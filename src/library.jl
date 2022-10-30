@@ -3,7 +3,7 @@ function read_adduct_code(file::String)
     code = CSV.read(file, DataFrame, header = [:repr, :object])
     transform!(code, :object => ByRow(eval ∘ Meta.parse), renamecols = false)
 end
-const ADDUCTCODE = read_adduct_code(".\\ADDUCTCODE.csv")
+const ADDUCTCODE = read_adduct_code(joinpath(@__DIR__, "..\\config\\ADDUCTCODE.csv"))
 const ADDUCTS = ADDUCTCODE.object
 const NLH2O = @view ADDUCTS[1:4]
 
@@ -29,7 +29,7 @@ function read_class_db(file::String,
     class_db
 end
 
-const CLASSDB = read_class_db(".\\CLASSDB.csv")
+const CLASSDB = read_class_db(joinpath(@__DIR__, "..\\config\\CLASSDB.csv"))
 
 class_db_index(::LCB) = @views CLASSDB[findfirst(==(SPB), CLASSDB[!, :Abbreviation]), :]
 class_db_index(cls::T) where {T <: ClassGSL} = @views CLASSDB[findfirst(==(deisomerized(T)), CLASSDB[!, :Abbreviation]), :]

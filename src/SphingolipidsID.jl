@@ -36,7 +36,7 @@ export library, rule, featuretable_mzmine, filter_duplicate, preis, preis!, fini
 
         Data, PreIS, MRM, Project, Query
 
-import Base: show, print, isless
+import Base: show, print, isless, isempty
 
 abstract type ClassGSL end
 
