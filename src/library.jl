@@ -29,7 +29,7 @@ function read_class_db(file::String,
     class_db
 end
 
-const CLASSDB = read_class_db(joinpath(@__DIR__, "..", "config", "config\\CLASSDB.csv"))
+const CLASSDB = read_class_db(joinpath(@__DIR__, "..", "config", "CLASSDB.csv"))
 
 class_db_index(::LCB) = @views CLASSDB[findfirst(==(SPB), CLASSDB[!, :Abbreviation]), :]
 class_db_index(cls::T) where {T <: ClassGSL} = @views CLASSDB[findfirst(==(deisomerized(T)), CLASSDB[!, :Abbreviation]), :]
