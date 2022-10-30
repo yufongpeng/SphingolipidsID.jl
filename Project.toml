@@ -1,0 +1,13 @@
+name = "SphingolipidsID"
+uuid = "c1ebf20f-b457-45e9-b029-ffb3f0746310"
+authors = ["yufongpeng <54415349+yufongpeng@users.noreply.github.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.7"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
