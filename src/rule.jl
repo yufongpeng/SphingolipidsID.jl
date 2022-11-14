@@ -2,33 +2,43 @@
 rule(c::ClassGSL, x...) = rule(c)
 rule(::Cer) = ISF(ProtonationNLH2O(), Cer()) => (Cer(), ())
 rule(::HexCer) = (ISF(ProtonationNLH2O(), HexCer()), ISF(ProtonationNLH2O(), Cer())) => (HexCer(), ())
-rule(::SHexCer) = (ISF(ProtonationNLH2O(), HexCer()), ISF(ProtonationNLH2O(), Cer())) => (SHexCer(), ())
-rule(::Hex2Cer) =  ISF(ProtonationNLH2O(), Cer()) => (Hex2Cer(), ())
-rule(::Hex3Cer) = (ISF(Protonation(), Hex2Cer()), ISF(ProtonationNLH2O(), Cer())) => (Hex3Cer(), Hex3Cer())
-rule(::HexNAcHex2Cer) = HexNAcHex2Cer()
-rule(::HexNAcHex3Cer) = HexNAcHex => (Hex_HexNAc_Hex2Cer(), HexNAc_Hex3Cer())
-
-rule(::GM4) = NANA => (GM4(), ())
-rule(::GM3) = NANA => (GM3(), ())
-rule(::GM2) = NANA => (GM2(), ())
-rule(::GM1) = NANA => (
-    IonUnion(
-        (ISF(Protonation(), GM3()), ISF(ProtonationNLH2O(), GM3())) => (GM1a(), ()),
-        IonComparison(HexNAcHexNANA, HexNAcHex) => (
-            0           => GM1a(),
-            (0, 5)      => GM1(GM1a(), GM1b()),
-            (5, Inf64)  => GM1b(),
-            NaN         => ()
-        )
-    ),
+rule(::SHexCer) = (ISF(ProtonationNLH2O(), HexCer()), ISF(Protonation(), HexCer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) => (SHexCer(), ())
+rule(::Hex2Cer) =  (ISF(ProtonationNLH2O(), Cer()), ISF(ProtonationNLH2O(), Hex2Cer())) => (
+    Hex2Cer(), 
+    Ion(ProtonationNLH2O(), Cer()) => (Hex2Cer(), ())
+)
+rule(::SHexHexCer) = (ISF(ProtonationNLH2O(), Hex2Cer()), ISF(Protonation(), Hex2Cer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) => (SHexHexCer(), ())
+rule(::Hex3Cer) = (ISF(Protonation(), Hex2Cer()), ISF(ProtonationNLH2O(), Hex2Cer()), ISF(ProtonationNLH2O(), Cer())) => (
+    Hex3Cer(),    
+    Ion(ProtonationNLH2O(), Cer()) => (Hex3Cer(), ())
+)
+rule(::HexNAcHex2Cer) = Ion(ProtonationNLH2O(), HexNAc()) => (HexNAcHex2Cer(), ())
+rule(::HexNAcHex3Cer) = Ion(ProtonationNLH2O(), HexNAc()) => (
+    Ion(Protonation(), Hex3Cer()) => (Hex_HexNAc_Hex2Cer(), HexNAc_Hex3Cer()),
     ()
 )
 
-rule_ab(::GM1) = NANA => (
-    HexNAcHex => (
-        GM1a(),
-        ()
-    ),
+rule(::GM4) = (ISF(ProtonationNLH2O(), HexCer()), ISF(Protonation(), HexCer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) => (
+    GM4(),    
+    Ion(ProtonationNLH2O(), Cer()) => (GM4(), ())
+)
+rule(::GM3) = (ISF(ProtonationNLH2O(), HexCer()), ISF(Protonation(), HexCer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) => (
+    GM3(),
+    Ion(ProtonationNLH2O(), Cer()) => (GM3(), ())
+)
+rule(::GM2) = Ion(ProtonationNLH2O(), HexNAc()) => (GM2(), ())
+rule(::GM1) = IonUnion(
+    (ISF(Protonation(), GM3()), ISF(ProtonationNLH2O(), GM3())) => (GM1a(), ()),
+    IonComparison(HexNAcHexNANA, HexNAcHex) => (
+        0           => GM1a(),
+        (0, 5)      => GM1(GM1a(), GM1b()),
+        (5, Inf64)  => GM1b(),
+        NaN         => ()
+    )
+)
+
+rule_ab(::GM1) = HexNAcHex => (
+    GM1a(),
     ()
 )
 
@@ -47,8 +57,13 @@ rule(::ClassGD1, mode::Symbol) =
 
 rule_ab(::ClassGD1) = NANA => (
     IonUnion(
-        NANA2           => (GD1b(), ()),
-        HexNAcHexNANA   => (GD1a(), ())
+        IonComparison(HexNAcHexNANA, HexNAcHex) => (
+            0 => GD1b(),
+            (0, 1) => GD1(GD1b(), GD1a()),
+            (1, 10) => GD1(GD1a(), GD1b()),
+            (10, Inf) => GD1a()
+        ),
+        NANA2           => (GD1b(), ())
     ),
     ()
 )    
@@ -74,27 +89,22 @@ rule(::GD1) = NANA => (
 =#
 rule(::ClassGD1) = NANA => (
     NANA2 => (
-        IonUnion(
-            HexNAcHexNANA2 => (
-                GD1c(),
-                ()
-            ),
-            IonComparison(HexNAcHexNANA2, HexNAcHex) => (
-                (0, 5) => GD1b(),
-                (5, Inf) => ()
-            )
+        IonComparison(HexNAcHexNANA2, HexNAcHex) => (
+            0 => GD1b(),
+            (0, 1) => GD1(GD1b(), GD1c()),
+            (1, 10) => GD1(GD1c(), GD1b()),
+            (10, Inf) => GD1c()
         ),
         IonUnion(
-            HexNAcHexNANA2 => (
-                GD1α(),
-                ()
-            ),
             (ISF(Protonation(), GM3()), ISF(ProtonationNLH2O(), GM3())) => (
                 GD1a(),
                 ()
+            ),
+            HexNAcHexNANA2 => (
+                GD1α(),
+                ()
             )
         )
-        
     ),
     ()
 )
@@ -126,16 +136,12 @@ rule_α(::GT1a) = IonMode(
 
 rule_ab(::GT1) = NANA => (
     NANA2 => (
-        HexNAcHexNANA2 => (
-            IonUnion(
-                rule_α(GT1a()),
-                IonComparison(HexNAcHexNANA2, HexNAcHexNANA) => (
-                    (0, 5) => GT1b(),
-                    (5, Inf) => ()
-                )
-            ), 
-            GT1b()
-        ),
+        IonComparison(HexNAcHexNANA2, HexNAcHexNANA) => (
+            0 => GT1b(),
+            (0, 1) => IonUnion(GT1b(), rule_α(GT1a())),
+            (1, 10) => IonUnion(rule_α(GT1a()), GT1b()),
+            (10, Inf) => rule_α(GT1a())
+        ), 
         HexNAcHexNANA2 => (
             GT1aα(),
             HexNAcHexNANA => (
@@ -205,22 +211,22 @@ rule(::GT1) = NANA => (
             IonUnion(
                 rule_α(GT1a()),
                 IonComparison(HexNAcHexNANA2, HexNAcHexNANA) => (
-                    (0, 5) => GT1b(),
-                    (5, Inf) => ()
+                    (0, 10) => GT1b(),
+                    (10, Inf) => ()
                 ),
                 IonComparison(IonPlus(HexNAcHexNANA2, HexNAcHexNANA), HexNAcHex) => (
-                    (0, 5) => GT1c(),
-                    (5, Inf) => ()
+                    (0, 10) => GT1c(),
+                    (10, Inf) => ()
                 )
             ), 
             HexNAcHexNANA => (
                 IonComparison(HexNAcHexNANA, HexNAcHex) => (
-                    (0, 5) => GT1(GT1c(), GT1b()),
-                    (5, Inf) => GT1b(),
+                    (0, 10) => GT1(GT1c(), GT1b()),
+                    (10, Inf) => GT1b(),
                 ), 
                 HexNAcHex => (
                     GT1c(),
-                    rule_ab_neg(GT1())
+                    rule_ab_neg(GT1()) # Assume a/b only
                 )
             )
         ),
@@ -290,10 +296,10 @@ rule_acyl(spb::T, ::Acyl{N}) where {T <: LCB, N} = AcylIon{T}(Ion(LossCH2O(), Ac
     )
 )
 
-to_phyto(::SPB3{C, N}) where {C, N} = PhytoSPB3{C, N}()
-to_phyto(::SPB4{C, N}) where {C, N} = PhytoSPB4{C, N}()
+to_phyto(::LCB3{N, C}) where {N, C} = PhytoSPB3{N, C}()
+to_phyto(::LCB4{N, C}) where {N, C} = PhytoSPB4{N, C}()
 
-rule_phytoacyl(spb::T, ::Acyl{0}) where {T <: LCB} = AcylIon{T}(Ion(LossCH8NO(), spb), Ion(AddC3H5NO(), Acyl{0}()), Ion(LossC2H8NO(), spb), Ion(AddC2H5NO(), Acyl{0}())) => (
+rule_phytoacyl(spb::T, ::Acyl{0}) where {T <: LCB} = AcylIon{T}(Ion(AddC2H5NO(), Acyl{0}()), Ion(AddC3H5NO(), Acyl{0}()), Ion(LossCH8NO(), spb), Ion(LossC2H8NO(), spb)) => (
     Chain(to_phyto(spb), Acyl{0}()),
     Chain(spb, Acyl{0}())
 )
@@ -303,93 +309,69 @@ rule_phytoacyl(spb::T, acyl::Acyl) where {T <: LCB} =  AcylIon{T}((Ion(AddC3H5NO
     rule_acyl(spb, acyl)
 )
 
-rule(::Chain{<: SPB2{C}, <: ACYL}) where C = IonComparison(Ion(ProtonationNL2H2O(), SPB2{C, 2}()), Ion(ProtonationNLH2O(), SPB2{C, 2}())) => (
+rule(::Chain{<: LCB2{N, C}, <: ACYL}) where {N, C} = IonComparison(Ion(ProtonationNL2H2O(), SPB2{2, C}()), Ion(ProtonationNLH2O(), SPB2{2, C}())) => (
     (0.0, 1.0) => (
-        Hydroxyl(SPB2{C, 2}()) => (
-            0 => Chain(SPB2{C, 2}(), Acyl{0}()),
-            1 => rule_acyl(SPB2{C, 2}(), Acyl{1}()),
-            2 => rule_acyl(SPB2{C, 2}(), Acyl{2}())
+        Hydroxyl(SPB2{2, C}()) => (
+            0 => Chain(SPB2{2, C}(), Acyl{0}()),
+            1 => rule_acyl(SPB2{2, C}(), Acyl{1}()),
+            2 => rule_acyl(SPB2{2, C}(), Acyl{2}())
         )
 
     ),
     (1.0, Inf64) => (
-        Hydroxyl(SPB2{C, 1}()) => (
-            0 => Chain(SPB2{C, 1}(), Acyl{0}()),
-            1 => rule_acyl(SPB2{C, 1}(), Acyl{1}()),
-            2 => rule_acyl(SPB2{C, 1}(), Acyl{2}())
+        Hydroxyl(SPB2{1, C}()) => (
+            0 => Chain(SPB2{1, C}(), Acyl{0}()),
+            1 => rule_acyl(SPB2{1, C}(), Acyl{1}()),
+            2 => rule_acyl(SPB2{1, C}(), Acyl{2}())
         )
     )
 )
 
-rule(::Chain{<: SPB3{C}, <: ACYL}) where C = IonComparison(Ion(ProtonationNL3H2O(), SPB3{C, 3}()), Ion(ProtonationNL2H2O(), SPB3{C, 3}())) => (
+rule(::Chain{<: LCB3{N, C}, <: ACYL}) where {N, C} = IonComparison(Ion(ProtonationNL3H2O(), SPB3{3, C}()), Ion(ProtonationNL2H2O(), SPB3{3, C}())) => (
     (0.0, 1.0) => (
-        Hydroxyl(SPB3{C, 3}()) => (
-            0 => rule_phytoacyl(SPB3{C, 3}(), Acyl{0}()),
-            1 => rule_phytoacyl(SPB3{C, 3}(), Acyl{1}()),
-            2 => rule_phytoacyl(SPB3{C, 3}(), Acyl{2}())
+        Hydroxyl(SPB3{3, C}()) => (
+            0 => rule_phytoacyl(SPB3{3, C}(), Acyl{0}()),
+            1 => rule_phytoacyl(SPB3{3, C}(), Acyl{1}()),
+            2 => rule_phytoacyl(SPB3{3, C}(), Acyl{2}())
         )
     ),
     (1.0, Inf64) => (
-        Hydroxyl(SPB3{C, 2}()) => (
-            0 => Chain(SPB3{C, 2}(), Acyl{0}()),
-            1 => rule_acyl(SPB3{C, 2}(), Acyl{1}()),
-            2 => rule_acyl(SPB3{C, 2}(), Acyl{2}())
+        Hydroxyl(SPB3{2, C}()) => (
+            0 => Chain(SPB3{2, C}(), Acyl{0}()),
+            1 => rule_acyl(SPB3{2, C}(), Acyl{1}()),
+            2 => rule_acyl(SPB3{2, C}(), Acyl{2}())
         )
     )
 )
 
-rule(::Chain{<: SPB4{C}, <: ACYL}) where C = IonComparison(Ion(ProtonationNL3H2O(), SPB4{C, 3}()), Ion(ProtonationNL2H2O(), SPB4{C, 3}())) => (
+rule(::Chain{<: LCB4{N, C}, <: ACYL}) where {N, C} = IonComparison(Ion(ProtonationNL3H2O(), SPB4{3, C}()), Ion(ProtonationNL2H2O(), SPB4{3, C}())) => (
     (0.0, 1.0) => (
-        Hydroxyl(SPB4{C, 3}()) => (
-            0 => rule_phytoacyl(SPB4{C, 3}(), Acyl{0}()),
-            1 => rule_phytoacyl(SPB4{C, 3}(), Acyl{1}()),
-            2 => rule_phytoacyl(SPB4{C, 3}(), Acyl{2}())
+        Hydroxyl(SPB4{3, C}()) => (
+            0 => rule_phytoacyl(SPB4{3, C}(), Acyl{0}()),
+            1 => rule_phytoacyl(SPB4{3, C}(), Acyl{1}()),
+            2 => rule_phytoacyl(SPB4{3, C}(), Acyl{2}())
         )
     ),
     (1.0, Inf64) => (
-        Hydroxyl(SPB4{C, 2}()) => (
-            0 => Chain(SPB4{C, 2}(), Acyl{0}()),
-            1 => rule_acyl(SPB4{C, 2}(), Acyl{1}()),
-            2 => rule_acyl(SPB4{C, 2}(), Acyl{2}())
+        Hydroxyl(SPB4{2, C}()) => (
+            0 => Chain(SPB4{2, C}(), Acyl{0}()),
+            1 => rule_acyl(SPB4{2, C}(), Acyl{1}()),
+            2 => rule_acyl(SPB4{2, C}(), Acyl{2}())
         )
     )
 )
 
-const CONNECTION = Dict{ClassGSL, ClassGSL}(
-    GP1()                   => GQ1(),
-    GQ1()                   => GT1(),
-    GT1()                   => GD1(),
-    GD1()                   => GM1(),
-    GM1()                   => GM3(),
-    GM3()                   => Hex2Cer(),
-    Hex2Cer()               => HexCer(),
-    Cer()                   => Cer(),
-    GD3()                   => GM3(),
-    GT3()                   => GD3(),
-    GM2()                   => GM3(),
-    GD2()                   => GD3(),
-    GT2()                   => GT3(),
-    SHexCer()               => HexCer(),
-    GM4()                   => HexCer(),
-    Hex3Cer()               => Hex2Cer(),
-    HexNAcHex2Cer()         => Hex2Cer(),
-    HexNAcHex3Cer()         => Hex2Cer(),
-    Hex_HexNAc_Hex2Cer()    => HexNAcHex2Cer(),
-    HexNAc_Hex3Cer()        => Hex3Cer(),
-    HexCer()                => Cer()
-)
-
-find_connected(cpd::CompoundGSL, analyte::AnalyteGSL) = findall(id -> connected(cpd, id), analyte.identification)
+find_connected(cpd::CompoundGSL, analyte::AnalyteGSL) = findall(id -> connected(cpd, id), analyte)
 connected(cpd::CompoundGSL, id::CompoundGSL) = ischaincompatible(cpd, id) && begin
-    class1 = haskey(CONNECTION, cpd.class) ? cpd.class : deisomerized(cpd.class)
-    class2 = haskey(CONNECTION, id.class) ? id.class : deisomerized(id.class)
-    connected(class1, class2) || connected(class1, class2)
+    class1 = haskey(SPDB[:CONNECTION], cpd.class) ? cpd.class : deisomerized(cpd.class)
+    class2 = haskey(SPDB[:CONNECTION], id.class) ? id.class : deisomerized(id.class)
+    connected(class1, class2) || connected(class2, class1)
 end
 
-connected(cls1::ClassGSL, cls2::ClassGSL) = cls2 == cls1 || connected(CONNECTION[cls1], cls2)
+connected(cls1::ClassGSL, cls2::ClassGSL) = cls2 == cls1 || connected(SPDB[:CONNECTION][cls1], cls2)
 connected(cls1::ClassGSL, cls2::Cer) = true
 connected(cls1::Cer, cls2::ClassGSL) = false
 connected(cls1::Cer, cls2::Cer) = true
 
-isf(cls::ClassGSL) = push!(isf(CONNECTION[cls]), cls)
+isf(cls::ClassGSL) = push!(isf(SPDB[:CONNECTION][cls]), cls)
 isf(cls::Cer) = ClassGSL[cls]

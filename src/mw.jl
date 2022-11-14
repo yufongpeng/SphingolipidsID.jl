@@ -37,7 +37,7 @@ function nmw(formula::AbstractString)
     end
 end
 
-mz(cpd::CompoundGSL, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, cpd.chain, DataFrame(), [])))
+mz(cpd::CompoundGSL, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, cpd.chain, DataFrame(), 0, [])))
 function mz(cpd::CompoundGSL, ions::AcylIon{T}) where T
     acyl_cb, acyl_db, acyl_o = cpd.sum .- sumcomp(T())
     map(ions.ions) do ion
@@ -49,18 +49,18 @@ function mz(cpd::CompoundGSL, ions::AcylIon{T}) where T
 end
 mz(cpd::CompoundGSL, ion::Ion) = mz(ion)
 mz(cpd::CompoundGSL, add::Adduct) = parse_adduct(add)(mw(cpd))
-mz(cpd::CompoundGSL, ion::Ion{<: Adduct, <: ClassGSL}) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, nothing, DataFrame(), ())))
+mz(cpd::CompoundGSL, ion::Ion{<: Adduct, <: ClassGSL}) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, nothing, DataFrame(), 0, [])))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
 mz(ion::Ion{S, <: ACYL{N}}, cb, db, o = N) where {S, N} = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
-mw(::T, cb, db, o = N) where {N, T<: ACYL{N}} = mw("C") * cb + mw("H") * (2 * cb - 2 * db - 1) + mw("O") * (o + 1)
+mw(::T, cb, db, o = N) where {N, T <: ACYL{N}} = mw("C") * cb + mw("H") * (2 * cb - 2 * db - 1) + mw("O") * (o + 1)
 #hydrosyn(a, b) = a + b - nmw("H2O")
 mw(::Hex) = mw("C6H12O6") 
 mw(::HexNAc) = mw("C8H15NO6") 
 mw(::NeuAc) = mw("C11H19NO9") 
 
-mw(glycan::Glycan{N}) where N = mapreduce(mw, +, glycan.chain) - (N - 1) * mw("H2O")
+mw(glycan::Glycan) = mapreduce(mw, +, glycan.chain) - (length(glycan.chain) - 1) * mw("H2O")
 
-function mw(lcb::LCB{C, N}) where {C, N}
+function mw(lcb::LCB{N, C}) where {N, C}
     cls = class_db_index(lcb)
     unit = cls[[:u1, :u2]]
     init_us = cls[["#u1", "#u2"]]

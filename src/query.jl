@@ -1,5 +1,5 @@
 function query(project::Project, args...; view = true) 
-    v = @view project.analytes[:]
+    v = @view project[:]
     v = view ? v : Vector(v)
     query(Query(project, v, [], view), args...)
 end
@@ -7,9 +7,9 @@ end
 
 function query(aquery::Query, quantity::Symbol, low, up; view = aquery.view)
     v = @views @match quantity begin
-        :rt => aquery.result[findall(analyte -> between(analyte.rt; low, up), aquery.result)]
-        :mw => aquery.result[findall(analyte -> between(mw(last(analyte.identification)); low, up), aquery.result)]
-        :mz => aquery.result[findall(analyte -> any(between(query_raw(aquery.project, frag.source, frag.id).mz; low, up) for frag in eachrow(last(analyte.identification).fragments)), aquery.result)]
+        :rt => aquery[findall(analyte -> between(analyte.rt; low, up), aquery)]
+        :mw => aquery[findall(analyte -> between(mw(last(analyte)); low, up), aquery)]
+        :mz => aquery[findall(analyte -> any(between(query_raw(aquery.project, frag.source, frag.id).mz1; low, up) for frag in eachrow(last(analyte).fragments)), aquery)]
     end
     push!(aquery.query, quantity => (low, up))
     aquery.view = view
@@ -17,31 +17,35 @@ function query(aquery::Query, quantity::Symbol, low, up; view = aquery.view)
     aquery
 end
 
-function query(aquery::Query, type::Symbol, object; view = true)
-    cpds = map(aquery.result) do analyte
-            last(analyte.identification)
+function query(aquery::Query, id::Symbol, type; view = true)
+    cpds = map(aquery) do analyte
+            last(analyte)
     end
-    v = @views @match type begin
-        :class  => aquery.result[findall(cpd -> cpd.class isa object, cpds)]
-        :sum    => aquery.result[findall(cpd -> cpd.sum == collect(object), cpds)]
-        :lcb    => aquery.result[findall(cpd -> !isnothing(cpd.chain) && cpd.chain.lcb == object(), cpds)]
+    v = @views @match id begin
+        :class  => aquery[findall(cpd -> cpd.class isa type, cpds)]
+        :sum    => aquery[findall(cpd -> cpd.sum == type, cpds)]
+        :lcb    => aquery[findall(cpd -> !isnothing(cpd.chain) && cpd.chain.lcb == type(), cpds)]
     end
-    push!(aquery.query, type => object)
+    push!(aquery.query, id => type)
     aquery.view = view
     aquery.result = view ? v : Vector(v)
     aquery
 end
 
-function query(aquery::Query, type::Symbol; view = true)
-    cpds = map(aquery.result) do analyte
-        last(analyte.identification)
+function query(aquery::Query, id::Symbol; view = true)
+    cpds = map(aquery) do analyte
+        last(analyte)
     end
-    v = @views @match type begin
-        :class  => aquery.result[findall(cpd -> isnothing(cpd.sub_rule[1]), cpds)]
-        :chain  => aquery.result[findall(cpd -> isnothing(cpd.sub_rule[1]), cpds)]
-        :both   => aquery.result[findall(cpd -> all(isnothing, cpd.sub_rule), cpds)]
+    v = @views @match id begin
+        :class  => aquery[findall(cpd -> isa(cpd.states[1], Symbol), cpds)]
+        :chain  => aquery[findall(cpd -> isa(cpd.states[2], Symbol), cpds)]
+        :class_fail  => aquery[findall(cpd -> isnothing(cpd.states[1]), cpds)]
+        :chain_fail  => aquery[findall(cpd -> isnothing(cpd.states[2]), cpds)]
+        :class_wait  => aquery[findall(cpd -> !isnothing(cpd.states[1]) && !isa(cpd.states[1], Symbol), cpds)]
+        :chain_wait  => aquery[findall(cpd -> !isnothing(cpd.states[2]) && !isa(cpd.states[2], Symbol), cpds)]
+        :both   => aquery[findall(cpd -> all(r -> isa(r, Symbol), cpd.states), cpds)]
     end
-    push!(aquery.query, :id => type)
+    push!(aquery.query, :id => id)
     aquery.view = view
     aquery.result = view ? v : Vector(v)
     aquery

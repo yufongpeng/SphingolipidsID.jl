@@ -3,41 +3,38 @@ preis(
         featuretable, 
         mz_range,
         ms2, 
-        polarity::Bool,
-        eV = -1;
-        db = polarity ? DEFAULT_POS_LIBRARY : DEFAULT_NEG_LIBRARY,
-        db_product = polarity ? DEFAULT_POS_FRAGMENT : DEFAULT_NEG_FRAGMENT,
+        polarity::Bool;
+        db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
+        db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
         mz_tol = 0.35, 
         rt_tol = 0.1,
         anion = :acetate,
         data = -1,
         additional = Dict()
-    ) = preis!(Project(AnalyteGSL[], Data[], anion), deepcopy(featuretable), mz_range, ms2, polarity, eV; db, mz_tol, rt_tol, data, additional)
+    ) = preis!(Project(AnalyteGSL[], Data[], anion), deepcopy(featuretable), mz_range, ms2, polarity; db, db_product, mz_tol, rt_tol, data, additional)
 
 preis(
         project::Project,
         featuretable, 
         mz_range,
         ms2, 
-        polarity::Bool,
-        eV = -1;
-        db = polarity ? DEFAULT_POS_LIBRARY : DEFAULT_NEG_LIBRARY,
-        db_product = polarity ? DEFAULT_POS_FRAGMENT : DEFAULT_NEG_FRAGMENT,
+        polarity::Bool;
+        db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
+        db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
         mz_tol = 0.35, 
         rt_tol = 0.1,
         data = -1,
         additional = Dict()
-    ) = preis!(deepcopy(project), deepcopy(featuretable), mz_range, ms2, polarity, eV; db, mz_tol, rt_tol, data, additional)
+    ) = preis!(deepcopy(project), deepcopy(featuretable), mz_range, ms2, polarity; db, db_product, mz_tol, rt_tol, data, additional)
 
 function preis!(
                     project::Project,
                     featuretable, 
                     mz_range,
                     ms2, 
-                    polarity::Bool,
-                    eV = -1;
-                    db = polarity ? DEFAULT_POS_LIBRARY : DEFAULT_NEG_LIBRARY,
-                    db_product = polarity ? DEFAULT_POS_FRAGMENT : DEFAULT_NEG_FRAGMENT,
+                    polarity::Bool;
+                    db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
+                    db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
                     mz_tol = 0.35, 
                     rt_tol = 0.1,
                     data = -1,
@@ -46,7 +43,6 @@ function preis!(
     products = id_product(ms2, polarity; mz_tol, db = db_product)
     featuretable = deepcopy(featuretable)
     println("PreIS> ", products)
-    analytes = project.analytes
     # check data compatibility ?
     if length(project.data) == 0
         source = 1
@@ -57,30 +53,29 @@ function preis!(
     else
         source = data
     end
-    # Custom eV
-    featuretable.eV .= eV
+    
     if source > length(project.data)
-        featuretable.mz2 .= 1
+        featuretable.scan .= 1
         push!(project.data, PreIS(featuretable, [mz_range], [ms2], mz_tol, polarity, additional))
     else 
         dt = project.data[source]
-        mz2_id = findfirst(mz2 -> abs(ms2 - mz2) < mz_tol, dt.mz2)
-        if isnothing(mz2_id)
+        scan_id = findfirst(mz2 -> abs(ms2 - mz2) < mz_tol, dt.mz2)
+        if isnothing(scan_id)
             push!(dt.mz2, ms2)
             push!(dt.range, mz_range)
-            featuretable.mz2 .= lastindex(dt.mz2)
+            featuretable.scan .= lastindex(dt.mz2)
             featuretable.id .= maximum(dt.raw.id) .+ (1:size(featuretable, 1))
             append!(dt.raw, featuretable)
-            sort!(dt.raw, [:mz, :rt])
-            featuretable = filter(:mz2 => ==(lastindex(dt.mz2)), dt.raw, view = true)
+            sort!(dt.raw, [:mz1, :rt])
+            featuretable = filter(:scan => ==(lastindex(dt.mz2)), dt.raw, view = true)
         else
-            origin = filter(:mz2 => ==(lastindex(dt.mz2)), dt.raw)
+            origin = filter(:scan => ==(lastindex(dt.mz2)), dt.raw)
             prev_id = maximum(origin.id)
             last_id = prev_id
             for ft in featuretable
-                id = findfirst(row -> abs(row.rt - ft.rt) < rt_tol && abs(row.mz - ft.mz) < mz_tol, eachrow(origin))
+                id = findfirst(row -> abs(row.rt - ft.rt) < rt_tol && abs(row.mz1 - ft.mz1) < mz_tol, eachrow(origin))
                 if isnothing(id)
-                    push!(project.data.raw[mz2_id], ft)
+                    push!(project.data.raw[scan_id], ft)
                     last_id += 1
                     origin.id[end] = last_id
                 else
@@ -88,60 +83,126 @@ function preis!(
                     origin[id, :] = [mean(x) for x in zip(origin[id, :], ft)]
                 end
             end
-            sort!(dt.raw, [:mz, :rt])
+            sort!(dt.raw, [:mz1, :rt])
             featuretable = filter(:id => >(prev_id), dt.raw, view = true)
         end
     end
 
-    for analyte in analytes
-        analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte.identification)
+    for analyte in project
+        analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte)
     end
     
     for ft in eachrow(featuretable)
         current_cpd = CompoundGSL[]
         for row in eachrow(db)
-            if abs(row.var"m/z" - ft.mz) < mz_tol
-                cpd = CompoundGSL(row, deepcopy(products), source, ft.id)
-                isnothing(cpd) || push!(current_cpd, cpd)
+            if abs(row.var"m/z" - ft.mz1) < mz_tol
+                cpds = map(products) do product
+                    CompoundGSL(row, product, source, ft.id, ft.area)
+                end
+                filter!(!isnothing, cpds)
+                n = length(cpds)
+                s = 1
+                component = [[i] for i in eachindex(cpds)]
+                while n > 0
+                    cpd1 = cpds[s]
+                    for i in s:n
+                        if iscompatible(cpd1, cpds[i]) && !issubset(component[s], component[i])
+                            push!(cpds, union(cpd1, cpds[i]))
+                            push!(component, union(component[s], component[i]))
+                            n += 1
+                        end
+                    end
+                    n -= 1
+                    s += 1
+                end
+                current_cpd = vcat(current_cpd, cpds)
             end
         end
         
         # Unidentified
         isempty(current_cpd) && continue
 
-        subanalytes = @views [analyte for analyte in analytes if abs(analyte.rt - ft.rt) < rt_tol]
+        subanalytes = @views [analyte for analyte in project if abs(analyte.rt - ft.rt) < rt_tol]
+        #=if 6 < ft.rt < 6.2 && any(cpd.sum == (42, 1, 2) for cpd in current_cpd)
+            println("========")
+            println(@views [cpd for cpd in current_cpd if cpd.sum == (42, 1, 2)])
+            println("--------")
+            println(@views [a for a in subanalytes if last(a).sum == (42, 1, 2)])
+        end=#
 
         if isempty(subanalytes) 
             for cpd in current_cpd
-                push!(analytes, AnalyteGSL([cpd], ft.rt))
+                push!(project, AnalyteGSL([cpd], ft.rt))
             end
         else
             # Aggregates
             for cpd in current_cpd
                 agg = false
-                for analyte in subanalytes
-                    connected_id = find_connected(cpd, analyte)
-                    isempty(connected_id) && continue
+                existids = @views [findfirst(connected_cpd -> iscompatible(cpd, connected_cpd), a) for a in subanalytes]
+                ids = findall(!isnothing, existids)
+                if isempty(ids)
+                    n = length(project)
+                    for analyte in subanalytes
+                        connected_id = find_connected(cpd, analyte)
+                        isempty(connected_id) && continue
+                        agg = true
+                        push = true
+                        for new in @view project[n + 1:end]
+                            if iscompatible(last(new), cpd)
+                                union!(new, deepcopy(analyte[connected_id]))
+                                new.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in new)
+                                push = false
+                                break
+                            end
+                        end
+                        push || continue
+                        if length(connected_id) < length(analyte)
+                            push!(project, AnalyteGSL(deepcopy(analyte[connected_id]), analyte.rt))
+                            analyte = last(project)
+                        end
+                        #=
+                        if cpd.sum == (42, 1, 2) && cpd.chain.lcb == SPB3{2, 18}() && analyte[end].chain.lcb == SPB3{2, 18}()
+                            println(analyte.rt)
+                            println(analyte)
+                            println(analyte[end].fragments)
+                            println(cpd.fragments)
+                            println(id)
+                        end
+                        =#
+                        push!(analyte, deepcopy(cpd))
+                        sort!(analyte, lt = isless_class)
+                        analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte)
+                        #=if cpd.sum == (42, 1, 2) && cpd.chain.lcb == SPB3{2, 18}() && analyte[end].chain.lcb == SPB3{2, 18}()
+                            println(id, ":")
+                            if isnothing(id)
+                                println(analyte[end].fragments)
+                            else
+                                println(analyte[id].fragments)
+                            end
+                            println(cpd.fragments)
+                        end=#
+                    end
+                else
                     agg = true
-                    if length(connected_id) < length(analyte.identification)
-                        push!(analytes, AnalyteGSL(deepcopy(analyte.identification[connected_id]), analyte.rt))
-                        analyte = last(analytes)
+                    existids = @view existids[ids]
+                    existanalytes = @view subanalytes[ids]
+                    for (id, analyte) in zip(existids, existanalytes)
+                        if isnothing(id)
+                            push!(analyte, deepcopy(cpd))
+                            sort!(analyte, lt = isless_class)
+                        else
+                            union!(project, analyte, id, deepcopy(cpd))
+                        end
+                        analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte)
                     end
-                    id = findfirst(connected_cpd -> iscompatible(cpd, connected_cpd), analyte.identification)
-                    if isnothing(id)
-                        push!(analyte.identification, deepcopy(cpd))
-                    else
-                        union!(analyte.identification[id], deepcopy(cpd))
-                    end
-                    analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte.identification)
                 end
-                agg || push!(analytes, AnalyteGSL([cpd], ft.rt))
+                agg || push!(project, AnalyteGSL([cpd], ft.rt))
             end
         end
         #=
         del = Int[]
         for (i, analyte) in enumerate(analytes)
-            any(x.identification == analyte.identification for x in @view analytes[1:i - 1]) && push!(del, i)
+            any(x == analyte for x in @view analytes[1:i - 1]) && push!(del, i)
         end
         deleteat!(analytes, del)
         =#
@@ -149,16 +210,40 @@ function preis!(
     project
 end
 
-function finish_profile!(project::Project)
-    println("PreIS> Sorting and deleting analytes")
-    del = Int[]
-    for (i, analyte) in enumerate(project.analytes)
-        sort!(analyte.identification, lt = isless_class)
-        any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), @views last(analyte.identification).fragments[!, :ion1]) || (push!(del, i); continue)
-        for cpd in analyte.identification
-            sort!(cpd.fragments, :ion1, lt = isless_ion)
-        end
+function finish_profile!(project::Project; rt_tol = 0.1)
+    println("PreIS> Sorting compounds")
+    for (i, analyte) in enumerate(project)
+        sort!(analyte, lt = isless_class)
     end
-    deleteat!(project.analytes, del)
+    println("PreIS> Merging, splitting and deleting analytes")
+    del = Int[]
+    for (i, analyte) in enumerate(project)
+        area = last(analyte).area
+        todel = false
+        for a in @view project[setdiff(eachindex(project), del, i)]
+            if abs(a.rt - analyte.rt) < rt_tol
+                id = findfirst(cpd -> iscompatible(cpd, last(analyte)), a)
+                if !isnothing(id) && any(cpd.area > area for cpd in @view a[id + 1:end])
+                    push!(del, i)
+                    todel = true
+                    union!(a, analyte)
+                    a.rt = mean(mean(query_raw(project, row.source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in a)
+                end
+            end
+        end
+        todel && continue
+
+        for (i, cpd) in Iterators.reverse(enumerate(analyte))
+            if cpd.area > area && all(!iscompatible(last(a), cpd) for a in project if abs(a.rt - analyte.rt) < rt_tol)
+                push!(project, AnalyteGSL(deepcopy(analyte[1:i]), analyte.rt))
+                last(project).rt = mean(mean(query_raw(project, row.source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in last(project))
+                break
+            end
+        end
+
+        any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), @views last(analyte).fragments[!, :ion1]) || push!(del, i)
+    end
+    unique!(del)
+    deleteat!(project, del)
     project
 end

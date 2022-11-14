@@ -11,7 +11,7 @@
 [M+Na+H]2+,SodizationProtonation()
 [M+2Na]2+,DiSodization()
 [M-H]-,Deprotonation()
-[M-H-2H2O]-,DeprotonationNLH2O()
+[M-H-H2O]-,DeprotonationNLH2O()
 [M-2H]2-,DiDeprotonation()
 [M-3H]3-,TriDeprotonation()
 [M+CH3COO]-,AddOAc()

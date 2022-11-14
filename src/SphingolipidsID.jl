@@ -2,15 +2,20 @@ module SphingolipidsID
 
 using DataFrames, CSV, MLStyle, Statistics
 using UnitfulMoles: parse_compound, ustrip, @u_str
-export library, rule, featuretable_mzmine, filter_duplicate, preis, preis!, finish_profile!, apply_rules!, id_product, query,
+export library, rule, featuretable_mzmine, add_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, 
+        preis, preis!, finish_profile!, 
+        apply_rules!, id_product, query,
+        generate_mrm,
 
-        DEFAULT_POS_LIBRARY, DEFAULT_POS_LIBRARY_NANA, DEFAULT_POS_FRAGMENT, 
+        SPDB, 
+        
+        LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB, 
 
-        read_adduct_code, ADDUCTCODE, read_class_db, CLASSDB, class_db_index, 
+        read_adduct_code, read_class_db, read_ce, class_db_index, 
 
         mw, mz, 
 
-        ClassGSL, SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, Hex3Cer, 
+        ClassGSL, SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, 
         ClassHexNAcHex2Cer, HexNAcHex2Cer, ClassHexNAcHex3Cer, HexNAcHex3Cer, HexNAc_Hex3Cer, Hex_HexNAc_Hex2Cer, ClasswoNANA,
         GM4, GM3, GM2, ClassGM1, GM1, GM1a, GM1b,
         GD3, GD2, ClassGD1, GD1, GD1a, GD1b, GD1c, GD1α, 
@@ -36,7 +41,8 @@ export library, rule, featuretable_mzmine, filter_duplicate, preis, preis!, fini
 
         Data, PreIS, MRM, Project, Query
 
-import Base: show, print, isless, isempty
+import Base: show, print, isless, isempty, keys, length, union, union!, deleteat!, 
+        iterate, getindex, view, firstindex, lastindex, sort, sort!, push!, pop!, popat!, popfirst!, reverse, reverse!
 
 abstract type ClassGSL end
 
@@ -45,6 +51,7 @@ struct Cer <: ClassGSL end
 struct CerP <: ClassGSL end
 struct HexCer <: ClassGSL end
 struct SHexCer <: ClassGSL end
+struct SHexHexCer <: ClassGSL end
 struct Hex2Cer <: ClassGSL end
 struct Hex3Cer <: ClassGSL end
 
@@ -58,7 +65,7 @@ end
 struct HexNAc_Hex3Cer <: ClassHexNAcHex3Cer end
 struct Hex_HexNAc_Hex2Cer <: ClassHexNAcHex3Cer end
 
-const ClasswoNANA = Union{SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, Hex3Cer, <: ClassHexNAcHex2Cer, <: ClassHexNAcHex3Cer}
+const ClasswoNANA = Union{SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, <: ClassHexNAcHex2Cer, <: ClassHexNAcHex3Cer}
 
 struct GM4 <: ClassGSL end
 struct GM3 <: ClassGSL end
@@ -117,16 +124,16 @@ for (class, super) in zip((:HexNAcHex3Cer, :GM1, :GD1, :GT1, :GQ1, :GP1), (:Clas
 end
 
 # N = # OH
-abstract type LCB{C, N} end
-abstract type LCB4{C, N} <: LCB{C, N} end
-abstract type LCB3{C, N} <: LCB{C, N} end
-abstract type LCB2{C, N} <: LCB{C, N} end
-struct SPB4{C, N} <: LCB4{C, N} end
-struct PhytoSPB4{C, N} <: LCB4{C, N} end
-struct SPB3{C, N} <: LCB3{C, N} end
-struct PhytoSPB3{C, N} <: LCB3{C, N} end
-struct SPB2{C, N} <: LCB2{C, N} end
-const PhytoSPB{C, N} = Union{PhytoSPB3{C, N}, PhytoSPB4{C, N}}
+abstract type LCB{N, C} end
+abstract type LCB4{N, C} <: LCB{N, C} end
+abstract type LCB3{N, C} <: LCB{N, C} end
+abstract type LCB2{N, C} <: LCB{N, C} end
+struct SPB4{N, C} <: LCB4{N, C} end
+struct PhytoSPB4{N, C} <: LCB4{N, C} end
+struct SPB3{N, C} <: LCB3{N, C} end
+struct PhytoSPB3{N, C} <: LCB3{N, C} end
+struct SPB2{N, C} <: LCB2{N, C} end
+const PhytoSPB{N, C} = Union{PhytoSPB3{N, C}, PhytoSPB4{N, C}}
 
 abstract type ACYL{N} end
 struct Acyl{N} <: ACYL{N} end
@@ -144,8 +151,8 @@ end
 
 abstract type Sugar end
 
-struct Glycan{N} 
-    chain::NTuple{N, Sugar}
+struct Glycan{T} 
+    chain::T
 end
 
 Glycan(sugar::Sugar...) = Glycan(sugar)
@@ -196,7 +203,7 @@ struct LossC2H8NO <: Neg end
 struct AddC3H5NO <: Neg end
 struct AddC2H5NO <: Neg end
 
-const NANA = (Ion(DeprotonationNLH2O(), NeuAc()), Ion(ProtonationNL2H2O(), NeuAc()), Ion(ProtonationNLH2O(), NeuAc()))
+const NANA = (Ion(ProtonationNL2H2O(), NeuAc()), Ion(DeprotonationNLH2O(), NeuAc()), Ion(ProtonationNLH2O(), NeuAc()))
 const NANA1 = Ion(DeprotonationNLH2O(), NeuAc())
 const NANA2 = Ion(DeprotonationNLH2O(), Glycan(NeuAc(), NeuAc()))
 const NANA3 = Ion(DeprotonationNLH2O(), Glycan(NeuAc(), NeuAc(), NeuAc()))
@@ -210,14 +217,15 @@ const HexNAcHexNANA2 = Ion(ProtonationNLH2O(), Glycan(HexNAc(), Hex(), NeuAc(), 
 
 mutable struct CompoundGSL
     class::ClassGSL
-    sum::Vector{Int}   # [#C, #db, #OH]
+    sum::NTuple{3, Int}   # (#C, #db, #OH)
     chain::Union{Chain, Nothing}
     fragments::DataFrame # ion1, ion2, source, id
-    sub_rule
+    area::Float64
+    states::Vector
 end
 
 mutable struct AnalyteGSL
-    identification::Vector{CompoundGSL}
+    compounds::Vector{CompoundGSL}
     rt::Float64
 end
 # ==()
@@ -263,7 +271,7 @@ abstract type Data end
 
 # precursor/product, ion => name, ms/mz => m/z, mw => molecular weight
 struct PreIS <: Data
-    raw::DataFrame #id, mz1, mz2 as index, area, ev, rt
+    raw::DataFrame #id, mz1, scan(index of mz2), area, ev, rt
     range::Vector{Tuple{Float64, Float64}} 
     mz2::Vector{Float64}
     mz_tol::Float64
@@ -272,8 +280,7 @@ struct PreIS <: Data
 end
 
 struct MRM <: Data
-    raw::DataFrame #id, mz1, mz2 as index, area, ev, rt
-    mz2::Vector{Float64} 
+    raw::DataFrame #id, mz1, mz2, area, ev, rt
     mz_tol::Float64
     polarity::Bool
     additional::Dict

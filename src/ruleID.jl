@@ -1,7 +1,15 @@
 # ==================================================================================
 # Rule-based ID
 # start point
-function apply_rules!(project::Project, part::Symbol = :both; class_mode::Symbol = :default, chain_mode::Symbol = :isf, class_rule_mode::Symbol = :ab)
+apply_rules!(aquery::Query, part::Symbol = :both; kwargs...) = apply_rules!(aquery.project, part, aquery.result; kwargs...)
+
+function apply_rules!(project::Project, part::Symbol = :both, analytes = project.analytes; 
+                        class_mode::Symbol = :default, 
+                        chain_mode::Symbol = :isf, 
+                        class_rule_mode::Symbol = :ab, 
+                        class_fail::Symbol = :pop_cpd, 
+                        chain_fail::Symbol = :ignore
+                    )
     del = Int[]
     @match part begin
         :both   => println("ID> Class and Chain")
@@ -9,60 +17,95 @@ function apply_rules!(project::Project, part::Symbol = :both; class_mode::Symbol
         :chain  => println("ID> Chain only")
     end
 
-    for (i, analyte) in enumerate(project.analytes)
-        cpd = last(analyte.identification)
-        if part == :both || part == :class 
-            id_result_class = match_rules(project, analyte, generate_ms(cpd, class_mode, project.anion)..., class_mode,
-            ismissing(first(cpd.sub_rule)) ? rule(cpd.class, class_rule_mode) : first(cpd.sub_rule)
+    n = length(analytes)
+    i = 1
+
+    while i <= n
+        fail = [false, false]
+        analyte = analytes[i]
+        cpd = last(analyte)
+        if (part == :both || part == :class) && !isa(first(cpd.states), Symbol)
+            id_result_class = isnothing(first(cpd.states)) ? (true, ()) : match_rules(project, analyte, generate_ms(cpd, class_mode, project.anion)..., class_mode,
+            ismissing(first(cpd.states)) ? rule(cpd.class, class_rule_mode) : first(cpd.states)
             )
         else
             id_result_class = nothing
         end
 
-        if part == :both || part == :chain
-            r = @match (last(last(analyte.identification).sub_rule), last(analyte.identification).chain, chain_mode) begin
-                (missing, nothing, :isf)    => begin
-                    id = findfirst(cpd -> !isnothing(cpd.chain), reverse(analyte.identification))
-                    isnothing(id) ? id : rule(analyte.identification[end - id + 1].chain)
+        if !isnothing(id_result_class) 
+            if first(id_result_class)
+                if last(id_result_class) === ()
+                    fail[1] = true
+                else
+                    last(analyte).states[1] = class_mode
+                    last(analyte).class = last(id_result_class)
                 end
-                (missing, nothing, _)       => nothing
+            else
+                last(analyte).states[1] = last(id_result_class) 
+            end
+        end
+
+
+        if (part == :both || part == :chain)
+            r = @match (last(cpd.states), cpd.chain, chain_mode) begin
+                (missing, nothing, :isf)    => begin
+                    id = findfirst(cpd -> !isnothing(cpd.chain), reverse(analyte))
+                    isnothing(id) ? missing : rule(analyte[end - id + 1].chain)
+                end
+                (missing, nothing, _)       => missing
                 (missing, chain, _)         => rule(chain)
+                (::Symbol, _, _)            => nothing
                 (r, _, _)                   => r
             end
-            isnothing(r) && continue
-            id_result_chain = match_rules(project, analyte, generate_ms(last(analyte.identification), chain_mode, project.anion)..., chain_mode, r)
+            if isnothing(r) 
+                id_result_chain = (true, ())
+            elseif ismissing(r)
+                id_result_chain = (false, missing)
+            else
+                id_result_chain = match_rules(project, analyte, generate_ms(last(analyte), chain_mode, project.anion)..., chain_mode, r)
+            end
         else
             id_result_chain = nothing
         end
 
-        if !isnothing(id_result_class) 
-            if first(id_result_class)
-                if last(id_result_class) === ()
-                    push!(del, i)
+        if !isnothing(id_result_chain) 
+            if first(id_result_chain)
+                if last(id_result_chain) === ()
+                    fail[2] = true
                 else
-                    last(analyte.identification).sub_rule[1] = nothing
-                    last(analyte.identification).class = last(id_result_class)
+                    last(analyte).states[2] = chain_mode
+                    last(analyte).chain = last(id_result_chain)
                 end
             else
-                last(analyte.identification).sub_rule[1] = last(id_result_class) 
+                last(analyte).states[2] = last(id_result_chain) 
             end
         end
 
-        if !isnothing(id_result_chain)
-            if first(id_result_chain)
-                if last(id_result_chain) === ()
-                    push!(del, i)
-                else
-                    last(analyte.identification).sub_rule[2] = nothing
-                    last(analyte.identification).chain = last(id_result_chain)
-                end
-            else
-                last(analyte.identification).sub_rule[2] = last(id_result_chain) 
+        if fail[1]
+            @match class_fail begin
+                :del        => push!(del, i)
+                :pop_cpd    => begin
+                    pop!(analyte)
+                    if isempty(analyte)
+                        push!(del, i)
+                    else
+                        i -= 1
+                    end
+                end 
+                :ignore     => (last(analyte).states[1] = nothing)
             end
         end
+
+        if fail[2]
+            @match chain_fail begin
+                :del    => push!(del, i)
+                :ignore => (last(analyte).states[2] = nothing)
+            end
+        end
+        i += 1
     end
     unique!(del)
-    deleteat!(project.analytes, del)
+    deleteat!(analytes, del)
     project
 end
 
@@ -94,9 +137,9 @@ match_rules(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::Vector, mo
 # Y/N ==
 function match_rules(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::Vector, mode::Symbol, rule, criteria::Union{Ion, ISF})
     found = @match (criteria, mode) begin
-        (::ISF, _)  => any(equivalent_in(criteria, @view cpd.fragments[!, :ion1]) for cpd in analyte.identification)
-        (_, :isf)   => any(equivalent_in(criteria, @views filter(:ion1 => in(prec), cpd.fragments, view = true)[!, :ion2]) for cpd in analyte.identification)
-        _           => equivalent_in(criteria, @views filter(:ion1 => in(prec), last(analyte.identification).fragments, view = true)[!, :ion2])
+        (::ISF, _)  => any(equivalent_in(criteria, @view cpd.fragments[!, :ion1]) for cpd in analyte)
+        (_, :isf)   => any(equivalent_in(criteria, @views filter(:ion1 => in(prec), cpd.fragments, view = true)[!, :ion2]) for cpd in analyte)
+        _           => equivalent_in(criteria, @views filter(:ion1 => in(prec), last(analyte).fragments, view = true)[!, :ion2])
     end
 
     if found
@@ -111,9 +154,9 @@ end
 # Y/N in
 function match_rules(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::Vector, mode::Symbol, rule, criteria::Tuple)
     found = @match (first(criteria), mode) begin
-        (::ISF, _)  => any(any(equivalent_in(frag, criteria) for frag in @view cpd.fragments[!, :ion1]) for cpd in analyte.identification)
-        (_, :isf)   => any(any(equivalent_in(frag, criteria) for frag in @views filter(:ion1 => in(prec),  cpd.fragments, view = true)[!, :ion2]) for cpd in analyte.identification)
-        _           => any(equivalent_in(frag, criteria) for frag in @views filter(:ion1 => in(prec), last(analyte.identification).fragments, view = true)[!, :ion2])
+        (::ISF, _)  => any(any(equivalent_in(frag, criteria) for frag in @view cpd.fragments[!, :ion1]) for cpd in analyte)
+        (_, :isf)   => any(any(equivalent_in(frag, criteria) for frag in @views filter(:ion1 => in(prec),  cpd.fragments, view = true)[!, :ion2]) for cpd in analyte)
+        _           => any(equivalent_in(frag, criteria) for frag in @views filter(:ion1 => in(prec), last(analyte).fragments, view = true)[!, :ion2])
     end
 
     if found
@@ -127,8 +170,8 @@ end
 
 function match_rules(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::Vector, mode::Symbol, rule, criteria::AcylIon)    
     found = @match mode begin
-        :isf    => any(any(equivalent_in(frag, criteria.ions) for frag in  @views filter(:ion1 => in(prec), cpd.fragments, view = true)[!, :ion2]) for cpd in analyte.identification)
-        _       => any(equivalent_in(frag, criteria.ions) for frag in @views filter(:ion1 => in(prec), last(analyte.identification).fragments, view = true)[!, :ion2])
+        :isf    => any(any(equivalent_in(frag, criteria.ions) for frag in  @views filter(:ion1 => in(prec), cpd.fragments, view = true)[!, :ion2]) for cpd in analyte)
+        _       => any(equivalent_in(frag, criteria.ions) for frag in @views filter(:ion1 => in(prec), last(analyte).fragments, view = true)[!, :ion2])
     end
 
     if found
@@ -161,7 +204,7 @@ end
 
 # hydroxl
 function match_rules(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::Vector, mode::Symbol, rule, criteria::Hydroxyl)
-    hydroxyl = last(analyte.identification).sum[3] - nhydroxyl(criteria.spb)
+    hydroxyl = last(analyte).sum[3] - nhydroxyl(criteria.spb)
     for level in rule.second
         hydroxyl == level.first && return match_rules(project, analyte, prec, ms1, mode, level.second)
     end
@@ -203,7 +246,7 @@ end
 
 function isf_checker(project::Project, analyte::AnalyteGSL, criteria)
     polarity = isa(first(criteria).adduct, Pos)
-    cpd = last(analyte.identification)
+    cpd = last(analyte)
     ms1 = [mz(cpd, ion) for ion in criteria]
     any(project.data) do data
         polarity == data.polarity || return false
@@ -211,8 +254,8 @@ function isf_checker(project::Project, analyte::AnalyteGSL, criteria)
             raw_id = eachindex(data.mz2)
         else
             ###
-            raw_id = findall(mz2 -> abs(rem(mz(Ion(Protonation(), cpd.chain.lcb)) - mz2, mw("H2O"))) < data.mz_tol, data.mz2)
-            isnothing(raw_id) && return false
+            raw_id = findall(mz2 -> abs(rem(mz(Ion(Protonation(), cpd.chain.lcb)) - mz2, mw("H2O"), RoundNearest)) < data.mz_tol, data.mz2)
+            isempty(raw_id) && return false
         end
         @match data begin
             ::PreIS => any(any(between(m1, data.range[id]) for m1 in ms1) for id in raw_id)
@@ -224,14 +267,14 @@ end
 #ion_checker(project::Project, precursor::Vector, ms1::Vector, rule::ISF) = true # Assume covered by PreIS
 
 function ion_checker(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::Vector, rule::Ion{T}) where T
-    #cpd = last(analyte.identification)
+    cpd = last(analyte)
     polarity = @match T begin
         ::Type{<: Pos} => Pos
         ::Type{<: Neg} => Neg
     end
     id = findall(ion -> isa(ion.adduct, polarity), prec)
     ms1 = @view ms1[id]
-    ms2 = mz(rule)
+    ms2 = mz(cpd, rule)
     polarity = ==(polarity, Pos)
     any(project.data) do data
         polarity == data.polarity && begin
@@ -246,13 +289,13 @@ function ion_checker(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::V
 end
 
 function ion_checker(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::Vector, rule::Tuple)
-    #cpd = last(analyte.identification)
+    cpd = last(analyte)
     length(rule) == 1 && return ion_checker(project, analyte, prec, ms1, rule)
     id1 = findall(ion -> isa(ion.adduct, Pos), prec)
     id2 = setdiff(eachindex(ms1), id1)
     ms1_pos = isempty(id1) ? nothing : @view ms1[id1]
     ms1_neg = isempty(id2) ? nothing : @view ms1[id2]
-    ms2 = mz.(rule)
+    ms2 = mz.(Ref(cpd), rule)
     id1 = findall(ion -> isa(ion.adduct, Pos), rule)
     id2 = setdiff(eachindex(ms2), id1)
     ms2_pos = isempty(id1) ? nothing : ms2[id1]
@@ -269,7 +312,7 @@ function ion_checker(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::V
 end
 
 function ion_checker(project::Project, analyte::AnalyteGSL, prec::Vector, ms1::Vector, rule::AcylIon)
-    cpd = last(analyte.identification)
+    cpd = last(analyte)
     id = findall(ion -> isa(ion.adduct, Neg), prec)
     ms1 = isempty(id) ? nothing : @view ms1[id]
     ms2 = mz(cpd, rule)
@@ -293,7 +336,7 @@ function ion_comparison(project::Project, analyte::AnalyteGSL, prec::Vector, ms1
     end
     if mode == :isf
         ratios = Float64[]
-        for cpd in analyte.identification
+        for cpd in analyte
             gdf = groupby(filter(:ion1 => in(prec), cpd.fragments, view = true), [:source, :ion1])
             for subdf in gdf
                 done = true
@@ -315,7 +358,7 @@ function ion_comparison(project::Project, analyte::AnalyteGSL, prec::Vector, ms1
             end
         end
     else
-        cpd = last(analyte.identification)
+        cpd = last(analyte)
         gdf = groupby(filter(:ion1 => in(prec), cpd.fragments, view = true), [:source, :ion1])
         ratios = Float64[]
         for subdf in gdf
