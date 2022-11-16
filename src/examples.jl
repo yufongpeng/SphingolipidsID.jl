@@ -29,27 +29,29 @@ finish_profile!(pj)
 apply_rules!(pj, :class)
 
 # ID: Chain
-apply_rules!(pj, :chain)
+apply_rules!(pj, :chain; chain_isf = 0.5)
 
 # Queries
 @chain pj begin
     query(:class, GM3)
-    query(:sum, (36, 1, 2))
+    query(not(:sum, (36, 1, 2)))
 end
 
 @chain pj begin
     query(:class)
-    query(:chain_wait)
+    query(not(:chain!))
 end
 
 @chain pj begin
-    query(:class, HexCer)
-    query(:chain_fail)
+    query(:class)
+    query(not(:chain!))
+    query((:class, HexCer), (:sum, (36, 1, 2)), (:sum, (34, 1, 2)))
+    query(:lcb, SPB3{2, 18})
 end
 
 # Partial id
 @chain pj begin
     query(:class, HexCer)
-    query(:chain_fail)
+    query(:chain!)
     apply_rules!(;chain_fail = :del)
 end

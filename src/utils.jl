@@ -85,6 +85,10 @@ function ischaincompatible(cpd1::CompoundGSL, cpd2::CompoundGSL)
     end
 end
 
+copy_wo_project(cpd::CompoundGSL) = CompoundGSL(cpd.class, cpd.sum, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), cpd.project)
+copy_wo_project(analyte::AnalyteGSL) = AnalyteGSL(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states))
+copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
+
 length(project::Project) = length(project.analytes)
 length(aquery::Query) = length(aquery.result)
 length(analyte::AnalyteGSL) = length(analyte.compounds)
@@ -114,9 +118,9 @@ lastindex(analyte::AnalyteGSL) = lastindex(analyte.compounds)
 
 sort(project::Project; kwargs...) = sort!(deepcopy(project); kwargs...)
 sort!(project::Project; kwargs...) = sort!(project.analytes; kwargs...)
-sort(aquery::Query; kwargs...) = sort!(deepcopy(aquery); kwargs...)
+sort(aquery::Query; kwargs...) = sort!(copy_wo_project(aquery); kwargs...)
 sort!(aquery::Query; kwargs...) = sort!(aquery.result; kwargs...)
-sort(analyte::AnalyteGSL; kwargs...) = sort!(deepcopy(analyte); kwargs...)
+sort(analyte::AnalyteGSL; kwargs...) = sort!(copy_wo_project(analyte); kwargs...)
 sort!(analyte::AnalyteGSL; kwargs...) = sort!(analyte.compounds; kwargs...)
 
 push!(project::Project, analyte::AnalyteGSL) = push!(project.analytes, analyte)
@@ -149,21 +153,39 @@ keys(analyte::AnalyteGSL) = LinearIndices(analyte.compounds)
 
 reverse(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(deepcopy(project), start, stop)
 reverse!(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(project.analytes, start, stop)
-reverse(aquery::Query, start::Int = 1, stop::Int = length(aquery)) = reverse!(deepcopy(aquery), start, stop)
+reverse(aquery::Query, start::Int = 1, stop::Int = length(aquery)) = reverse!(copy_wo_project(aquery), start, stop)
 reverse!(aquery::Query, start::Int = 1, stop::Int = length(aquery)) = reverse!(aquery.result, start, stop)
-reverse(analyte::AnalyteGSL, start::Int = 1, stop::Int = length(analyte)) = reverse!(deepcopy(analyte), start, stop)
+reverse(analyte::AnalyteGSL, start::Int = 1, stop::Int = length(analyte)) = reverse!(copy_wo_project(analyte), start, stop)
 reverse!(analyte::AnalyteGSL, start::Int = 1, stop::Int = length(analyte)) = reverse!(analyte.compounds, start, stop)
+
+function union!(qs::Vararg{Query, N}) where N
+    q = qs[1]
+    length(qs) <= 1 && return q
+    q.query = [q.query]
+    if q.view
+        ids = collect(parentindices(q.result)[1])
+        for qo in qs[2:end]
+            push!(q.query, qo.query)
+            union!(ids, collect(parentindices(qo.result)[1]))
+        end
+        q.result = @views parent(q.result)[ids]
+    end
+    q
+end
+
+
+
 
 function union!(project::Project, analyte::AnalyteGSL, id::Int, cpd2::CompoundGSL)
     cpd1 = analyte[id]
     if isnothing(cpd2.chain) 
-        append!(cpd1.fragments, cpd2.fragments)
+        append!(cpd1.fragments, cpd2.fragments; cols = :union)
         unique!(cpd1.fragments)
         cpd1.area = max(cpd1.area, cpd2.area)
         return cpd1
     end
     if isnothing(cpd1.chain)
-        push!(project, deepcopy(analyte))
+        push!(project, copy_wo_project(analyte))
         analyte = last(project)
         for a in analyte
             a.chain = cpd2.chain
@@ -178,17 +200,17 @@ function union!(project::Project, analyte::AnalyteGSL, id::Int, cpd2::CompoundGS
             a.chain = chain
         end
     end
-    append!(cpd1.fragments, cpd2.fragments)
+    append!(cpd1.fragments, cpd2.fragments; cols = :union)
     unique!(cpd1.fragments)
     cpd1.area = max(cpd1.area, cpd2.area)
     sort!(analyte, lt = isless_class)
     cpd1
 end
 
-union(cpd1::CompoundGSL, cpd2::CompoundGSL) = union!(deepcopy(cpd1), cpd2)
+union(cpd1::CompoundGSL, cpd2::CompoundGSL) = union!(copy_wo_project(cpd1), cpd2)
 
 function union!(cpd1::CompoundGSL, cpd2::CompoundGSL)
-    append!(cpd1.fragments, cpd2.fragments)
+    append!(cpd1.fragments, cpd2.fragments; cols = :union)
     unique!(cpd1.fragments)
     cpd1.area = max(cpd1.area, cpd2.area)
     if isnothing(cpd2.chain) 
@@ -205,11 +227,11 @@ function union!(cpd1::CompoundGSL, cpd2::CompoundGSL)
     cpd1
 end
 
-union(analyte1::AnalyteGSL, analyte2::AnalyteGSL) = union!(deepcopy(analyte1), analyte2.identi)
-union(analyte1::AnalyteGSL, cpds::Vector{CompoundGSL}) = union!(deepcopy(analyte1), cpds)
-union!(analyte1::AnalyteGSL, analyte2::AnalyteGSL) = union!(analyte1, analyte2.compounds)
+union(analyte1::AnalyteGSL, analyte2::AnalyteGSL) = union!(copy_wo_project(analyte1), analyte2.compounds, analyte2.states)
+union(analyte1::AnalyteGSL, cpds::Vector{CompoundGSL}) = union!(copy_wo_project(analyte1), cpds)
+union!(analyte1::AnalyteGSL, analyte2::AnalyteGSL) = union!(analyte1, analyte2.compounds, analyte2.states)
 
-function union!(analyte1::AnalyteGSL, cpds::Vector{CompoundGSL})
+function union!(analyte1::AnalyteGSL, cpds::Vector{CompoundGSL}, states2 = [0, 0])
     for cpd2 in cpds
         id = findfirst(cpd1 -> iscompatible(cpd1, cpd2), analyte1)
         if isnothing(id)
@@ -219,6 +241,7 @@ function union!(analyte1::AnalyteGSL, cpds::Vector{CompoundGSL})
         end
     end
     sort!(analyte1, lt = isless_class)
+    analyte1.states = min.(analyte1.states, states2)
     analyte1
 end
 

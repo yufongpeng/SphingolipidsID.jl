@@ -37,7 +37,7 @@ function nmw(formula::AbstractString)
     end
 end
 
-mz(cpd::CompoundGSL, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, cpd.chain, DataFrame(), 0, [])))
+mz(cpd::CompoundGSL, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, cpd.chain, DataFrame(), 0, [], nothing)))
 function mz(cpd::CompoundGSL, ions::AcylIon{T}) where T
     acyl_cb, acyl_db, acyl_o = cpd.sum .- sumcomp(T())
     map(ions.ions) do ion
@@ -49,7 +49,7 @@ function mz(cpd::CompoundGSL, ions::AcylIon{T}) where T
 end
 mz(cpd::CompoundGSL, ion::Ion) = mz(ion)
 mz(cpd::CompoundGSL, add::Adduct) = parse_adduct(add)(mw(cpd))
-mz(cpd::CompoundGSL, ion::Ion{<: Adduct, <: ClassGSL}) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, nothing, DataFrame(), 0, [])))
+mz(cpd::CompoundGSL, ion::Ion{<: Adduct, <: ClassGSL}) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, nothing, DataFrame(), 0, [], nothing)))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
 mz(ion::Ion{S, <: ACYL{N}}, cb, db, o = N) where {S, N} = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
 mw(::T, cb, db, o = N) where {N, T <: ACYL{N}} = mw("C") * cb + mw("H") * (2 * cb - 2 * db - 1) + mw("O") * (o + 1)

@@ -4,50 +4,63 @@ function query(project::Project, args...; view = true)
     query(Query(project, v, [], view), args...)
 end
 
+query(aquery::Query, id::Tuple; view = aquery.view, fn = identity) = query(aquery, id...; view, fn)
 
-function query(aquery::Query, quantity::Symbol, low, up; view = aquery.view)
-    v = @views @match quantity begin
-        :rt => aquery[findall(analyte -> between(analyte.rt; low, up), aquery)]
-        :mw => aquery[findall(analyte -> between(mw(last(analyte)); low, up), aquery)]
-        :mz => aquery[findall(analyte -> any(between(query_raw(aquery.project, frag.source, frag.id).mz1; low, up) for frag in eachrow(last(analyte).fragments)), aquery)]
+function query(aquery::Query, quantity::Symbol, low, up; view = aquery.view, fn = identity)
+    v = @match quantity begin
+        :rt => @view aquery[findall(analyte -> between(analyte.rt; low, up)|>fn, aquery)]
+        :mw => @view aquery[findall(analyte -> between(mw(last(analyte)); low, up)|>fn, aquery)]
+        :mz => @view aquery[findall(analyte -> any(between(query_raw(aquery.project, frag.source, frag.id).mz1; low, up) for frag in eachrow(last(analyte).fragments))|>fn, aquery)]
     end
-    push!(aquery.query, quantity => (low, up))
-    aquery.view = view
-    aquery.result = view ? v : Vector(v)
-    aquery
+    finish_query!(aquery, quantity, (low, up), fn, v, view)
 end
 
-function query(aquery::Query, id::Symbol, type; view = true)
+function query(aquery::Query, id::Symbol, type; view = aquery.view, fn = identity)
     cpds = map(aquery) do analyte
             last(analyte)
     end
-    v = @views @match id begin
-        :class  => aquery[findall(cpd -> cpd.class isa type, cpds)]
-        :sum    => aquery[findall(cpd -> cpd.sum == type, cpds)]
-        :lcb    => aquery[findall(cpd -> !isnothing(cpd.chain) && cpd.chain.lcb == type(), cpds)]
+    v = @match id begin
+        :class  => @view aquery[findall(cpd -> isa(cpd.class, type)|>fn, cpds)]
+        :sum    => @view aquery[findall(cpd -> ==(cpd.sum, type)|>fn, cpds)]
+        :lcb    => @view aquery[findall(cpd -> (!isnothing(cpd.chain) && ==(cpd.chain.lcb, type()))|>fn, cpds)]
     end
-    push!(aquery.query, id => type)
+    finish_query!(aquery, id, type, fn, v, view)
+end
+
+function query(aquery::Query, id::Symbol; view = aquery.view, fn = identity)
+    v = @match id begin
+        :class  => @view aquery[findall(analyte -> ==(analyte.states[1], 1)|>fn, aquery.result)]
+        :chain  => @view aquery[findall(analyte -> ==(analyte.states[2], 1)|>fn, aquery.result)]
+        :class_  => @view aquery[findall(analyte -> ==(analyte.states[1], 0)|>fn, aquery.result)]
+        :chain_  => @view aquery[findall(analyte -> ==(analyte.states[2], 0)|>fn, aquery.result)]
+        :class!  => @view aquery[findall(analyte -> ==(analyte.states[1], -1)|>fn, aquery.result)]
+        :chain!  => @view aquery[findall(analyte -> ==(analyte.states[2], -1)|>fn, aquery.result)]
+        :both   => @view aquery[findall(analyte -> all(==(1), analyte.states)|>fn, aquery.result)]
+    end
+    finish_query!(aquery, :id, id, fn, v, view)
+end
+
+function finish_query!(aquery::Query, ql::Symbol, qr, fn, v, view)
+    if fn === identity
+        push!(aquery.query, ql => qr)
+    else
+        push!(aquery.query, ql => Inv(qr))
+    end
     aquery.view = view
     aquery.result = view ? v : Vector(v)
     aquery
 end
 
-function query(aquery::Query, id::Symbol; view = true)
-    cpds = map(aquery) do analyte
-        last(analyte)
+query(aquery::Query, id::Inv; view = true) = query(aquery, id.args...; view, fn = !)
+function query(aquery::Query, ids::Vararg{Union{Tuple, Inv}, N}; view = true) where N 
+    pid = parentindices(aquery.result)[1]
+    qs = map(ids) do id
+        query(Query(aquery.project, view ? Base.view(aquery.project, deepcopy(pid)) : copy_wo_project.(aquery.result), [], view), id; view)
     end
-    v = @views @match id begin
-        :class  => aquery[findall(cpd -> isa(cpd.states[1], Symbol), cpds)]
-        :chain  => aquery[findall(cpd -> isa(cpd.states[2], Symbol), cpds)]
-        :class_fail  => aquery[findall(cpd -> isnothing(cpd.states[1]), cpds)]
-        :chain_fail  => aquery[findall(cpd -> isnothing(cpd.states[2]), cpds)]
-        :class_wait  => aquery[findall(cpd -> !isnothing(cpd.states[1]) && !isa(cpd.states[1], Symbol), cpds)]
-        :chain_wait  => aquery[findall(cpd -> !isnothing(cpd.states[2]) && !isa(cpd.states[2], Symbol), cpds)]
-        :both   => aquery[findall(cpd -> all(r -> isa(r, Symbol), cpd.states), cpds)]
-    end
-    push!(aquery.query, :id => id)
+    qs = union!(qs...)
+    push!(aquery.query, tuple(qs.query...))
     aquery.view = view
-    aquery.result = view ? v : Vector(v)
+    aquery.result = view ? qs.result : Vector(qs.result)
     aquery
 end
 

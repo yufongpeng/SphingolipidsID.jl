@@ -42,7 +42,8 @@ function preis!(
                 )
     products = id_product(ms2, polarity; mz_tol, db = db_product)
     featuretable = deepcopy(featuretable)
-    println("PreIS> ", products)
+    printstyled("PreIS> ", color = :green, bold = true)
+    println(products)
     # check data compatibility ?
     if length(project.data) == 0
         source = 1
@@ -97,7 +98,7 @@ function preis!(
         for row in eachrow(db)
             if abs(row.var"m/z" - ft.mz1) < mz_tol
                 cpds = map(products) do product
-                    CompoundGSL(row, product, source, ft.id, ft.area)
+                    CompoundGSL(project, row, product, source, ft.id, ft.area)
                 end
                 filter!(!isnothing, cpds)
                 n = length(cpds)
@@ -132,7 +133,7 @@ function preis!(
 
         if isempty(subanalytes) 
             for cpd in current_cpd
-                push!(project, AnalyteGSL([cpd], ft.rt))
+                push!(project, AnalyteGSL([cpd], ft.rt, [0, 0]))
             end
         else
             # Aggregates
@@ -149,7 +150,7 @@ function preis!(
                         push = true
                         for new in @view project[n + 1:end]
                             if iscompatible(last(new), cpd)
-                                union!(new, deepcopy(analyte[connected_id]))
+                                union!(new, copy_wo_project.(analyte[connected_id]))
                                 new.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in new)
                                 push = false
                                 break
@@ -157,7 +158,7 @@ function preis!(
                         end
                         push || continue
                         if length(connected_id) < length(analyte)
-                            push!(project, AnalyteGSL(deepcopy(analyte[connected_id]), analyte.rt))
+                            push!(project, AnalyteGSL(copy_wo_project.(analyte[connected_id]), analyte.rt, [0, 0]))
                             analyte = last(project)
                         end
                         #=
@@ -169,7 +170,7 @@ function preis!(
                             println(id)
                         end
                         =#
-                        push!(analyte, deepcopy(cpd))
+                        push!(analyte, copy_wo_project(cpd))
                         sort!(analyte, lt = isless_class)
                         analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte)
                         #=if cpd.sum == (42, 1, 2) && cpd.chain.lcb == SPB3{2, 18}() && analyte[end].chain.lcb == SPB3{2, 18}()
@@ -188,15 +189,15 @@ function preis!(
                     existanalytes = @view subanalytes[ids]
                     for (id, analyte) in zip(existids, existanalytes)
                         if isnothing(id)
-                            push!(analyte, deepcopy(cpd))
+                            push!(analyte, copy_wo_project(cpd))
                             sort!(analyte, lt = isless_class)
                         else
-                            union!(project, analyte, id, deepcopy(cpd))
+                            union!(project, analyte, id, copy_wo_project(cpd))
                         end
                         analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte)
                     end
                 end
-                agg || push!(project, AnalyteGSL([cpd], ft.rt))
+                agg || push!(project, AnalyteGSL([cpd], ft.rt, [0, 0]))
             end
         end
         #=
@@ -211,11 +212,13 @@ function preis!(
 end
 
 function finish_profile!(project::Project; rt_tol = 0.1)
-    println("PreIS> Sorting compounds")
+    printstyled("PreIS> ", color = :green, bold = true)
+    println("Sorting compounds")
     for (i, analyte) in enumerate(project)
         sort!(analyte, lt = isless_class)
     end
-    println("PreIS> Merging, splitting and deleting analytes")
+    printstyled("PreIS> ", color = :green, bold = true)
+    println("Merging, splitting and deleting analytes")
     del = Int[]
     for (i, analyte) in enumerate(project)
         area = last(analyte).area
@@ -235,7 +238,7 @@ function finish_profile!(project::Project; rt_tol = 0.1)
 
         for (i, cpd) in Iterators.reverse(enumerate(analyte))
             if cpd.area > area && all(!iscompatible(last(a), cpd) for a in project if abs(a.rt - analyte.rt) < rt_tol)
-                push!(project, AnalyteGSL(deepcopy(analyte[1:i]), analyte.rt))
+                push!(project, AnalyteGSL(copy_wo_project.(analyte[1:i]), analyte.rt, [0, 0]))
                 last(project).rt = mean(mean(query_raw(project, row.source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in last(project))
                 break
             end
@@ -245,5 +248,10 @@ function finish_profile!(project::Project; rt_tol = 0.1)
     end
     unique!(del)
     deleteat!(project, del)
+    for analyte in project
+        for cpd in analyte
+            cpd.project = project
+        end
+    end
     project
 end

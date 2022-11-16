@@ -1,6 +1,6 @@
 module SphingolipidsID
 
-using DataFrames, CSV, MLStyle, Statistics
+using DataFrames, CSV, MLStyle, Statistics, PrettyTables
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export library, rule, featuretable_mzmine, add_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, 
         preis, preis!, finish_profile!, 
@@ -39,7 +39,7 @@ export library, rule, featuretable_mzmine, add_ce_mzmine!, featuretable_masshunt
         CompoundGSL, AnalyteGSL, 
         IonPlus, IonComparison, IonMode, IonUnion, AcylIon,
 
-        Data, PreIS, MRM, Project, Query
+        Data, PreIS, MRM, Project, Query, not
 
 import Base: show, print, isless, isempty, keys, length, union, union!, deleteat!, 
         iterate, getindex, view, firstindex, lastindex, sort, sort!, push!, pop!, popat!, popfirst!, reverse, reverse!
@@ -222,11 +222,13 @@ mutable struct CompoundGSL
     fragments::DataFrame # ion1, ion2, source, id
     area::Float64
     states::Vector
+    project
 end
 
 mutable struct AnalyteGSL
     compounds::Vector{CompoundGSL}
     rt::Float64
+    states::Vector{Int}
 end
 # ==()
 
@@ -299,6 +301,12 @@ mutable struct Query
     query::Vector
     view::Bool
 end
+
+struct Inv
+    args
+end
+
+not(id::Symbol, args...) = Inv((id, args...))
 
 include("io.jl")
 include("utils.jl")

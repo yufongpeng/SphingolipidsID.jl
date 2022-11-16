@@ -12,7 +12,10 @@ function featuretable_mzmine(paths)
     rename!(tbl, :mz => :mz1)
     sort!(tbl, [:mz1, :rt])
     tbl.id = 1:size(tbl, 1)
-    println("DataFiles Order: ", unique(tbl.datafile)...)
+    println("DataFiles Order: ")
+    for i in unique(tbl.datafile)
+        println(" ", i)
+    end
     tbl
 end
 
@@ -101,7 +104,7 @@ function filter_duplicate(tbl::DataFrame; rt_tol = 0.1, mz_tol = 0.35)
     combine(groupby(tbl, :id), All() .=> mean, renamecols = false)
 end
 
-function CompoundGSL(cpd, product, source, id, area)
+function CompoundGSL(project::Project, cpd, product, source, id, area)
     sum_cb, sum_db, sum_o = match(r".+ (\d+):(\d+);(\d*)O", cpd.Species).captures
     sum_cb = parse(Int, sum_cb)
     sum_db = parse(Int, sum_db)
@@ -148,7 +151,8 @@ function CompoundGSL(cpd, product, source, id, area)
     end
     CompoundGSL(class, (sum_cb, sum_db, sum_o), chain, 
         fragments, area,
-        Union{Missing, Pair, IonMode, IonUnion, Symbol, Nothing}[missing, missing]
+        Union{Missing, Pair, IonMode, IonUnion, Symbol, Nothing}[missing, missing],
+        project
     )
 end
 
