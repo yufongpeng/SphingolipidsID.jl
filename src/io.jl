@@ -1,7 +1,7 @@
 
 function Base.show(io::IO, class::T) where {T <: ClassGSL}
     hasisomer(T) ? begin
-        str = join(map(x -> repr, class.isomer), ", ")
+        str = join(map(repr, class.isomer), ", ")
         str = isempty(str) ? "" : str 
         print(io, repr(T), isempty(str) ? "" : "($str)") 
     end : print(io, T)

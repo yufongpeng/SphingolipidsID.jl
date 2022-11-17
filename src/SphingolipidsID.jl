@@ -37,9 +37,11 @@ export library, rule, featuretable_mzmine, add_ce_mzmine!, featuretable_masshunt
         LossCH2O, AddO, AddC2H2O, LossCH8NO, LossC2H8NO, AddC3H5NO, AddC2H5NO,
 
         CompoundGSL, AnalyteGSL, 
-        IonPlus, IonComparison, IonMode, IonUnion, AcylIon,
+        #IonPlus, IonComparison, RuleMode, RuleUnion, AcylIon,
 
         Data, PreIS, MRM, Project, Query, not
+
+
 
 import Base: show, print, isless, isempty, keys, length, union, union!, deleteat!, 
         iterate, getindex, view, firstindex, lastindex, sort, sort!, push!, pop!, popat!, popfirst!, reverse, reverse!
@@ -242,13 +244,38 @@ end
 
 IonComparison(ion1, ion2) = IonComparison((ion1, ion2))
 
-struct IonUnion
+abstract type AbstractRule end
+
+struct Rule{T} <: AbstractRule
+    criteria::T
+    rule
+end
+
+@as_record Rule
+
+struct RuleUnion <: AbstractRule
     rules
 end
 
-struct IonMode
+struct RuleMode <: AbstractRule
     rules
 end
+
+abstract type AbstractResult{T} end
+
+struct Result{T} <: AbstractResult{T}
+    matched::Bool
+    rule::T
+end
+@as_record Result
+
+struct PartialResult{T, C <: Union{Chain, ClassGSL}} <: AbstractResult{T}
+    matched::Bool
+    rule::T
+    result::C
+end
+
+@as_record PartialResult
 
 struct Hydroxyl 
     spb::LCB
@@ -260,7 +287,7 @@ end
 
 AcylIon{T}(ions...) where {T<: LCB} = AcylIon{T}(ions)
 
-for fn in (:IonPlus, :IonUnion, :IonMode)
+for fn in (:IonPlus, :RuleUnion, :RuleMode)
     @eval begin
         $fn(x...) = $fn(x)
     end
@@ -317,6 +344,7 @@ include("data.jl")
 include("preis.jl")
 include("ruleID.jl")
 include("query.jl")
+include("mrm.jl")
 
 # S: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-237.2224
 # DHS: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-239.2224

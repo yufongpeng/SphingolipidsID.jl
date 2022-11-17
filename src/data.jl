@@ -113,7 +113,7 @@ function CompoundGSL(project::Project, cpd, product, source, id, area)
     adduct_class = object_adduct(cpd.Adduct)
     chain = nothing
     fragments = DataFrame(ion1 = Ion[Ion(adduct_class, class)], ion2 = Ion[product], source = [source], id = [id])
-    result = @match product begin
+    @match product begin
         Ion(adduct, lcb::LCB) => begin 
             lcb_o = nhydroxyl(lcb)
             lcb_db = ndb(lcb)
@@ -151,7 +151,7 @@ function CompoundGSL(project::Project, cpd, product, source, id, area)
     end
     CompoundGSL(class, (sum_cb, sum_db, sum_o), chain, 
         fragments, area,
-        Union{Missing, Pair, IonMode, IonUnion, Symbol, Nothing}[missing, missing],
+        Union{Rule, Symbol, Nothing}[Rule(missing, missing), Rule(missing, missing)],
         project
     )
 end

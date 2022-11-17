@@ -5,8 +5,8 @@ fts = map(files) do file
 end;
 
 ms = [236.238, 250.253, 284.295, 264.269, 262.253, 278.285, 292.3, 266.285, 274.093, 282.28]
-range = repeat([(400, 1500)], 9)
-insert!(range, 9, (900, 1650))
+rang = repeat([(400, 1500)], 9)
+insert!(rang, 9, (900, 1650))
 
 # Custom DB
 db = reduce(append!, (
@@ -20,7 +20,7 @@ db = reduce(append!, (
 # PreIS 
 SPDB[:LIBRARY_POS] = db
 pj = preis()
-for (m, r, ft) in zip(ms, range, fts)
+for (m, r, ft) in zip(ms, rang, fts)
     preis!(pj, ft, r, m, true; rt_tol = 0.1)
 end
 finish_profile!(pj)
@@ -29,7 +29,7 @@ finish_profile!(pj)
 apply_rules!(pj, :class)
 
 # ID: Chain
-apply_rules!(pj, :chain; chain_isf = 0.5)
+apply_rules!(pj, :chain; chain!_isf = (1, 0.5))
 
 # Queries
 @chain pj begin
@@ -38,8 +38,15 @@ apply_rules!(pj, :chain; chain_isf = 0.5)
 end
 
 @chain pj begin
+    query(:both)
+    query(:sum, (36, 1, 2))
+    generate_mrm(:default, LCB)
+end
+
+@chain pj begin
     query(:class)
     query(not(:chain!))
+    generate_mrm(:default, LCB)
 end
 
 @chain pj begin

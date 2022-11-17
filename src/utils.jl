@@ -72,18 +72,22 @@ end
 iscompatible(cpd1::CompoundGSL, cpd2::CompoundGSL) = 
     cpd1.class == cpd2.class && ischaincompatible(cpd1, cpd2)
 
-function ischaincompatible(cpd1::CompoundGSL, cpd2::CompoundGSL)
-    cpd1.sum == cpd2.sum && begin 
-        isnothing(cpd1.chain) || isnothing(cpd2.chain) || begin
-            @match (cpd1.chain.lcb, cpd2.chain.lcb) begin
-                ::Tuple{<: LCB2{N1, C}, <: LCB2{N2, C}} where {C, N1, N2}   => true
-                ::Tuple{<: LCB3{N1, C}, <: LCB3{N2, C}} where {C, N1, N2}   => true
-                ::Tuple{<: LCB4{N1, C}, <: LCB4{N2, C}} where {C, N1, N2}   => true
-                _                                                           => false
-            end
-        end
+ischaincompatible(cpd1::CompoundGSL, cpd2::CompoundGSL) = 
+    cpd1.sum == cpd2.sum && ischaincompatible(cpd1.chain, cpd2.chain)
+
+ischaincompatible(chain1::Nothing, chain2::Chain) = true
+ischaincompatible(chain1::Chain, chain2::Nothing) = true
+ischaincompatible(chain1::Nothing, chain2::Nothing) = true
+
+ischaincompatible(chain1::Chain, chain2::Chain) = 
+    @match (chain1.lcb, chain2.lcb) begin
+        ::Tuple{<: LCB2{N1, C}, <: LCB2{N2, C}} where {C, N1, N2}   => true
+        ::Tuple{<: LCB3{N1, C}, <: LCB3{N2, C}} where {C, N1, N2}   => true
+        ::Tuple{<: LCB4{N1, C}, <: LCB4{N2, C}} where {C, N1, N2}   => true
+        _                                                           => false
     end
-end
+
+ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(chain2) && sumcomp(chain1.lcb) == sumcomp(chain2.lcb) 
 
 copy_wo_project(cpd::CompoundGSL) = CompoundGSL(cpd.class, cpd.sum, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), cpd.project)
 copy_wo_project(analyte::AnalyteGSL) = AnalyteGSL(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states))
@@ -163,10 +167,10 @@ function union!(qs::Vararg{Query, N}) where N
     length(qs) <= 1 && return q
     q.query = [q.query]
     if q.view
-        ids = collect(parentindices(q.result)[1])
+        ids = parentindices(q.result)[1]
         for qo in qs[2:end]
             push!(q.query, qo.query)
-            union!(ids, collect(parentindices(qo.result)[1]))
+            union!(ids, parentindices(qo.result)[1])
         end
         q.result = @views parent(q.result)[ids]
     end
@@ -289,3 +293,17 @@ vectorize(x) = [x]
 
 tuplize(x::Tuple) = x
 tuplize(x) = (x,)
+
+macro rule(expr)
+    expr = pipe2rule(expr)
+    return quote
+        $(esc(expr))
+    end
+end
+
+pipe2rule(expr) = 
+    @match expr begin
+        Expr(:call, :(|>), arg1, arg2)  => Expr(:call, :(Rule), pipe2rule(arg1), pipe2rule(arg2))
+        Expr(head, args...)             => Expr(head, map(pipe2rule, args)...)
+        e                               => e
+    end 
