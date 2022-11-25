@@ -1,5 +1,3 @@
-const SPDB = Dict{Symbol, Any}()
-
 function read_adduct_code(file::String) 
     code = CSV.read(file, DataFrame, header = [:repr, :object])
     transform!(code, :object => ByRow(eval ∘ Meta.parse), renamecols = false)
@@ -36,10 +34,10 @@ const CLASSDB = read_class_db(joinpath(@__DIR__, "..", "config", "CLASSDB.csv"))
 SPDB[:CLASSDB] = CLASSDB
 
 class_db_index(::LCB) = @views SPDB[:CLASSDB][findfirst(==(SPB), SPDB[:CLASSDB][!, :Abbreviation]), :]
-class_db_index(cls::T) where {T <: ClassGSL} = @views SPDB[:CLASSDB][findfirst(==(deisomerized(T)), SPDB[:CLASSDB][!, :Abbreviation]), :]
+class_db_index(cls::T) where {T <: ClassSP} = @views SPDB[:CLASSDB][findfirst(==(deisomerized(T)), SPDB[:CLASSDB][!, :Abbreviation]), :]
 
 library(class::Vector, adduct::Vector{<: Adduct}, range::Vector{<: Tuple}) = library(class, map(repr_adduct, adduct), range)
-#library(class::Vector{Type{<: ClassGSL}}, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple}) = library([cls() for cls in class], adduct, range)
+#library(class::Vector{Type{<: ClassSP}}, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple}) = library([cls() for cls in class], adduct, range)
 
 function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple})
     range = map(range) do r
@@ -47,7 +45,7 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
     end
     n = mapreduce(rng -> mapreduce(length, *, rng), +, range) * length(adduct) * length(class)
     df = DataFrame(
-                    :Abbreviation => Vector{Type{<: ClassGSL}}(undef, n),
+                    :Abbreviation => Vector{Type{<: ClassSP}}(undef, n),
                     :Species => Vector{String}(undef, n),
                     :Formula => Vector{String}(undef, n),
                     :Adduct => repeat(adduct, Int(n / length(adduct))),
@@ -129,8 +127,8 @@ SPDB[:LIBRARY_POS] = LIBRARY_POS
 
 const FRAGMENT_POS = let
     frags = [SPB2{1, 18}(), SPB2{2, 18}(), 
-            SPB3{2, 16}(), SPB3{2, 17}(), SPB3{2, 18}(), PhytoSPB3{3, 18}(), SPB3{2, 19}(), SPB3{2, 20}(), 
-            SPB4{2, 16}(), SPB4{2, 18}(), PhytoSPB4{3, 18}(), SPB4{2, 20}()]
+            SPB3{2, 16}(), SPB3{2, 17}(), SPB3{2, 18}(), SPB3{3, 18}(), SPB3{2, 19}(), SPB3{2, 20}(), 
+            SPB4{2, 16}(), SPB4{2, 18}(), SPB4{3, 18}(), SPB4{2, 20}()]
     ion = map(default_adduct, frags)
     append!(ion, [Ion(ProtonationNL2H2O(), NeuAc()), 
                     Ion(ProtonationNLH2O(), NeuAc()), 
@@ -149,27 +147,40 @@ SPDB[:FRAGMENT_POS] = FRAGMENT_POS
 #FRAGMENT_NEG
 
 
-const CONNECTION = Dict{ClassGSL, ClassGSL}(
-    GP1()                   => GQ1(),
-    GQ1()                   => GT1(),
-    GT1()                   => GD1(),
-    GD1()                   => GM1(),
-    GM1()                   => GM3(),
+const CONNECTION = Dict{ClassSP, Any}(
+    GP1c()                  => (GQ1c(), GQ1b()),
+    GP1cα()                 => (GQ1bα(), GQ1c()),
+    GQ1c()                  => (GT1c(), GT1b()),
+    GQ1b()                  => (GT1a(), GT1b()),
+    GQ1bα()                 => (GT1aα(), GT1b()),
+    GT1c()                  => GT2(),
+    GT1b()                  => (GD1b(), GD1a()),
+    GT1a()                  => (GD1a(), GD1c()),
+    GT1aα()                 => (GD1a(), GD1α()),
+    GD1b()                  => GD2(),
+    GD1a()                  => (GM1a(), GM1b()),
+    GD1c()                  => GM1b(),
+    GD1α()                  => GM1b(),
+    GM1a()                  => GM2(),
+    GM1b()                  => Hex_HexNAc_Hex2Cer(),
+    GT2()                   => (GT3(), GD2()),
+    GD2()                   => (GD3(), GM2()),
+    GM2()                   => (GM3(), HexNAc_Hex2Cer()),
+    GT3()                   => GD3(),
+    GD3()                   => GM3(),
+#    GP1()                   => GQ1(),
+#    GQ1()                   => GT1(),
+#    GT1()                   => GD1(),
+#    GD1()                   => GM1(),
     GM3()                   => Hex2Cer(),
     Hex2Cer()               => HexCer(),
     Cer()                   => Cer(),
-    GD3()                   => GM3(),
-    GT3()                   => GD3(),
-    GM2()                   => GM3(),
-    GD2()                   => GD3(),
-    GT2()                   => GT3(),
     SHexCer()               => HexCer(),
     SHexHexCer()            => Hex2Cer(),
     GM4()                   => HexCer(),
     Hex3Cer()               => Hex2Cer(),
-    HexNAcHex2Cer()         => Hex2Cer(),
-    HexNAcHex3Cer()         => Hex2Cer(),
-    Hex_HexNAc_Hex2Cer()    => HexNAcHex2Cer(),
+    HexNAc_Hex2Cer()        => Hex2Cer(),
+    Hex_HexNAc_Hex2Cer()    => HexNAc_Hex2Cer(),
     HexNAc_Hex3Cer()        => Hex3Cer(),
     HexCer()                => Cer()
 )

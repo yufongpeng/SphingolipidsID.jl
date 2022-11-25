@@ -104,7 +104,7 @@ function filter_duplicate(tbl::DataFrame; rt_tol = 0.1, mz_tol = 0.35)
     combine(groupby(tbl, :id), All() .=> mean, renamecols = false)
 end
 
-function CompoundGSL(project::Project, cpd, product, source, id, area)
+function CompoundSP(project::Project, cpd, product, source, id, area)
     sum_cb, sum_db, sum_o = match(r".+ (\d+):(\d+);(\d*)O", cpd.Species).captures
     sum_cb = parse(Int, sum_cb)
     sum_db = parse(Int, sum_db)
@@ -149,12 +149,15 @@ function CompoundGSL(project::Project, cpd, product, source, id, area)
             hasnana(class) || return nothing
         end
     end
-    CompoundGSL(class, (sum_cb, sum_db, sum_o), chain, 
+    CompoundSP(class, (sum_cb, sum_db, sum_o), chain, 
         fragments, area,
-        Union{Rule, Symbol, Nothing}[Rule(missing, missing), Rule(missing, missing)],
+        [0, 0],
+        RuleSet[RuleSet(:missing, EmptyRule()), RuleSet(:missing, EmptyRule())],
         project
     )
 end
+
+AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64, states::Vector{Int}) = AnalyteSP(compounds, rt, states, [default_score])
 
 function id_product(ms2, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG], mz_tol = 0.35)
     products = Ion[]

@@ -5,8 +5,9 @@ ms1,adduct1,ms2,adduct2,eV,
 "Hex2Cer	",1,LCB,0,55,
 "SHexHexCer	",1,LCB,0,60,*
 "Hex3Cer	",1,LCB,0,65,*
-"HexNAcHex2Cer	",1,LCB,0,70,*
-"HexNAcHex3Cer	",1,LCB,0,80,*
+"HexNAc_Hex2Cer	",1,LCB,0,70,*
+"HexNAc_Hex3Cer	",1,LCB,0,80,*
+"Hex_HexNAc_Hex2Cer	",1,LCB,0,80,*
 "GM3	",1,LCB,0,80,
 "GM2	",1,LCB,0,80,
 "GM1	",1,LCB,0,80,
@@ -23,9 +24,10 @@ ms1,adduct1,ms2,adduct2,eV,
 "Hex3Cer	",1,Cer,2,,
 GM4,1,Cer,2,,
 "GM3	",1,Cer,2,,
-"HexNAcHex3Cer	",1,Hex3Cer,1,,
-"HexNAcHex2Cer	",1,HexNAc,2,,
-"HexNAcHex3Cer	",1,HexNAc_Hex,2,10,*
+"HexNAc_Hex3Cer	",1,Hex3Cer,1,,
+"HexNAc_Hex2Cer	",1,HexNAc,2,,
+"HexNAc_Hex3Cer	",1,HexNAc_Hex,2,10,*
+"Hex_HexNAc_Hex2Cer	",1,HexNAc_Hex,2,10,*
 "GM3	",1,NeuAc,3,50,
 "GM2	",1,NeuAc,3,60,
 "GM1	",1,NeuAc,3,70,

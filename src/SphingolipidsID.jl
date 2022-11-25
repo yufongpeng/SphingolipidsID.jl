@@ -2,29 +2,23 @@ module SphingolipidsID
 
 using DataFrames, CSV, MLStyle, Statistics, PrettyTables
 using UnitfulMoles: parse_compound, ustrip, @u_str
-export library, rule, featuretable_mzmine, add_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, 
-        preis, preis!, finish_profile!, 
-        apply_rules!, id_product, query,
-        generate_mrm,
-
-        SPDB, 
-        
-        LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB, 
+export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB, 
 
         read_adduct_code, read_class_db, read_ce, class_db_index, 
 
         mw, mz, 
 
-        ClassGSL, SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, 
-        ClassHexNAcHex2Cer, HexNAcHex2Cer, ClassHexNAcHex3Cer, HexNAcHex3Cer, HexNAc_Hex3Cer, Hex_HexNAc_Hex2Cer, ClasswoNANA,
-        GM4, GM3, GM2, ClassGM1, GM1, GM1a, GM1b,
-        GD3, GD2, ClassGD1, GD1, GD1a, GD1b, GD1c, GD1α, 
-        GT3, GT2, GT1, ClassGT1, GT1, GT1a, GT1b, GT1c, GT1aα,
-        ClassGQ1, GQ1, GQ1b, GQ1c, GQ1bα,
-        ClassGP1, GP1, GP1c, GP1cα,
+        ClassSP, SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, 
+        HexNAcHex2Cer, HexNAcHex2Cer_, HexNAc_Hex2Cer, HexNAcHex3Cer, HexNAcHex3Cer_, HexNAc_Hex3Cer, Hex_HexNAc_Hex2Cer, ClasswoNANA,
+        GM4, GM3, GM2, GM1, GM1_, GM1a, GM1b,
+        GD3, GD2, GD1, GD1_, GD1a, GD1b, GD1c, GD1α, 
+        GT3, GT2, GT1, GT1_, GT1a, GT1b, GT1c, GT1aα,
+        GQ1, GQ1_, GQ1b, GQ1c, GQ1bα,
+        GP1, GP1_, GP1c, GP1cα,
 
-        LCB, LCB2, LCB3, LCB4, SPB2, SPB3, SPB4, PhytoSPB, PhytoSPB3, PhytoSPB4,
+        LCB, LCB2, LCB3, LCB4, SPB2, SPB3, SPB4, NotPhyto, NotPhyto3, NotPhyto4,
         ACYL, Acyl, Acylα, Acylβ, 
+        Lcb, Nacyl, Nacylα, Nacylβ, NACYL,
         Chain, 
 
         Sugar, Glycan, Hex, HexNAc, NeuAc,
@@ -36,92 +30,124 @@ export library, rule, featuretable_mzmine, add_ce_mzmine!, featuretable_masshunt
         Deprotonation, DeprotonationNLH2O, DiDeprotonation, TriDeprotonation, AddOAc, AddHCOO, 
         LossCH2O, AddO, AddC2H2O, LossCH8NO, LossC2H8NO, AddC3H5NO, AddC2H5NO,
 
-        CompoundGSL, AnalyteGSL, 
+        CompoundSP, AnalyteSP, 
         #IonPlus, IonComparison, RuleMode, RuleUnion, AcylIon,
 
-        Data, PreIS, MRM, Project, Query, not
+        Data, PreIS, MRM, Project, Query, 
+
+        library, rule, 
+        
+        featuretable_mzmine, add_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, 
+
+        preis, preis!, finish_profile!, 
+
+        apply_rules!, id_product, 
+
+        query, not, cpd, lcb, acyl, acylα, acylβ,
+
+        nfrags, @score, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!,
+
+        generate_mrm, nMRM
 
 
 
 import Base: show, print, isless, isempty, keys, length, union, union!, deleteat!, 
         iterate, getindex, view, firstindex, lastindex, sort, sort!, push!, pop!, popat!, popfirst!, reverse, reverse!
 
-abstract type ClassGSL end
+const SPDB = Dict{Symbol, Any}()
+const ISOMER = Dict{Type, Tuple}()
+abstract type ClassSP end
 
-struct SPB <: ClassGSL end
-struct Cer <: ClassGSL end
-struct CerP <: ClassGSL end
-struct HexCer <: ClassGSL end
-struct SHexCer <: ClassGSL end
-struct SHexHexCer <: ClassGSL end
-struct Hex2Cer <: ClassGSL end
-struct Hex3Cer <: ClassGSL end
+struct SPB <: ClassSP end
+struct Cer <: ClassSP end
+struct CerP <: ClassSP end
+struct HexCer <: ClassSP end
+struct SHexCer <: ClassSP end
+struct SHexHexCer <: ClassSP end
+struct Hex2Cer <: ClassSP end
+struct Hex3Cer <: ClassSP end
 
-abstract type ClassHexNAcHex2Cer <: ClassGSL end
-struct HexNAcHex2Cer <: ClassHexNAcHex2Cer end
-
-abstract type ClassHexNAcHex3Cer <: ClassGSL end
-struct HexNAcHex3Cer <: ClassHexNAcHex3Cer 
+abstract type HexNAcHex2Cer <: ClassSP end
+struct HexNAcHex2Cer_ <: HexNAcHex2Cer 
     isomer
 end
-struct HexNAc_Hex3Cer <: ClassHexNAcHex3Cer end
-struct Hex_HexNAc_Hex2Cer <: ClassHexNAcHex3Cer end
+struct HexNAc_Hex2Cer <: HexNAcHex2Cer end
+push!(ISOMER, HexNAcHex2Cer_ => (HexNAc_Hex2Cer(),))
 
-const ClasswoNANA = Union{SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, <: ClassHexNAcHex2Cer, <: ClassHexNAcHex3Cer}
-
-struct GM4 <: ClassGSL end
-struct GM3 <: ClassGSL end
-struct GM2 <: ClassGSL end
-
-abstract type ClassGM1 <: ClassGSL end
-struct GM1 <: ClassGM1 
+abstract type HexNAcHex3Cer <: ClassSP end
+struct HexNAcHex3Cer_ <: HexNAcHex3Cer 
     isomer
 end
-struct GM1a <: ClassGM1 end
-struct GM1b <: ClassGM1 end
+struct HexNAc_Hex3Cer <: HexNAcHex3Cer end
+struct Hex_HexNAc_Hex2Cer <: HexNAcHex3Cer end
+push!(ISOMER, HexNAcHex3Cer_ => (HexNAc_Hex3Cer(), Hex_HexNAc_Hex2Cer()))
 
-struct GD3 <: ClassGSL end
-struct GD2 <: ClassGSL end
+const ClasswoNANA = Union{SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, <: HexNAcHex2Cer, <: HexNAcHex3Cer}
 
-abstract type ClassGD1 <: ClassGSL end
-struct GD1 <: ClassGD1
+struct GM4 <: ClassSP end
+struct GM3 <: ClassSP end
+struct GM2 <: ClassSP end
+
+abstract type GM1 <: ClassSP end
+struct GM1_ <: GM1 
     isomer
 end
-struct GD1a <: ClassGD1 end
-struct GD1b <: ClassGD1 end
-struct GD1c <: ClassGD1 end
-struct GD1α <: ClassGD1 end
+struct GM1a <: GM1 end
+struct GM1b <: GM1 end
+push!(ISOMER, GM1_ => (GM1a(), GM1b()))
 
-struct GT3 <: ClassGSL end
-struct GT2 <: ClassGSL end
+struct GD3 <: ClassSP end
+struct GD2 <: ClassSP end
 
-abstract type ClassGT1 <: ClassGSL end
-struct GT1 <: ClassGT1
+abstract type GD1 <: ClassSP end
+struct GD1_ <: GD1
     isomer
 end
-struct GT1a <: ClassGT1 end
-struct GT1aα <: ClassGT1 end
-struct GT1b <: ClassGT1 end
-struct GT1c <: ClassGT1 end
+struct GD1a <: GD1 end
+struct GD1b <: GD1 end
+struct GD1c <: GD1 end
+struct GD1α <: GD1 end
+push!(ISOMER, GD1_ => (GD1a(), GD1b(), GD1c(), GD1α()))
 
-abstract type ClassGQ1 <: ClassGSL end
-struct GQ1 <: ClassGQ1
+
+struct GT3 <: ClassSP end
+struct GT2 <: ClassSP end
+
+abstract type GT1 <: ClassSP end
+struct GT1_ <: GT1
     isomer
 end
-struct GQ1b <: ClassGQ1 end
-struct GQ1bα <: ClassGQ1 end
-struct GQ1c <: ClassGQ1 end
+struct GT1a <: GT1 end
+struct GT1aα <: GT1 end
+struct GT1b <: GT1 end
+struct GT1c <: GT1 end
+push!(ISOMER, GT1_ => (GT1a(), GT1b(), GT1c(), GT1aα()))
 
-abstract type ClassGP1 <: ClassGSL end
-struct GP1 <: ClassGP1    
+abstract type GQ1 <: ClassSP end
+struct GQ1_ <: GQ1
     isomer
 end
-struct GP1c <: ClassGP1 end
-struct GP1cα <: ClassGP1 end
+struct GQ1b <: GQ1 end
+struct GQ1bα <: GQ1 end
+struct GQ1c <: GQ1 end
+push!(ISOMER, GQ1_ => (GQ1b(), GQ1c(), GQ1bα()))
 
-for (class, super) in zip((:HexNAcHex3Cer, :GM1, :GD1, :GT1, :GQ1, :GP1), (:ClassHexNAcHex3Cer, :ClassGM1, :ClassGD1, :ClassGT1, :ClassGQ1, :ClassGP1))
+abstract type GP1 <: ClassSP end
+struct GP1_ <: GP1    
+    isomer
+end
+struct GP1c <: GP1 end
+struct GP1cα <: GP1 end
+push!(ISOMER, GP1_ => (GP1c(), GP1cα()))
+SPDB[:ISOMER] = ISOMER
+
+for (class, super) in zip((:HexNAcHex2Cer_, :HexNAcHex3Cer_, :GM1_, :GD1_, :GT1_, :GQ1_, :GP1_), (:HexNAcHex2Cer, :HexNAcHex3Cer, :GM1, :GD1, :GT1, :GQ1, :GP1))
     @eval begin 
         $class(cls::Vararg{<: $super}) = $class(cls)
+        $class() = $class(SPDB[:ISOMER][$class])
+        $super(cls::Vararg{<: $super}) = $class(cls)
+        $super() = $class(SPDB[:ISOMER][$class])
+
     end
 end
 
@@ -131,16 +157,39 @@ abstract type LCB4{N, C} <: LCB{N, C} end
 abstract type LCB3{N, C} <: LCB{N, C} end
 abstract type LCB2{N, C} <: LCB{N, C} end
 struct SPB4{N, C} <: LCB4{N, C} end
-struct PhytoSPB4{N, C} <: LCB4{N, C} end
+struct NotPhyto4{N, C} <: LCB4{N, C} end
 struct SPB3{N, C} <: LCB3{N, C} end
-struct PhytoSPB3{N, C} <: LCB3{N, C} end
+struct NotPhyto3{N, C} <: LCB3{N, C} end
 struct SPB2{N, C} <: LCB2{N, C} end
-const PhytoSPB{N, C} = Union{PhytoSPB3{N, C}, PhytoSPB4{N, C}}
+const NotPhyto{N, C} = Union{NotPhyto3{N, C}, NotPhyto4{N, C}}
 
 abstract type ACYL{N} end
 struct Acyl{N} <: ACYL{N} end
 struct Acylα{N} <: ACYL{N} end
 struct Acylβ{N} <: ACYL{N} end
+
+# Used for query
+struct Lcb 
+    cb::Int
+    db::Int
+    ox::Int
+end
+abstract type NACYL end
+struct Nacyl <: NACYL
+    cb::Int
+    db::Int
+    ox::Int
+end
+struct Nacylα <: NACYL
+    cb::Int
+    db::Int
+    ox::Int
+end
+struct Nacylβ <: NACYL
+    cb::Int
+    db::Int
+    ox::Int
+end
 
 struct Chain{S <: LCB, T <: ACYL}
     lcb::S
@@ -167,12 +216,12 @@ abstract type Adduct end
 abstract type Pos <: Adduct end
 abstract type Neg <: Adduct end
 
-struct Ion{S <: Adduct, T <: Union{<: Sugar, <: Glycan, <: ClassGSL, <: LCB, <: ACYL}}
+struct Ion{S <: Adduct, T <: Union{<: Sugar, <: Glycan, <: ClassSP, <: LCB, <: ACYL}}
     adduct::S
     molecule::T
 end
 
-struct ISF{S <: Adduct, T <: ClassGSL}
+struct ISF{S <: Adduct, T <: ClassSP}
     adduct::S
     molecule::T
 end
@@ -217,20 +266,35 @@ const HexNAcHexNANA2 = Ion(ProtonationNLH2O(), Glycan(HexNAc(), Hex(), NeuAc(), 
 @as_record Ion
 @as_record Adduct
 
-mutable struct CompoundGSL
-    class::ClassGSL
+mutable struct Score
+    score::Float64
+    parameters::NamedTuple
+    apply_score
+    apply_threshold
+end
+
+struct CompoundID{C <: Union{ClassSP, Nothing}}
+    sum::NTuple{3, Int}
+    lcb::Union{Lcb, Nothing}
+    acyl::Union{NACYL, Nothing}
+end
+
+mutable struct CompoundSP
+    class::ClassSP
     sum::NTuple{3, Int}   # (#C, #db, #OH)
     chain::Union{Chain, Nothing}
     fragments::DataFrame # ion1, ion2, source, id
     area::Float64
-    states::Vector
+    states::Vector{Int}
+    results::Vector
     project
 end
 
-mutable struct AnalyteGSL
-    compounds::Vector{CompoundGSL}
+mutable struct AnalyteSP
+    compounds::Vector{CompoundSP}
     rt::Float64
     states::Vector{Int}
+    scores::Vector{Score}
 end
 # ==()
 
@@ -251,10 +315,19 @@ struct Rule{T} <: AbstractRule
     rule
 end
 
+struct EmptyRule <: AbstractRule end
+
 @as_record Rule
+
+struct RuleSet
+    mode::Symbol
+    rule::Union{AbstractRule, ClassSP, Chain}
+end
 
 struct RuleUnion <: AbstractRule
     rules
+    exception
+    RuleUnion(x...; exception = EmptyRule()) = new(x, exception)
 end
 
 struct RuleMode <: AbstractRule
@@ -269,7 +342,7 @@ struct Result{T} <: AbstractResult{T}
 end
 @as_record Result
 
-struct PartialResult{T, C <: Union{Chain, ClassGSL}} <: AbstractResult{T}
+struct PartialResult{T, C <: Union{Chain, ClassSP}} <: AbstractResult{T}
     matched::Bool
     rule::T
     result::C
@@ -285,9 +358,9 @@ struct AcylIon{T <: LCB}
     ions
 end
 
-AcylIon{T}(ions...) where {T<: LCB} = AcylIon{T}(ions)
+AcylIon{T}(ions...) where {T <: LCB} = AcylIon{T}(ions)
 
-for fn in (:IonPlus, :RuleUnion, :RuleMode)
+for fn in (:IonPlus, :RuleMode)
     @eval begin
         $fn(x...) = $fn(x)
     end
@@ -317,7 +390,7 @@ end
 
 
 struct Project
-    analytes::Vector{AnalyteGSL}
+    analytes::Vector{AnalyteSP}
     data::Vector{Data}
     anion
 end
@@ -336,6 +409,7 @@ end
 not(id::Symbol, args...) = Inv((id, args...))
 
 include("io.jl")
+include("interface.jl")
 include("utils.jl")
 include("mw.jl")
 include("library.jl")
@@ -343,6 +417,7 @@ include("rule.jl")
 include("data.jl")
 include("preis.jl")
 include("ruleID.jl")
+include("score.jl")
 include("query.jl")
 include("mrm.jl")
 

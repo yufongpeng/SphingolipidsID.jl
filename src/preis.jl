@@ -1,4 +1,4 @@
-preis(anion = :acetate) = Project(AnalyteGSL[], Data[], anion)
+preis(anion = :acetate) = Project(AnalyteSP[], Data[], anion)
 preis(
         featuretable, 
         mz_range,
@@ -11,7 +11,7 @@ preis(
         anion = :acetate,
         data = -1,
         additional = Dict()
-    ) = preis!(Project(AnalyteGSL[], Data[], anion), deepcopy(featuretable), mz_range, ms2, polarity; db, db_product, mz_tol, rt_tol, data, additional)
+    ) = preis!(Project(AnalyteSP[], Data[], anion), deepcopy(featuretable), mz_range, ms2, polarity; db, db_product, mz_tol, rt_tol, data, additional)
 
 preis(
         project::Project,
@@ -94,11 +94,11 @@ function preis!(
     end
     
     for ft in eachrow(featuretable)
-        current_cpd = CompoundGSL[]
+        current_cpd = CompoundSP[]
         for row in eachrow(db)
             if abs(row.var"m/z" - ft.mz1) < mz_tol
                 cpds = map(products) do product
-                    CompoundGSL(project, row, product, source, ft.id, ft.area)
+                    CompoundSP(project, row, product, source, ft.id, ft.area)
                 end
                 filter!(!isnothing, cpds)
                 n = length(cpds)
@@ -124,16 +124,10 @@ function preis!(
         isempty(current_cpd) && continue
 
         subanalytes = @views [analyte for analyte in project if abs(analyte.rt - ft.rt) < rt_tol]
-        #=if 6 < ft.rt < 6.2 && any(cpd.sum == (42, 1, 2) for cpd in current_cpd)
-            println("========")
-            println(@views [cpd for cpd in current_cpd if cpd.sum == (42, 1, 2)])
-            println("--------")
-            println(@views [a for a in subanalytes if last(a).sum == (42, 1, 2)])
-        end=#
 
         if isempty(subanalytes) 
             for cpd in current_cpd
-                push!(project, AnalyteGSL([cpd], ft.rt, [0, 0]))
+                push!(project, AnalyteSP([cpd], ft.rt, [0, 0]))
             end
         else
             # Aggregates
@@ -158,30 +152,12 @@ function preis!(
                         end
                         push || continue
                         if length(connected_id) < length(analyte)
-                            push!(project, AnalyteGSL(copy_wo_project.(analyte[connected_id]), analyte.rt, [0, 0]))
+                            push!(project, AnalyteSP(copy_wo_project.(analyte[connected_id]), analyte.rt, [0, 0]))
                             analyte = last(project)
                         end
-                        #=
-                        if cpd.sum == (42, 1, 2) && cpd.chain.lcb == SPB3{2, 18}() && analyte[end].chain.lcb == SPB3{2, 18}()
-                            println(analyte.rt)
-                            println(analyte)
-                            println(analyte[end].fragments)
-                            println(cpd.fragments)
-                            println(id)
-                        end
-                        =#
                         push!(analyte, copy_wo_project(cpd))
                         sort!(analyte, lt = isless_class)
                         analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte)
-                        #=if cpd.sum == (42, 1, 2) && cpd.chain.lcb == SPB3{2, 18}() && analyte[end].chain.lcb == SPB3{2, 18}()
-                            println(id, ":")
-                            if isnothing(id)
-                                println(analyte[end].fragments)
-                            else
-                                println(analyte[id].fragments)
-                            end
-                            println(cpd.fragments)
-                        end=#
                     end
                 else
                     agg = true
@@ -197,16 +173,9 @@ function preis!(
                         analyte.rt = mean(mean(query_raw(project, source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in analyte)
                     end
                 end
-                agg || push!(project, AnalyteGSL([cpd], ft.rt, [0, 0]))
+                agg || push!(project, AnalyteSP([cpd], ft.rt, [0, 0]))
             end
         end
-        #=
-        del = Int[]
-        for (i, analyte) in enumerate(analytes)
-            any(x == analyte for x in @view analytes[1:i - 1]) && push!(del, i)
-        end
-        deleteat!(analytes, del)
-        =#
     end
     project
 end
@@ -216,6 +185,9 @@ function finish_profile!(project::Project; rt_tol = 0.1)
     println("Sorting compounds")
     for (i, analyte) in enumerate(project)
         sort!(analyte, lt = isless_class)
+        for cpd in analyte
+            sort!(cpd.fragments, :ion1, lt = isless_ion)
+        end
     end
     printstyled("PreIS> ", color = :green, bold = true)
     println("Merging, splitting and deleting analytes")
@@ -238,7 +210,7 @@ function finish_profile!(project::Project; rt_tol = 0.1)
 
         for (i, cpd) in Iterators.reverse(enumerate(analyte))
             if cpd.area > area && all(!iscompatible(last(a), cpd) for a in project if abs(a.rt - analyte.rt) < rt_tol)
-                push!(project, AnalyteGSL(copy_wo_project.(analyte[1:i]), analyte.rt, [0, 0]))
+                push!(project, AnalyteSP(copy_wo_project.(analyte[1:i]), analyte.rt, [0, 0]))
                 last(project).rt = mean(mean(query_raw(project, row.source, row.id).rt for row in eachrow(cpd.fragments)) for cpd in last(project))
                 break
             end

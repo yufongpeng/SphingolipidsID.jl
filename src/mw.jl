@@ -37,8 +37,8 @@ function nmw(formula::AbstractString)
     end
 end
 
-mz(cpd::CompoundGSL, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, cpd.chain, DataFrame(), 0, [], nothing)))
-function mz(cpd::CompoundGSL, ions::AcylIon{T}) where T
+mz(cpd::CompoundSP, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, cpd.chain, DataFrame(), 0, [], [], nothing)))
+function mz(cpd::CompoundSP, ions::AcylIon{T}) where T
     acyl_cb, acyl_db, acyl_o = cpd.sum .- sumcomp(T())
     map(ions.ions) do ion
         @match ion begin
@@ -47,9 +47,9 @@ function mz(cpd::CompoundGSL, ions::AcylIon{T}) where T
         end
     end
 end
-mz(cpd::CompoundGSL, ion::Ion) = mz(ion)
-mz(cpd::CompoundGSL, add::Adduct) = parse_adduct(add)(mw(cpd))
-mz(cpd::CompoundGSL, ion::Ion{<: Adduct, <: ClassGSL}) = parse_adduct(ion.adduct)(mw(CompoundGSL(ion.molecule, cpd.sum, nothing, DataFrame(), 0, [], nothing)))
+mz(cpd::CompoundSP, ion::Ion) = mz(ion)
+mz(cpd::CompoundSP, add::Adduct) = parse_adduct(add)(mw(cpd))
+mz(cpd::CompoundSP, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, nothing, DataFrame(), 0, [], [], nothing)))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
 mz(ion::Ion{S, <: ACYL{N}}, cb, db, o = N) where {S, N} = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
 mw(::T, cb, db, o = N) where {N, T <: ACYL{N}} = mw("C") * cb + mw("H") * (2 * cb - 2 * db - 1) + mw("O") * (o + 1)
@@ -60,16 +60,9 @@ mw(::NeuAc) = mw("C11H19NO9")
 
 mw(glycan::Glycan) = mapreduce(mw, +, glycan.chain) - (length(glycan.chain) - 1) * mw("H2O")
 
-function mw(lcb::LCB{N, C}) where {N, C}
-    cls = class_db_index(lcb)
-    unit = cls[[:u1, :u2]]
-    init_us = cls[["#u1", "#u2"]]
-    Δu = [C - init_us[1], nunsa(lcb) - N - init_us[2]]
-    ms = mw(merge_formula(cls.formula, unit, Δu; sign = (:+, :-)))
-    ms + mw("O") * N
-end
+mw(lcb::LCB{N, C}) where {N, C} = C * mw("C") + mw("O") * N + (2 * (C - nunsa(lcb) + N) + 3) * mw("H") + mw("N")
 
-function mw(cpd::CompoundGSL)
+function mw(cpd::CompoundSP)
     cls = class_db_index(cpd.class)
     unit = cls[[:u1, :u2]]
     init_us = cls[["#u1", "#u2"]]

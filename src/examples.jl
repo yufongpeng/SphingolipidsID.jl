@@ -1,4 +1,4 @@
-using SphingolipidsID, Chain
+@time using SphingolipidsID, Chain
 files = joinpath.(".\\test\\data\\mzmine", readdir(".\\test\\data\\mzmine"))
 fts = map(files) do file
     filter_duplicate(add_ce_mzmine!(featuretable_mzmine(file), -1))
@@ -19,46 +19,92 @@ db = reduce(append!, (
 
 # PreIS 
 SPDB[:LIBRARY_POS] = db
+
 pj = preis()
 for (m, r, ft) in zip(ms, rang, fts)
     preis!(pj, ft, r, m, true; rt_tol = 0.1)
 end
 finish_profile!(pj)
-
-# ID: Class
+# ID: Class, 1614
 apply_rules!(pj, :class)
-
 # ID: Chain
-apply_rules!(pj, :chain; chain!_isf = (1, 0.5))
+apply_rules!(pj, :chain)
+# Score
+@chain pj begin
+    filter_score!
+    filter_score!(@score chain 1 (0 + 1) / all  x >= 0.5)
+    filter_score!(@score chain (analyte, cpd) -> nrow(cpd.fragments) (0 + 1)  x >= 2)
+end
 
 # Queries
 @chain pj begin
-    query(:class, GM3)
-    query(not(:sum, (36, 1, 2)))
+    query(not(:class!))
 end
 
 @chain pj begin
-    query(:both)
-    query(:sum, (36, 1, 2))
-    generate_mrm(:default, LCB)
+    query(:class)
+    query(HexNAcHex3Cer)
+end
+
+@chain pj begin
+    query(:class)
+    query(HexNAcHex2Cer)
+end
+
+@chain pj begin
+    query(cpd(Cer, (36, 1, 2)))
+end
+
+@chain pj begin
+    query(cpd(36, 1, 2))
 end
 
 @chain pj begin
     query(:class)
     query(not(:chain!))
-    generate_mrm(:default, LCB)
+    query(HexCer, cpd(36, 1, 2), cpd(34, 1, 2))
+    query(lcb(18, 1, 2))
 end
 
 @chain pj begin
-    query(:class)
-    query(not(:chain!))
-    query((:class, HexCer), (:sum, (36, 1, 2)), (:sum, (34, 1, 2)))
-    query(:lcb, SPB3{2, 18})
+    query(cpd(lcb(18, 1, 2), acyl(24, 0, 1)))
+end
+
+@chain pj begin
+    query(cpd(42, 1, 3))
 end
 
 # Partial id
 @chain pj begin
     query(:class, HexCer)
     query(:chain!)
-    apply_rules!(;chain_fail = :del)
+    apply_rules!
+end
+
+# MRM
+@chain pj begin
+    query(not(:class!))
+    query(not(:chain!))
+    generate_mrm(:default, LCB)
+end
+
+@chain pj begin
+    select_score!
+    query(not(:class!))
+    query(not(:chain!))
+    generate_mrm(:default, LCB)
+    nMRM
+end
+
+@chain pj begin
+    query(:class)
+    query(not(:chain!))
+    generate_mrm(:default, LCB)
+end
+
+@chain pj begin
+    select_score!()
+    query(:class)
+    query(not(:chain!))
+    generate_mrm(:default, LCB)
 end

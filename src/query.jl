@@ -1,3 +1,9 @@
+function query(project::Project; view = true) 
+    v = @view project[:]
+    v = view ? v : Vector(v)
+    Query(project, v, [], view)
+end
+
 function query(project::Project, args...; view = true) 
     v = @view project[:]
     v = view ? v : Vector(v)
@@ -15,16 +21,52 @@ function query(aquery::Query, quantity::Symbol, low, up; view = aquery.view, fn 
     finish_query!(aquery, quantity, (low, up), fn, v, view)
 end
 
-function query(aquery::Query, id::Symbol, type; view = aquery.view, fn = identity)
+function query(aquery::Query, id::Type{<: ClassSP}; view = aquery.view, fn = identity)
+    cpds = map(aquery) do analyte
+        last(analyte)
+    end
+    v = @view aquery[findall(cpd -> isa(cpd.class, id)|>fn, cpds)]
+    finish_query!(aquery, :class, id, fn, v, view)
+end
+
+function query(aquery::Query, id::Lcb; view = aquery.view, fn = identity)
+    match = convert_type(LCB, id)
     cpds = map(aquery) do analyte
             last(analyte)
     end
-    v = @match id begin
-        :class  => @view aquery[findall(cpd -> isa(cpd.class, type)|>fn, cpds)]
-        :sum    => @view aquery[findall(cpd -> ==(cpd.sum, type)|>fn, cpds)]
-        :lcb    => @view aquery[findall(cpd -> (!isnothing(cpd.chain) && ==(cpd.chain.lcb, type()))|>fn, cpds)]
+    v = @view aquery[findall(cpd -> (!isnothing(cpd.chain) && isa(cpd.chain.lcb, match))|>fn, cpds)]
+    finish_query!(aquery, :lcb, id, fn, v, view)
+end
+
+function query(aquery::Query, id::NACYL; view = aquery.view, fn = identity)
+    match = convert_type(ACYL, id)
+    cpds = map(aquery) do analyte
+            last(analyte)
     end
-    finish_query!(aquery, id, type, fn, v, view)
+    v = @view aquery[findall(cpd -> (!isnothing(cpd.chain) && isa(cpd.chain.acyl, match) && (cpd.sum .- sumcomp(cpd.chain.lcb)) .== (id.cb, id.db, id.ox))|>fn, cpds)]
+    finish_query!(aquery, :acyl, id, fn, v, view)
+end
+
+function query(aquery::Query, id::Type{<: LCB}; view = aquery.view, fn = identity)
+    cpds = map(aquery) do analyte
+            last(analyte)
+    end
+    v = @view aquery[findall(cpd -> (!isnothing(cpd.chain) && isa(cpd.chain.lcb, id))|>fn, cpds)]
+    finish_query!(aquery, :lcb, id, fn, v, view)
+end
+
+function query(aquery::Query, id::CompoundID; view = aquery.view, fn = identity)
+    cpds = map(aquery) do analyte
+            last(analyte)
+    end
+    match = convert_internal(id)
+    v, sym = @match match begin
+        (::Type{Nothing}, sum, ::Type{Nothing}, ::Type{Nothing})    => (Base.view(aquery, findall(cpd -> (==(cpd.sum, sum))|>fn, cpds)), :sum)
+        (::Type{Nothing}, sum, lcb, acyl)                           => (Base.view(aquery, findall(cpd -> (==(cpd.sum, sum) && isa(cpd.chain.lcb, lcb)) && isa(cpd.chain.acyl, acyl)|>fn, cpds)), :chain)
+        (class, sum, ::Type{Nothing}, ::Type{Nothing})              => (Base.view(aquery, findall(cpd -> (isa(cpd.class, class) && ==(cpd.sum, sum))|>fn, cpds)), :cpd)
+        (class, sum, lcb, acyl)                                     => (Base.view(aquery, findall(cpd -> (isa(cpd.class, class) && ==(cpd.sum, sum) && isa(cpd.chain.lcb, lcb)) && isa(cpd.chain.acyl, acyl)|>fn, cpds)), :cpd)
+    end
+    finish_query!(aquery, sym, id, fn, v, view)
 end
 
 function query(aquery::Query, id::Symbol; view = aquery.view, fn = identity)
@@ -40,7 +82,7 @@ function query(aquery::Query, id::Symbol; view = aquery.view, fn = identity)
     finish_query!(aquery, :id, id, fn, v, view)
 end
 
-function finish_query!(aquery::Query, ql::Symbol, qr, fn, v, view)
+function finish_query!(aquery::Query, ql, qr, fn, v, view)
     if fn === identity
         push!(aquery.query, ql => qr)
     else
@@ -52,7 +94,7 @@ function finish_query!(aquery::Query, ql::Symbol, qr, fn, v, view)
 end
 
 query(aquery::Query, id::Inv; view = true) = query(aquery, id.args...; view, fn = !)
-function query(aquery::Query, ids::Vararg{Union{Tuple, Inv}, N}; view = true) where N 
+function query(aquery::Query, ids::Vararg{Union{Tuple, Inv, Type, CompoundID}, N}; view = true) where N 
     pid = parentindices(aquery.result)[1]
     qs = map(ids) do id
         query(Query(aquery.project, view ? Base.view(aquery.project, deepcopy(pid)) : copy_wo_project.(aquery.result), [], view), id; view)
@@ -65,3 +107,5 @@ function query(aquery::Query, ids::Vararg{Union{Tuple, Inv}, N}; view = true) wh
 end
 
 query_raw(project::Project, source, id) = @views project.data[source].raw[findfirst(==(id), project.data[source].raw.id), :]
+
+# filter/comparator
