@@ -2,14 +2,11 @@ function featuretable_mzmine(paths)
     tbl = CSV.read(paths, DataFrame; select = (i, name) -> any(startswith(String(name), text) for text in ["id", "rt", "mz", "height", "area", "intensity"]))
     fwhm = CSV.read(paths, DataFrame; select = (i, name) -> endswith(String(name), "fwhm"))
     id = findfirst.(!ismissing, eachrow(fwhm))
-    tbl.FWHM = [row[i] for (row, i) in zip(eachrow(fwhm), id)]
-    datafile = Dict(propertynames(fwhm) .=> map(names(fwhm)) do col
-        match(r".*:(.*):.*", col)[1]
-    end)
-    tbl.datafile = [datafile[i] for i in id]
+    tbl.FWHM = getindex.(eachrow(fwhm), id)
+    datafile = Dict(propertynames(fwhm) .=> map(col -> match(r".*:(.*):.*", col)[1], names(fwhm)))
+    tbl.datafile = getindex.(Ref(datafile), id)
     rename!(tbl, :mz => :mz1)
-    sort!(tbl, [:mz1, :rt])
-    tbl.id = 1:size(tbl, 1)
+    sort!(tbl, :datafile)
     println("DataFiles Order: ")
     for i in unique(tbl.datafile)
         println(" ", i)
@@ -19,7 +16,9 @@ end
 
 function add_ce_mzmine!(tbl, eV::Float64)
     tbl.collision_energy .= eV
-    delete!(tbl, :datafile)
+    select!(tbl, Not(:datafile))
+    sort!(tbl, [:mz1, :rt])
+    tbl.id = 1:size(tbl, 1)
     tbl
 end
 
@@ -27,6 +26,8 @@ function add_ce_mzmine!(tbl, eV)
     mapping = Dict(unique(tbl.datafile) .=> eV)
     tbl.collision_energy = getindex.(Ref(mapping), tbl.datafile)
     select!(tbl, Not(:datafile))
+    sort!(tbl, [:mz1, :rt])
+    tbl.id = 1:size(tbl, 1)
     tbl
 end
 
