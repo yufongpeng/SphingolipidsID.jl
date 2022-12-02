@@ -1,6 +1,6 @@
 module SphingolipidsID
 
-using DataFrames, CSV, MLStyle, Statistics, PrettyTables
+using DataFrames, CSV, MLStyle, Statistics, PrettyTables, DataPipes, SplitApplyCombine
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB, 
 
@@ -15,6 +15,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         GT3, GT2, GT1, GT1_, GT1a, GT1b, GT1c, GT1aα,
         GQ1, GQ1_, GQ1b, GQ1c, GQ1bα,
         GP1, GP1_, GP1c, GP1cα,
+        CLS,
 
         LCB, LCB2, LCB3, LCB4, SPB2, SPB3, SPB4, NotPhyto, NotPhyto3, NotPhyto4,
         ACYL, Acyl, Acylα, Acylβ, 
@@ -37,7 +38,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
 
         library, rule, 
         
-        featuretable_mzmine, add_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, 
+        featuretable_mzmine, add_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, rsd, re,
 
         preis, preis!, finish_profile!, 
 
@@ -81,8 +82,6 @@ end
 struct HexNAc_Hex3Cer <: HexNAcHex3Cer end
 struct Hex_HexNAc_Hex2Cer <: HexNAcHex3Cer end
 push!(ISOMER, HexNAcHex3Cer_ => (HexNAc_Hex3Cer(), Hex_HexNAc_Hex2Cer()))
-
-const ClasswoNANA = Union{SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, <: HexNAcHex2Cer, <: HexNAcHex3Cer}
 
 struct GM4 <: ClassSP end
 struct GM3 <: ClassSP end
@@ -151,6 +150,27 @@ for (class, super) in zip((:HexNAcHex2Cer_, :HexNAcHex3Cer_, :GM1_, :GD1_, :GT1_
     end
 end
 
+const CLS = (
+    nana = Dict{Int, Type}(
+        0 => Union{SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, HexNAcHex2Cer, HexNAcHex3Cer},
+        1 => Union{GM4, GM3, GM2, GM1},
+        2 => Union{GD3, GD2, GD1},
+        3 => Union{GT3, GT2, GT1},
+        4 => GQ1,
+        5 => GP1
+    ),
+    series = (
+        as = Union{Hex2Cer, HexNAc_Hex2Cer, Hex_HexNAc_Hex2Cer, GM1b, GD1c, GD1α},
+        a  = Union{GM3, GM2, GM1a, GD1a, GT1a, GT1aα},
+        b  = Union{GD3, GD2, GD1b, GT1b, GQ1b, GQ1bα},
+        c  = Union{GT3, GT2, GT1c, GQ1c, GP1c, GP1cα}
+    ),
+    fg = (
+        nana = Union{GM4, GM3, GM2, GM1, GD3, GD2, GD1, GT3, GT2, GT1, GQ1, GP1},
+        sulfate = Union{SHexCer, SHexHexCer}
+    ) 
+)
+
 # N = # OH
 abstract type LCB{N, C} end
 abstract type LCB4{N, C} <: LCB{N, C} end
@@ -216,7 +236,7 @@ abstract type Adduct end
 abstract type Pos <: Adduct end
 abstract type Neg <: Adduct end
 
-struct Ion{S <: Adduct, T <: Union{<: Sugar, <: Glycan, <: ClassSP, <: LCB, <: ACYL}}
+struct Ion{S <: Adduct, T <: Union{Sugar, Glycan, ClassSP, LCB, ACYL}}
     adduct::S
     molecule::T
 end
@@ -284,7 +304,7 @@ mutable struct CompoundSP
     sum::NTuple{3, Int}   # (#C, #db, #OH)
     chain::Union{Chain, Nothing}
     fragments::DataFrame # ion1, ion2, source, id
-    area::Float64
+    area::Tuple{Float64, Float64}
     states::Vector{Int}
     results::Vector
     project
@@ -294,7 +314,7 @@ mutable struct AnalyteSP
     compounds::Vector{CompoundSP}
     rt::Float64
     states::Vector{Int}
-    scores::Vector{Score}
+    scores::Tuple{Float64, Float64}
 end
 # ==()
 
@@ -332,6 +352,8 @@ end
 
 struct RuleMode <: AbstractRule
     rules
+    exception
+    RuleMode(x...; exception = EmptyRule()) = new(x, exception)
 end
 
 abstract type AbstractResult{T} end
@@ -360,7 +382,7 @@ end
 
 AcylIon{T}(ions...) where {T <: LCB} = AcylIon{T}(ions)
 
-for fn in (:IonPlus, :RuleMode)
+for fn in (:IonPlus, )
     @eval begin
         $fn(x...) = $fn(x)
     end
@@ -373,7 +395,7 @@ abstract type Data end
 
 # precursor/product, ion => name, ms/mz => m/z, mw => molecular weight
 struct PreIS <: Data
-    raw::DataFrame #id, mz1, scan(index of mz2), area, ev, rt
+    raw::DataFrame #id, mz1, scan(index of mz2), area, ev, rt # get rid of dataframe => tables.rowtables
     range::Vector{Tuple{Float64, Float64}} 
     mz2::Vector{Float64}
     mz_tol::Float64

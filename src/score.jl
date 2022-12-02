@@ -1,10 +1,13 @@
-macro score(targetconvert, weight, objective, threshold)
+SPDB[:SCORE] = Dict{NamedTuple, Function}()
+
+macro score(targetconvert, weight, objective)
     target, converter = @match targetconvert begin
         :class                                  => (:class, :first)   
         :chain                                  => (:chain, :last)   
         Expr(:call, :(=>), target, converter)   => (target, converter)
     end # any 1-arg fn: Vector -> Int 
-    parameters = (target = target, converter = converter, weight = weight, objective = objective, threshold = threshold)
+    parameters = (target = target, converter = converter, weight = weight, objective = objective)
+    haskey(SPDB[:SCORE], parameters) && return quote SPDB[:SCORE][$parameters] end
     weight = @match weight begin
         1 => :w1
         _ => weight
@@ -18,100 +21,59 @@ macro score(targetconvert, weight, objective, threshold)
         ::Expr  => Expr(objective.head, map(replace_int, objective.args)...)
         ::Int   => replace_int(objective)
     end
-    threshold = Expr(threshold.head, threshold.args[1], :x, threshold.args[3])
+    #threshold = Expr(threshold.head, threshold.args[1], :x, threshold.args[3])
     return quote
         transform_score(dict) = $objective
-        apply_threshold(x) = $threshold
-        function apply_score(analyte::AnalyteSP)
+        transform_score_v(dict) = @match $parameters.target begin
+            :class => (transform_score(dict), NaN) 
+            :chain => (NaN, transform_score(dict)) 
+            :both  => (transform_score(dict), transform_score(dict)) 
+        end
+        function score_fn(analyte::AnalyteSP)
             dict = Dict{Int, Float64}()
             for cpd in analyte
                 uw = $converter(cpd.states)
                 dict[uw] = get!(dict, uw, 0) + $weight(analyte, cpd)
             end
-            transform_score(dict)
+            transform_score_v(dict)
         end
-        Score(0.0, $parameters, apply_score, apply_threshold)
+        push!(SPDB[:SCORE], $parameters => score_fn)
+        SPDB[:SCORE][$parameters]
     end
 end
-filter_score!(aquery::Query, score = nothing) = (filter_score!(aquery.project, score; analytes = aquery.result); aquery)
-function filter_score!(project::Project, score = nothing; analytes = project.analytes)
-    printstyled("Score> \n", color = :green, bold = true)
-    isnothing(score) || for analyte in analytes
-        push!(analyte.scores, deepcopy(score))
-    end 
+apply_score!(aquery::Query, score_fn) = (apply_score!(aquery.project, score_fn; analytes = aquery.result); aquery)
+function apply_score!(project::Project, score_fn; analytes = project.analytes)
+    printstyled("Score> \n", score_fn, "\n", color = :green, bold = true)
     for analyte in analytes
-        apply_score!(analyte)
-        apply_threshold!(analyte)
+        apply_score!(analyte, score_fn)
+    end
+    project
+end
+apply_threshold!(aquery::Query, thresh_fn) = (apply_threshold!(aquery.project, thresh_fn; analytes = aquery.result); aquery)
+function apply_threshold!(project::Project, thresh_fn; analytes = project.analytes)
+    printstyled("Threshold> ", thresh_fn, "\n", color = :green, bold = true)
+    for analyte in analytes
+        apply_threshold!(analyte, thresh_fn)
     end
     project
 end
 
-apply_score(analyte::AnalyteSP) = last(analyte.scores).apply_score(analyte)
-apply_score!(analyte::AnalyteSP) = (last(analyte.scores).score = apply_score(analyte)) 
-apply_threshold(analyte::AnalyteSP) = last(analyte.scores).apply_threshold(analyte)
-function apply_threshold!(analyte::AnalyteSP)
-    sc = last(analyte.scores)
-    id = @match sc.parameters.target begin
-            :class => 1:1
-            :chain => 2:2
-            :both  => 1:2
+apply_score(analyte::AnalyteSP, score_fn) = score_fn(analyte)
+apply_score!(analyte::AnalyteSP, score_fn) = (analyte.scores = score_fn(analyte)) 
+apply_threshold(analyte::AnalyteSP, thresh_fn) = thresh_fn(analyte)
+function apply_threshold!(analyte::AnalyteSP, thresh_fn)
+    id = @match analyte.scores begin
+            (x, x) && if isnan(x) end   => 1:0     
+            (_, x) && if isnan(x) end   => 1:1       
+            (x, _) && if isnan(x) end   => 2:2
+            (_, _)          => 1:2
     end
-    r = sc.apply_threshold(sc.score) 
-    r || (analyte.states[id] .= -1)
-    r
+    map(id) do i
+        r = thresh_fn(analyte.scores[i])
+        r || (analyte.states[i] = -1)
+        r
+    end
 end
 
 nfrags(analyte::AnalyteSP, cpd::CompoundSP) = nfrags(cpd)
 w1(analyte::AnalyteSP, cpd::CompoundSP) = 1
-
-default_score = @score chain 1 -1 s <= 1
-
-select_score!(aquery::Query, score = nothing; topN = 0.5, by = :cpd) = select_score!(aquery.project, score; aquery = aquery, analytes = aquery.result, view = aquery.view, topN = topN, by = by)
-function select_score!(project::Project, score = nothing; topN = 0.5, by = :cpd, analytes = project.analytes, aquery = nothing, view = true)
-    isnothing(score) || begin
-        for analyte in analytes
-            push!(analyte.scores, deepcopy(score))
-        end 
-        apply_score!(analytes)
-    end
-    # no isomer => has isomer
-    id1 = Int[]
-    id2 = Int[]
-    for (i, analyte) in enumerate(analytes)
-        (hasisomer(last(analyte).class) || hasisomer(last(analyte).chain)) ? push!(id2, i) : push!(id1, i)
-    end
-    dict = Dict{Tuple{<: ClassSP, NTuple{3, Int}, <: Union{Chain, Nothing}}, Vector{Tuple{Float64, Int}}}()
-
-    for id in id1
-        cpd = last(analytes[id])
-        push!(get!(dict, (cpd.class, cpd.sum, cpd.chain), Tuple{Float64, Int}[]), (last(analytes[id].scores).score, id))
-    end
-
-    for id in id2
-        cpd = last(analytes[id])
-        pushed = false
-        for (ky, vl) in dict
-            cpd.sum == ky[2] || continue
-            (hasisomer(cpd.class) ? in(ky[1], cpd.class.isomer) : ==(ky[1], cpd.class)) || continue
-            (isnothing(cpd.chain) || nhydroxyl(cpd.chain.acyl) == nhydroxyl(ky[3].acyl)) && (pushed = true; push!(vl, (last(analytes[id].scores).score, id)))
-        end
-        pushed || push!(dict, (cpd.class, cpd.sum, cpd.chain) => [(last(analytes[id].scores).score, id)])
-    end
-    final = Int[] 
-    len = @match topN begin
-        ::Int       => (vl -> topN)
-        ::Float64   => (vl -> round(Int, length(vl) * topN * (1 + eps(Float64))))
-    end
-    for vl in values(dict)
-        sort!(vl, by = first)
-        for _ in 1:len(vl)
-            isempty(vl) && break
-            push!(final, pop!(vl)[2])
-        end
-    end
-    isnothing(aquery) && (aquery = query(project; view))
-    aquery.result = view ? (@view project[final]) : project[final]
-    push!(aquery.query, :select_score => Symbol("top$(topN)"))
-    aquery
-end
-

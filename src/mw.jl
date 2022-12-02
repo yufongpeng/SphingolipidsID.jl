@@ -1,5 +1,6 @@
 # molecular weight to be coordinated with https://www.sisweb.com/referenc/tools/exactmass.htm? and LipidMaps
 const MW = Dict(
+    ""   => 0u"g",
     "C"  => 12u"g",
     "H"  => 1.007825u"g",
     "O"  => 15.994915u"g",
@@ -37,22 +38,15 @@ function nmw(formula::AbstractString)
     end
 end
 
-mz(cpd::CompoundSP, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, cpd.chain, DataFrame(), 0, [], [], nothing)))
-function mz(cpd::CompoundSP, ions::AcylIon{T}) where T
-    acyl_cb, acyl_db, acyl_o = cpd.sum .- sumcomp(T())
-    map(ions.ions) do ion
-        @match ion begin
-            Ion(_, ::LCB)   => mz(ion)
-            Ion(_, ::ACYL)  => mz(ion, acyl_cb, acyl_db, acyl_o)
-        end
-    end
-end
+mz(cpd::CompoundSP, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, cpd.chain, DataFrame(), (0, 0), [], [], nothing)))
+mz(cpd::CompoundSP, ions::AcylIon{T}) where T = mz.(ions.ions, (cpd.sum .- sumcomp(T()))...)
 mz(cpd::CompoundSP, ion::Ion) = mz(ion)
 mz(cpd::CompoundSP, add::Adduct) = parse_adduct(add)(mw(cpd))
-mz(cpd::CompoundSP, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, nothing, DataFrame(), 0, [], [], nothing)))
+mz(cpd::CompoundSP, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, nothing, DataFrame(), (0, 0), [], [], nothing)))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
-mz(ion::Ion{S, <: ACYL{N}}, cb, db, o = N) where {S, N} = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
+mz(ion::Ion, cb, db, o) = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
 mw(::T, cb, db, o = N) where {N, T <: ACYL{N}} = mw("C") * cb + mw("H") * (2 * cb - 2 * db - 1) + mw("O") * (o + 1)
+mw(molecule, cb, db, o) = mw(molecule)
 #hydrosyn(a, b) = a + b - nmw("H2O")
 mw(::Hex) = mw("C6H12O6") 
 mw(::HexNAc) = mw("C8H15NO6") 
@@ -79,10 +73,9 @@ function merge_formula(elements::Vector, Δcn::Int, Δdb::Int)
     Δdb -= Δcn
     mapreduce(*, elements) do element
         el, num = element
-        if el == "C"
-            num = num + Δcn
-        elseif el == "H"
-            num = num - Δdb * 2
+        num = @match el begin
+            "C" => num + Δcn
+            "H" => num - Δdb * 2
         end
         num == 1 ? "$el" : "$el$num"
     end
@@ -91,28 +84,18 @@ end
 function merge_formula(elements::Vector, units, Δu; sign = ntuple(i -> :+, length(init_unit)))
     adds = Pair[]
     for (id, (unit, nu)) in enumerate(zip(units, Δu))
-        if isnothing(unit)
-            break
-        else
-            append!(adds, map(unit) do (el, num)
-                el => eval(sign[id])(1) * num  * nu
-            end)
-        end
+        isnothing(unit) && break
+        append!(adds, map(unit) do (el, num)
+            el => eval(sign[id])(1) * num  * nu
+        end)
     end
 
-    if isempty(adds) 
-        mapreduce(*, elements) do element
-            el, num = element
-            num == 1 ? "$el" : "$el$num"
+    mapreduce(*, elements) do element
+        el, num = element
+        for (el_add, num_add) in adds
+            el_add == el && (num += num_add)
         end
-    else
-        mapreduce(*, elements) do element
-            el, num = element
-            for (el_add, num_add) in adds
-                el_add == el && (num += num_add)
-            end
-            num == 1 ? "$el" : "$el$num"
-        end
+        num == 1 ? "$el" : "$el$num"
     end
 end
 
@@ -120,19 +103,14 @@ function add_addition(init_elements, posts)
     init_elements = deepcopy(init_elements)
     for post in posts
         m = match(r"(\d*)O(\d*)", post)
-        if !isnothing(match)
-            if all(==(""), m.captures)
-                add = 1
-            elseif first(m.captures) == ""
-                add = parse(Int, last(m.captures))
-            else
-                add = parse(Int, first(m.captures))
-            end
-            for (id, (el, num)) in enumerate(init_elements)
-                if el == "O"
-                    init_elements[id] = el => num + add
-                end
-            end
+        isnothing(m) && continue
+        add = @match m.captures begin
+            ["", ""] => 1
+            ["", s]  => parse(Int, s)
+            [s, _]   => parse(Int, s)
+        end
+        for (id, (el, num)) in enumerate(init_elements)
+            el == "O" && (init_elements[id] = el => num + add)
         end
     end
     init_elements
@@ -154,11 +132,9 @@ function parse_adduct(adduct::AbstractString)
 
     pos_adds = split(ion, "+", keepempty = false)
     madd = mapreduce(+, pos_adds) do pos_add
-        neg_adds = split(pos_add, "-")
         # M-H / M+FA-H
-        isempty(first(neg_adds)) ? (- mapreduce(nmw, +, neg_adds[2:end])) : mapreduce(nmw, -, neg_adds)
+        mapreduce(nmw, -, split(pos_add, "-"))
     end
-
     x -> (x * nm + madd) / charge 
 end
 

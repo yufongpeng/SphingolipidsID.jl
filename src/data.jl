@@ -1,9 +1,7 @@
 function featuretable_mzmine(paths)
     tbl = CSV.read(paths, DataFrame; select = (i, name) -> any(startswith(String(name), text) for text in ["id", "rt", "mz", "height", "area", "intensity"]))
     fwhm = CSV.read(paths, DataFrame; select = (i, name) -> endswith(String(name), "fwhm"))
-    id = map(eachrow(fwhm)) do row
-        findfirst(!ismissing, row)
-    end
+    id = findfirst.(!ismissing, eachrow(fwhm))
     tbl.FWHM = [row[i] for (row, i) in zip(eachrow(fwhm), id)]
     datafile = Dict(propertynames(fwhm) .=> map(names(fwhm)) do col
         match(r".*:(.*):.*", col)[1]
@@ -85,7 +83,11 @@ function featuretable_masshunter_mrm(path)
     tbl
 end
 
-function filter_duplicate(tbl::DataFrame; rt_tol = 0.1, mz_tol = 0.35)
+rsd(v) = std(v) / mean(v)
+re(v) =  - foldl(-, extrema(v)) / mean(v) / 2
+default_error(v) = length(v) > 2 ? rsd(v) : re(v)
+
+function filter_duplicate(tbl::DataFrame; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5)
     ids = Vector{Int}[]
     for (i, ft) in enumerate(eachrow(tbl))
         new = true
@@ -98,10 +100,13 @@ function filter_duplicate(tbl::DataFrame; rt_tol = 0.1, mz_tol = 0.35)
         end
         new && push!(ids, [i])
     end
+    n > 1 && filter!(id -> (length(id) >= n && err(tbl[id, :area]) <= err_tol), ids)
+    fill!(tbl[!, :id], 0)
     for (i, id) in enumerate(ids)
         tbl[id, :id] .= i
     end
-    combine(groupby(tbl, :id), All() .=> mean, renamecols = false)
+    filter!(:id => >(0), tbl)
+    combine(groupby(tbl, :id), All() .=> mean, :area => err => :error, renamecols = false)
 end
 
 function CompoundSP(project::Project, cpd, product, source, id, area)
@@ -157,7 +162,7 @@ function CompoundSP(project::Project, cpd, product, source, id, area)
     )
 end
 
-AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64, states::Vector{Int}) = AnalyteSP(compounds, rt, states, [default_score])
+AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64, states::Vector{Int}) = AnalyteSP(compounds, rt, states, (NaN, NaN))
 
 function id_product(ms2, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG], mz_tol = 0.35)
     products = Ion[]

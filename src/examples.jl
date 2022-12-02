@@ -1,9 +1,10 @@
 @time using SphingolipidsID, Chain
 files = joinpath.(".\\test\\data\\mzmine", readdir(".\\test\\data\\mzmine"))
-fts = map(files) do file
-    filter_duplicate(add_ce_mzmine!(featuretable_mzmine(file), -1))
-end;
+fts = featuretable_mzmine.(files)
 
+ces = repeat([[30, 30, 60, 60, 60, 60]], 8)
+insert!(ces, 6, [30, 30, 60 ,60 , 60])
+insert!(ces, 9, [45, 45, 45, 45])
 ms = [236.238, 250.253, 284.295, 264.269, 262.253, 278.285, 292.3, 266.285, 274.093, 282.28]
 rang = repeat([(400, 1500)], 9)
 insert!(rang, 9, (900, 1650))
@@ -21,34 +22,37 @@ db = reduce(append!, (
 SPDB[:LIBRARY_POS] = db
 
 pj = preis()
-for (m, r, ft) in zip(ms, rang, fts)
+for (m, r, ce, ft) in zip(ms, rang, ces, deepcopy(fts))
+    ft = filter_duplicate(add_ce_mzmine!(ft, ce), n = 2)
     preis!(pj, ft, r, m, true; rt_tol = 0.1)
 end
 finish_profile!(pj)
-# ID: Class, 1614
+# ID: Class, 1361
 apply_rules!(pj, :class)
 # ID: Chain
 apply_rules!(pj, :chain)
 # Score
 @chain pj begin
-    filter_score!
-    filter_score!(@score chain 1 (0 + 1) / all  x >= 0.5)
-    filter_score!(@score chain (analyte, cpd) -> nrow(cpd.fragments) (0 + 1)  x >= 2)
+    apply_score!(@score chain 1 -1)
+    apply_threshold!(<=(1))
+    apply_score!(@score chain 1 (0 + 1) / all)
+    apply_threshold!(>=(0.5))
+    #filter_score!(@score chain (analyte, cpd) -> nrow(cpd.fragments) (0 + 1)  x >= 2)
 end
 
 # Queries
 @chain pj begin
-    query(not(:class!))
+    query(GM1)
 end
 
 @chain pj begin
-    query(:class)
     query(HexNAcHex3Cer)
+    query(cpd(lcb(18, 1, 2), acyl(16, 0, 0)))
+    _[1]
 end
 
 @chain pj begin
-    query(:class)
-    query(HexNAcHex2Cer)
+    query(acyl(24, 0, 1))
 end
 
 @chain pj begin
@@ -76,24 +80,23 @@ end
 
 # Partial id
 @chain pj begin
-    query(:class, HexCer)
+    query(HexCer)
     query(:chain!)
     apply_rules!
 end
 
 # MRM
-@chain pj begin
+@time @chain pj begin
     query(not(:class!))
     query(not(:chain!))
     generate_mrm(:default, LCB)
 end
 
 @chain pj begin
-    select_score!
+    query(:topsc, 0.5)
     query(not(:class!))
     query(not(:chain!))
     generate_mrm(:default, LCB)
-    nMRM
 end
 
 @chain pj begin
@@ -103,7 +106,7 @@ end
 end
 
 @chain pj begin
-    select_score!()
+    query(:topsc, 0.5)
     query(:class)
     query(not(:chain!))
     generate_mrm(:default, LCB)

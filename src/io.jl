@@ -52,7 +52,7 @@ fragment_table(cpd) = map(eachrow(cpd.fragments)) do row
     s = query_raw(cpd.project, row.source, row.id)
     mz2 = in(:mz2, propertynames(s)) ? s.mz2 : cpd.project.data[row.source].mz2[s.scan]
     mode = isa(cpd.project.data[row.source], PreIS) ? "PreIS" : "MRM"
-    (ion1 = row.ion1, mz1 = s.mz1, ion2 = row.ion2, mz2 = mz2, area = s.area, CE = s.collision_energy, rt = s.rt, source = mode)
+    (ion1 = row.ion1, mz1 = s.mz1, ion2 = row.ion2, mz2 = mz2, area = s.area, error = s.error, CE = s.collision_energy, rt = s.rt, source = mode)
 end
 
 show_cpdid_class(c::Type{T}) where {T <: ClassSP}= "$T "
@@ -80,10 +80,11 @@ function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
         print(io, " ", spb_c, ":", spb_db, ";", "O", spb_o > 1 ? spb_o : "", "/")
         print(io, cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
     end
-    print(io, "\n∘ Area: ", cpd.area)
+    print(io, "\n∘ Area: ", cpd.area[1])
+    print(io, "\n∘ Error: ", cpd.area[2])
     dt = fragment_table(cpd)
     println(io, "\n∘ Fragments: ")
-    PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r])
+    PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r])
 end
 
 function Base.show(io::IO, cpd::CompoundSP)
@@ -100,14 +101,14 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     class = analyte.states[1] == 1 ? "🟢" : analyte.states[1] == -1 ? "🔴" : "🟡" 
     chain = analyte.states[2] == 1 ? "🟢"  : analyte.states[2] == -1 ? "🔴" : "🟡" 
     print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " ($class,$chain):")
-    print(io, "\n∘ Score: ", last(analyte.scores).score)
+    print(io, "\n∘ Score: ", analyte.scores)
     print(io, "\n∘ Compounds:")
     for cpd in analyte
         print(io, "\n ", cpd)
     end
     dt = mapreduce(fragment_table, vcat, analyte)
     println(io, "\n∘ Fragments: ")
-    PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r])
+    PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r])
 end
 
 function Base.show(io::IO, analyte::AnalyteSP)

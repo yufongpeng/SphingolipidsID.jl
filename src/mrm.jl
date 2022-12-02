@@ -1,5 +1,4 @@
-
-
+# get rid of dataframe => tables.rowtables
 generate_mrm(project::Project, args...; kwargs...) = generate_mrm(project.analytes, args...; kwargs..., anion = project.anion)
 generate_mrm(aquery::Query, args...; kwargs...) = generate_mrm(aquery.result, args...; kwargs..., anion = aquery.project.anion)
 function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool = true; 
@@ -7,31 +6,10 @@ function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, pola
                     db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG], 
                     anion = :acetate,
                     default = mz(Ion(ProtonationNL2H2O(), SPB3{2, 18}())))
-    adduct = @match vectorize(adduct) begin
-        [:default]                      => polarity
-        add::Vector{Int}                => SPDB[:ADDUCTCODE].object[add]
-        add::Vector{<: AbstractString}  => object_adduct.(add)
-        add::Vector{<: Type}            => map(t -> t(), add)
-        _                               => adduct
-    end
-
-    if isa(adduct, Bool)
-        cpdlist = generate_cpdlist(analytes, adduct, anion)
-    else
-        if polarity 
-            adduct = filter(t -> isa(t, Pos), adduct)
-        elseif anion == :acetate
-            adduct = filter(t -> isa(t, Neg) && !=(t, AddHCOO()), adduct)
-        elseif anion == :formate
-            adduct = filter(t -> isa(t, Neg) && !=(t, AddOAc()), adduct)
-        end
-    
-        cpdlist = generate_cpdlist(analytes, adduct, anion)
-    end
-    @match product begin
-        ::LCB   => (cpdlist = cpdlist[findall(cpd -> !isnothing(cpd.chain), analytes)])
-        _       => product
-    end
+    adduct = generate_adduct(vectorize(adduct))
+    cpdlist = isempty(adduct) ? generate_cpdlist(analytes, polarity, anion) : 
+        generate_cpdlist(analytes, filter_adduct(adduct, polarity, anion), anion)
+    filter_cpdlist!(cpdlist, product)
     productlist = generate_productlist(cpdlist, product, polarity)
     celist = generate_celist(cpdlist, product)
     tbl = DataFrame("Compound Name"     => Any[],
@@ -42,28 +20,28 @@ function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, pola
                     "Collision Energy"  => Int[],
                     )
 
-    for (rcpd, product, ce) in zip(eachrow(cpdlist), productlist, celist)
-        if product == 0 
+    for (rcpd, mz2, ce) in zip(cpdlist, productlist, celist)
+        if mz2 == 0 
             isnothing(default) && continue
-            product = default
+            mz2 = default
         end
         pushed = false
-        ms1 = mz(rcpd[1], rcpd[2])
+        ms1 = mz(rcpd.cpd, rcpd.add)
         for row in eachrow(tbl)
-            (!between(row[2], ms1, mz_tol) || !between(row[3], product, mz_tol)) && continue
-            !between(rcpd[3] - rt_tol, row[4], row[5] / 2) && !between(rcpd[3] + rt_tol, row[4], row[5] / 2) && continue
+            (!between(row[2], ms1, mz_tol) || !between(row[3], mz2, mz_tol)) && continue
+            !between(rcpd.rt - rt_tol, row[4], row[5] / 2) && !between(rcpd.rt + rt_tol, row[4], row[5] / 2) && continue
             row[6] == ce || continue
-            rt_l = min(row[4] - row[5] / 2, rcpd[3] - rt_tol)
-            rt_r = max(row[4] + row[5] / 2, rcpd[3] + rt_tol)
+            rt_l = min(row[4] - row[5] / 2, rcpd.rt - rt_tol)
+            rt_r = max(row[4] + row[5] / 2, rcpd.rt + rt_tol)
             row[1] = vectorize(row[1])
             row[2] = (row[2] * length(row[1]) + ms1) / (length(row[1]) + 1)
-            row[3] = (row[3] * length(row[1]) + product) / (length(row[1]) + 1)
+            row[3] = (row[3] * length(row[1]) + mz2) / (length(row[1]) + 1)
             row[4] = (rt_l + rt_r) / 2
             row[5] = rt_r - rt_l
-            push!(row[1], repr(rcpd[1]))
+            push!(row[1], repr(rcpd.cpd))
             pushed = true
         end
-        pushed || (push!(tbl, (repr(rcpd[1]), ms1, product, rcpd[3], rt_tol * 2, ce)))
+        pushed || (push!(tbl, (repr(rcpd.cpd), ms1, mz2, rcpd.rt, rt_tol * 2, ce)))
     end
     insertcols!(tbl, "Polarity" => repeat([polarity ? "Positive" : "Negative"], nrow(tbl)))
     #=
@@ -78,45 +56,59 @@ function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, pola
     tbl
 end
 
-function generate_cpdlist(analytes::AbstractVector{AnalyteSP}, adduct::Vector, anion)
-    mapreduce(vcat, analytes) do analyte
-        cpd = last(analyte)
-        rt = analyte.rt
-        mapreduce(vcat, adduct) do add
-            [cpd add rt]
-        end
+generate_adduct(adduct::Vector{Symbol}) = @match adduct begin
+    [:default] => Ion[]
+end
+generate_adduct(adduct::Vector{Int}) = SPDB[:ADDUCTCODE].object[adduct]
+generate_adduct(adduct::Vector{<: AbstractString}) = object_adduct.(adduct)
+generate_adduct(adduct::Vector{<: Type{T}}) where {T <: Ion} = map(t -> t(), adduct)
+function filter_adduct(adduct::Vector{<: Adduct}, polarity::Bool, anion::Symbol)
+    if polarity 
+        filter(t -> isa(t, Pos), adduct)
+    elseif anion == :acetate
+        filter(t -> isa(t, Neg) && !=(t, AddHCOO()), adduct)
+    elseif anion == :formate
+        filter(t -> isa(t, Neg) && !=(t, AddOAc()), adduct)
     end
 end
 
-function generate_cpdlist(analytes::AbstractVector{AnalyteSP}, polarity::Bool, anion)
-    mapreduce(vcat, analytes) do analyte
-        cpd = last(analyte)
-        rt = analyte.rt
-        adduct = class_db_index(cpd.class).default_ion
-        if polarity 
-            adduct = filter(t -> isa(t, Pos), adduct)
-        elseif anion == :acetate
-            adduct = filter(t -> isa(t, Neg) && !=(t, AddHCOO()), adduct)
-        elseif anion == :formate
-            adduct = filter(t -> isa(t, Neg) && !=(t, AddOAc()), adduct)
-        end
-        mapreduce(vcat, adduct) do add
-            [cpd add rt]
-        end
-    end
-end
+cpd_add_rt(analyte, add) = (cpd = last(analyte), add = add, rt = analyte.rt)
+cpd_add_rt(analyte, polarity, anion) = Iterators.map(add -> cpd_add_rt(analyte, add), filter_adduct(class_db_index(last(analyte).class).default_ion, polarity, anion))
 
-function generate_productlist(cpdlist::Matrix, product::Type{LCB}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG])
-    map(eachrow(cpdlist)) do row
-        isnothing(row[1].chain) && return 0
-        id = findfirst(x -> ==(row[1].chain.lcb, x.molecule), @view db[:, 1])
-        isnothing(id) ? mz(default_adduct(row[1].chain.lcb)) : db[id, 2]
-    end
-end
+generate_cpdlist(analytes::AbstractVector{AnalyteSP}, adduct::Vector, anion) = 
+    productview(cpd_add_rt, adduct, analytes) |> splitdimsview |> flatten
+    # Transducers
+    # Iterators.product(adduct, analytes) |> MapSplat(cpd_add_rt) |> collect
+    # DataPipes and BangBang:
+    # @p Iterators.product(adduct, analytes) |> Iterators.map(cpd_add_rt(_...)) |> reduce(push!!; init = [])
+    # Much more allocation for 1st
+    # SplitApplyCombine
+    # productview(cpd_add_rt, adduct, analytes) |> splitdimsview |> flatten
+    # A little more allocation for 1st, less allocation for 2nd
 
-function generate_celist(cpdlist::Matrix, product::Type{LCB})
-    map(eachrow(cpdlist)) do row
-        id = findfirst(x -> ==(row[1].class, x[1]) && ==(row[2], x[2]) && ==(x[3], "LCB"), eachrow(SPDB[:CE]))
+generate_cpdlist(analytes::AbstractVector{AnalyteSP}, polarity::Bool, anion) = 
+    @p analytes |> mapmany(cpd_add_rt(_, polarity, anion))
+    # Transducers
+    # analytes |> MapCat(analyte -> cpd_add_rt(analyte, polarity, anion)) |> collect
+    # DataPipes and BangBang:
+    # @p analytes |> Iterators.map(cpd_add_rt(_, polarity, anion)) |> reduce(vcat)
+    # Much less allocation for 1st
+    # DataPipes and SplitApplyCombine
+    
+    # Even less allocation for 1st
+
+filter_cpdlist!(cpdlist, product) = cpdlist
+filter_cpdlist!(cpdlist, product::LCB) = filter!(cpd -> !isnothing(cpd.cpd.chain), cpdlist)
+
+generate_productlist(cpdlist::Vector, product::Type{LCB}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) = 
+    map(cpdlist) do row
+        isnothing(row.cpd.chain) && return 0
+        id = findfirst(x -> ==(row.cpd.chain.lcb, x.molecule), @view db[:, 1])
+        isnothing(id) ? mz(default_adduct(row.cpd.chain.lcb)) : db[id, 2]
+    end
+
+generate_celist(cpdlist::Vector, product::Type{LCB}) = 
+    map(cpdlist) do row
+        id = findfirst(x -> ==(row.cpd.class, x[1]) && ==(row.add, x[2]) && ==(x[3], "LCB"), eachrow(SPDB[:CE]))
         isnothing(id) ? 40 : SPDB[:CE][id, :eV]
     end
-end

@@ -58,6 +58,23 @@ deleteat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analytes), parentindices(analytes)[1][del])
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analytes), parentindices(analytes)[1][del])
 
+
+function delete!(aquery::Query, target::Symbol) 
+    delete!(aquery.project, target; analytes = query.result)
+    aquery.view ? (printstyled("Please re-query to get the correct result\n"; bold = true, color = :red); aquery.project) : aquery
+end
+
+function delete!(project::Project, target::Symbol; analytes = project.analytes)
+    printstyled("Delete> "; color = :green, bold = true)
+    del = @match target begin
+        :class => (println("Class only"); analyte -> analyte.states[1] < 0)
+        :chain => (println("Chain only"); analyte -> analyte.states[2] < 0)
+        :both  => (println("Class and Chain"); analyte -> any(s < 0 for s in analyte.states))
+    end
+    deleteat!(analytes, findall(del, analytes))
+    project
+end
+
 keys(project::Project) = LinearIndices(project.analytes)
 keys(aquery::Query) = LinearIndices(aquery.result)
 keys(analyte::AnalyteSP) = LinearIndices(analyte.compounds)
@@ -89,7 +106,8 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
     if isnothing(cpd2.chain) 
         append!(cpd1.fragments, cpd2.fragments; cols = :union)
         unique!(cpd1.fragments)
-        cpd1.area = max(cpd1.area, cpd2.area)
+        i = findmax((cpd1.area[1], cpd2.area[1]))
+        cpd1.area = i == 1 ? cpd1.area : cpd2.area
         return cpd1
     end
     if isnothing(cpd1.chain)
@@ -110,7 +128,8 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
     end
     append!(cpd1.fragments, cpd2.fragments; cols = :union)
     unique!(cpd1.fragments)
-    cpd1.area = max(cpd1.area, cpd2.area)
+    i = findmax((cpd1.area[1], cpd2.area[1]))
+    cpd1.area = i == 1 ? cpd1.area : cpd2.area
     sort!(analyte, lt = isless_class)
     cpd1
 end
@@ -120,7 +139,8 @@ union(cpd1::CompoundSP, cpd2::CompoundSP) = union!(copy_wo_project(cpd1), cpd2)
 function union!(cpd1::CompoundSP, cpd2::CompoundSP)
     append!(cpd1.fragments, cpd2.fragments; cols = :union)
     unique!(cpd1.fragments)
-    cpd1.area = max(cpd1.area, cpd2.area)
+    i = findmax((cpd1.area[1], cpd2.area[1]))
+    cpd1.area = i == 1 ? cpd1.area : cpd2.area
     if isnothing(cpd2.chain) 
         return cpd1
     end
@@ -153,6 +173,7 @@ function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0])
     analyte1
 end
 
+# variant of interface
 iscompatible(cpd1::CompoundSP, cpd2::CompoundSP) = 
     isclasscompatible(cpd1.class, cpd2.class) && ischaincompatible(cpd1, cpd2)
 
@@ -183,7 +204,6 @@ ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(ch
 copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.sum, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
 copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), deepcopy(analyte.scores))
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
-
 
 equivalent_in(ion, collection) = any(equivalent(ion, x) for x in collection)
 function equivalent(ion1::Ion{<: Pos, <: LCB}, ion2::Ion{<: Pos, <: LCB})
@@ -217,21 +237,4 @@ function isless_ion(ion1, ion2)
     id1 = findfirst(==(ion2.adduct), getproperty(id, level[id2]))
     id1 > id2 && return true
     false
-end
-
-function delete!(aquery::Query, target::Symbol) 
-    delete!(aquery.project, target; analytes = query.result)
-    aquery.view ? (printstyled("Please re-query to get the correct result\n"; bold = true, color = :red); aquery.project) : aquery
-end
-
-function delete!(project::Project, target::Symbol; analytes = project.analytes)
-    printstyled("Delete> "; color = :green, bold = true)
-    to_filter = @match target begin
-        :class => (println("Class only"); analyte -> analyte.states[1] >= 0)
-        :chain => (println("Chain only"); analyte -> analyte.states[2] >= 0)
-        :both  => (println("Class and Chain"); analyte -> all(s >= 0 for s in analyte.states))
-    end
-    del = findall(to_filter, analytes)
-    deleteat!(analytes, del)
-    project
 end
