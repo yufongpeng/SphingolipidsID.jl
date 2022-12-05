@@ -4,79 +4,64 @@ function query(project::Project; view = true)
     Query(project, v, [], view)
 end
 
-function query(project::Project, args...; view = true) 
+query(qq, project::Project; kwargs...) = query(project::Project, qq; kwargs...)
+
+function query(project::Project, qq; view = true) 
     v = @view project[:]
     v = view ? v : Vector(v)
-    query(Query(project, v, [], view), args...)
+    query(Query(project, v, [], view), qq)
 end
 
-query(aquery::Query, id::Tuple; view = aquery.view, fn = identity) = query(aquery, id...; view, fn)
+query(qq, aquery::Query; kwargs...) = query(aquery, qq; kwargs...)
 
-function query(aquery::Query, quantity::Symbol, low, up; view = aquery.view, fn = identity)
-    qf = @match quantity begin
-        :rt => analyte -> between(analyte.rt; low, up)
-        :mw => analyte -> between(mw(last(analyte)); low, up)
-        :mz => analyte -> any(between(query_raw(aquery.project, frag.source, frag.id).mz1; 
-                                                low, up) for frag in eachrow(last(analyte).fragments))
+function query(aquery::Query, qq::Pair{Symbol, <: Any}; view = aquery.view, fn = identity)
+    score = @match qq.first begin
+        :topscore => true
+        :topsc    => true
+        _         => false
     end
-    finish_query!(aquery, quantity, (low, up), fn, findall(fn ∘ qf, aquery), view)
+    score && return finish_query!(aquery, qq.first, qq.second, fn, query_score(aquery, qq.second), view)
+    qf = @match qq.first begin
+        :rt => analyte -> between(analyte.rt, qq.second)
+        :mw => analyte -> between(mw(last(analyte)), qq.second)
+        :mz => analyte -> any(between(query_raw(aquery.project, frag.source, frag.id).mz1, 
+                                                qq.second) for frag in last(analyte).fragments)
+    end
+    finish_query!(aquery, qq.first, qq.second, fn, findall(fn ∘ qf, aquery), view)
 end
 
-function query(aquery::Query, quantity::Symbol, param; view = aquery.view, fn = identity)
-    id = @match quantity begin
-        :topscore => query_score(aquery, param)
-        :topsc    => query_score(aquery, param)
-    end
-    finish_query!(aquery, quantity, param, fn, id, view)
-end
-
-function query(aquery::Query, id::Type{<: ClassSP}; view = aquery.view, fn = identity)
-    cpds = map(aquery) do analyte
-        last(analyte)
-    end
+function query(aquery::Query, qq::Type{<: ClassSP}; view = aquery.view, fn = identity)
     qf(cpd) = fn(
-        isa(cpd.class, id) || 
+        isa(cpd.class, qq) || 
         hasisomer(cpd.class) && 
-        any(isa(isomer, id) for isomer in cpd.class.isomer)
+        any(isa(isomer, qq) for isomer in cpd.class.isomer)
     )
-    finish_query!(aquery, :class, id, fn, findall(qf, cpds), view)
+    finish_query!(aquery, :class, qq, fn, findall(qf, last.(aquery)), view)
 end
 
-function query(aquery::Query, id::Lcb; view = aquery.view, fn = identity)
-    match = convert_type(LCB, id)
-    cpds = map(aquery) do analyte
-            last(analyte)
-    end
+function query(aquery::Query, qq::Lcb; view = aquery.view, fn = identity)
+    match = convert_type(LCB, qq)
     qf(cpd) = fn(!isnothing(cpd.chain) && isa(cpd.chain.lcb, match))
-    finish_query!(aquery, :lcb, id, fn, findall(qf, cpds), view)
+    finish_query!(aquery, :lcb, qq, fn, findall(qf, last.(aquery)), view)
 end
 
-function query(aquery::Query, id::NACYL; view = aquery.view, fn = identity)
-    match = convert_type(ACYL, id)
-    cpds = map(aquery) do analyte
-            last(analyte)
-    end
+function query(aquery::Query, qq::NACYL; view = aquery.view, fn = identity)
+    match = convert_type(ACYL, qq)
     qf(cpd) = fn(
         !isnothing(cpd.chain) && 
         isa(cpd.chain.acyl, match) && 
-        all((cpd.sum .- sumcomp(cpd.chain.lcb)) .== (id.cb, id.db, id.ox))
+        all((cpd.sum .- sumcomp(cpd.chain.lcb)) .== (qq.cb, qq.db, qq.ox))
     )
-    finish_query!(aquery, :acyl, id, fn, findall(qf, cpds), view)
+    finish_query!(aquery, :acyl, qq, fn, findall(qf, last.(aquery)), view)
 end
 
-function query(aquery::Query, id::Type{<: LCB}; view = aquery.view, fn = identity)
-    cpds = map(aquery) do analyte
-            last(analyte)
-    end
-    qf(cpd) = fn(!isnothing(cpd.chain) && isa(cpd.chain.lcb, id))
-    finish_query!(aquery, :lcb, id, fn, findall(qf, cpds), view)
+function query(aquery::Query, qq::Type{<: LCB}; view = aquery.view, fn = identity)
+    qf(cpd) = fn(!isnothing(cpd.chain) && isa(cpd.chain.lcb, qq))
+    finish_query!(aquery, :lcb, qq, fn, findall(qf, last.(aquery)), view)
 end
 
-function query(aquery::Query, id::CompoundID; view = aquery.view, fn = identity)
-    cpds = map(aquery) do analyte
-            last(analyte)
-    end
-    match = convert_internal(id)
+function query(aquery::Query, qq::CompoundID; view = aquery.view, fn = identity)
+    match = convert_internal(qq)
     qf, sym = @match match begin
         (::Type{Nothing}, sum, ::Type{Nothing}, ::Type{Nothing})    => (cpd -> (==(cpd.sum, sum)), :sum)
         (::Type{Nothing}, sum, lcb, acyl)                           => (cpd -> (==(cpd.sum, sum) && 
@@ -90,11 +75,11 @@ function query(aquery::Query, id::CompoundID; view = aquery.view, fn = identity)
                                                                                 isa(cpd.chain.acyl, acyl),
                                                                         :cpd)
     end
-    finish_query!(aquery, sym, id, fn, findall(fn ∘ qf, cpds), view)
+    finish_query!(aquery, sym, qq, fn, findall(fn ∘ qf, last.(aquery)), view)
 end
 
-function query(aquery::Query, id::Symbol; view = aquery.view, fn = identity)
-    qf = @match id begin
+function query(aquery::Query, qq::Symbol; view = aquery.view, fn = identity)
+    qf = @match qq begin
         :class  => analyte -> ==(analyte.states[1], 1)
         :chain  => analyte -> ==(analyte.states[2], 1)
         :class_ => analyte -> ==(analyte.states[1], 0)
@@ -103,7 +88,7 @@ function query(aquery::Query, id::Symbol; view = aquery.view, fn = identity)
         :chain! => analyte -> ==(analyte.states[2], -1)
         :both   => analyte -> all(==(1), analyte.states)
     end
-    finish_query!(aquery, :id, id, fn, findall(fn ∘ qf, aquery.result), view)
+    finish_query!(aquery, :id, qq, fn, findall(fn ∘ qf, aquery.result), view)
 end
 
 function query_score(aquery::Query, topN = 0.5)
@@ -151,11 +136,11 @@ function finish_query!(aquery::Query, ql, qr, fn, id, view)
     aquery
 end
 
-query(aquery::Query, id::Inv; view = true) = query(aquery, id.args...; view, fn = !)
-function query(aquery::Query, ids::Vararg{Union{Tuple, Inv, Type, CompoundID}, N}; view = true) where N 
+query(aquery::Query, qq::Inv; view = true) = query(aquery, qq.arg; view, fn = !)
+function query(aquery::Query, qqs::Tuple; view = true) 
     pid = parentindices(aquery.result)[1]
-    qs = map(ids) do id
-        query(Query(aquery.project, view ? Base.view(aquery.project, deepcopy(pid)) : copy_wo_project.(aquery.result), [], view), id; view)
+    qs = map(qqs) do qq
+        query(Query(aquery.project, view ? Base.view(aquery.project, deepcopy(pid)) : copy_wo_project.(aquery.result), [], view), qq; view)
     end
     qs = union!(qs...)
     push!(aquery.query, tuple(qs.query...))
@@ -164,6 +149,6 @@ function query(aquery::Query, ids::Vararg{Union{Tuple, Inv, Type, CompoundID}, N
     aquery
 end
 
-query_raw(project::Project, source, id) = @views project.data[source].raw[findfirst(==(id), project.data[source].raw.id), :]
+query_raw(project::Project, source, id) = project.data[source].raw[findfirst(==(id), project.data[source].raw.id)]
 
 # filter/comparator

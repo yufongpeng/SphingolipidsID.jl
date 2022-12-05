@@ -1,7 +1,7 @@
 # ==================================================================================
 # Rule-based ID
-apply_rules!(aquery::Query, match_mode::Symbol = :both; kwargs...) = (apply_rules!(aquery.project, match_mode, aquery.result; kwargs...); aquery)
-function apply_rules!(project::Project, match_mode::Symbol = :both, analytes = project.analytes; 
+apply_rules!(aquery::Query; match_mode::Symbol = :both, kwargs...) = (apply_rules!(aquery.project; match_mode, analytes = aquery.result, kwargs...); aquery)
+function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = project.analytes, 
                         class_mode::Symbol = :default, 
                         chain_mode::Symbol = :isf, 
                         class_rule::Symbol = :ab,
@@ -350,7 +350,7 @@ function ion_comparison(project::Project, analyte::AnalyteSP, prec::Vector, ms1:
 end
 
 function _ion_comparison(ratios::Vector{Float64}, project::Project, cpd::CompoundSP, prec::Vector, ms1::Vector, all_ions)
-    gdf = groupby(filter(:ion1 => (x -> equivalent_in(x, prec)), cpd.fragments, view = true), [:source, :ion1])
+    gdf = @p cpd.fragments |> filterview(x -> equivalent_in(x.ion1, prec)) |> groupview(getproperties((:source, :ion1)))
     for subdf in gdf
         done = true
         ion1 = subdf.ion1[1]

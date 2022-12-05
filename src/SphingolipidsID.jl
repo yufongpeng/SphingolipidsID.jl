@@ -1,6 +1,7 @@
 module SphingolipidsID
 
-using DataFrames, CSV, MLStyle, Statistics, PrettyTables, DataPipes, SplitApplyCombine
+using CSV, MLStyle, Statistics, PrettyTables, DataPipes, SplitApplyCombine, TypedTables
+using DataFrames: DataFrame, groupby, combine, All
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB, 
 
@@ -38,7 +39,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
 
         library, rule, 
         
-        featuretable_mzmine, fill_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, filter_duplicate!, rsd, re,
+        featuretable_mzmine, fill_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
 
         preis, preis!, finish_profile!, 
 
@@ -48,7 +49,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
 
         nfrags, @score, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!,
 
-        generate_mrm, nMRM
+        generate_mrm, nMRM, write_mrm
 
 
 
@@ -303,11 +304,13 @@ mutable struct CompoundSP
     class::ClassSP
     sum::NTuple{3, Int}   # (#C, #db, #OH)
     chain::Union{Chain, Nothing}
-    fragments::DataFrame # ion1, ion2, source, id
+    fragments::Table # ion1, ion2, source, id
     area::Tuple{Float64, Float64}
     states::Vector{Int}
     results::Vector
     project
+    CompoundSP(class, sum, chain, fragments, area, states, results, project) = new(class, sum, chain, fragments, area, states, results, project)
+    CompoundSP(class, sum, chain) = new(class, sum, chain)
 end
 
 mutable struct AnalyteSP
@@ -395,7 +398,7 @@ abstract type Data end
 
 # precursor/product, ion => name, ms/mz => m/z, mw => molecular weight
 struct PreIS <: Data
-    raw::DataFrame #id, mz1, scan(index of mz2), area, ev, rt # get rid of dataframe => tables.rowtables
+    raw::Table #id, mz1, scan(index of mz2), area, ev, rt 
     range::Vector{Tuple{Float64, Float64}} 
     mz2::Vector{Float64}
     mz_tol::Float64
@@ -404,7 +407,7 @@ struct PreIS <: Data
 end
 
 struct MRM <: Data
-    raw::DataFrame #id, mz1, mz2, area, ev, rt
+    raw::Table #id, mz1, mz2, area, ev, rt
     mz2::Vector{Float64}
     mz_tol::Float64
     polarity::Bool
@@ -426,10 +429,9 @@ mutable struct Query
 end
 
 struct Inv
-    args
+    arg
 end
-
-not(id::Symbol, args...) = Inv((id, args...))
+not(arg) = Inv(arg)
 
 include("io.jl")
 include("interface.jl")

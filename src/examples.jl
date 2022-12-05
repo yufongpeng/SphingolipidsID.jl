@@ -1,12 +1,14 @@
-using SphingolipidsID, Chain
-files = joinpath.("C:\\users\\sciph\\.julia\\dev\\SphingolipidsID\\test\\data\\mzmine", readdir("C:\\users\\sciph\\.julia\\dev\\SphingolipidsID\\test\\data\\mzmine"))
+using SphingolipidsID, DataPipes
+files = joinpath.(".\\test\\data\\mzmine", readdir(".\\test\\data\\mzmine"))
 fts = featuretable_mzmine.(files);
 
 ces = repeat([[30, 30, 60, 60, 60, 60]], 8)
 insert!(ces, 6, [30, 30, 60 ,60 , 60])
 insert!(ces, 9, [45, 45, 45, 45])
-fill_ce_mzmine!.(fts, ces);
-filter_duplicate!(fts; n = 2);
+
+fts = fill_ce_mzmine!.(fts, ces);
+fts = filter_duplicate!.(fts; n = 2);
+
 ms = [236.238, 250.253, 284.295, 264.269, 262.253, 278.285, 292.3, 266.285, 274.093, 282.28]
 rang = repeat([(400, 1500)], 9)
 insert!(rang, 9, (900, 1650))
@@ -29,86 +31,40 @@ for (m, r, ft) in zip(ms, rang, fts)
 end
 finish_profile!(pj)
 # ID: Class, 1361
-apply_rules!(pj, :class)
+apply_rules!(pj; match_mode = :class)
 # ID: Chain
-apply_rules!(pj, :chain)
+apply_rules!(pj; match_mode = :chain)
 # Score
-@chain pj begin
-    apply_score!(@score chain 1 -1)
-    apply_threshold!(<=(1))
-    apply_score!(@score chain 1 (0 + 1) / all)
-    apply_threshold!(>=(0.5))
-    #filter_score!(@score chain (analyte, cpd) -> nrow(cpd.fragments) (0 + 1)  x >= 2)
-end
+@p pj |>
+    apply_score!(@score chain 1 -1) |> apply_threshold!(<=(1)) |>
+    apply_score!(@score chain 1 (0 + 1) / all) |> apply_threshold!(>=(0.5))
+    # apply_score!(@score chain => (analyte, cpd) -> size(cpd.fragments, 1) (0 + 1)) |> apply_threshold!(>=(2))
 
 # Queries
-@chain pj begin
-    query(GM1)
-end
+@p pj |> query(GM1) |> query(:rt => (3, 4))
+@p pj |> query(HexNAcHex3Cer) |> query(cpd(lcb(18, 1, 2), acyl(16, 0, 0))) |> __[1]
+@p pj |> query(acyl(24, 0, 1)) |> query(:mz => (810, 813))
+query(pj, cpd(Cer, (36, 1, 2)))
 
-@chain pj begin
-    query(HexNAcHex3Cer)
-    query(cpd(lcb(18, 1, 2), acyl(16, 0, 0)))
-    _[1]
-end
+@p pj |>
+    query(:class) |>
+    query(not(:chain!)) |>
+    query((HexCer, cpd(36, 1, 2), cpd(34, 1, 2))) |>
+    query(lcb(18, 1, 2)) 
 
-@chain pj begin
-    query(acyl(24, 0, 1))
-end
-
-@chain pj begin
-    query(cpd(Cer, (36, 1, 2)))
-end
-
-@chain pj begin
-    query(cpd(36, 1, 2))
-end
-
-@chain pj begin
-    query(:class)
-    query(not(:chain!))
-    query(HexCer, cpd(36, 1, 2), cpd(34, 1, 2))
-    query(lcb(18, 1, 2))
-end
-
-@chain pj begin
-    query(cpd(lcb(18, 1, 2), acyl(24, 0, 1)))
-end
-
-@chain pj begin
-    query(cpd(42, 1, 3))
-end
+query(pj, (cpd(lcb(18, 1, 2), acyl(24, 0, 1))))
 
 # Partial id
-@chain pj begin
-    query(HexCer)
-    query(:chain!)
-    apply_rules!
-end
+@p pj |> query(HexCer) |> query(:chain!) |> apply_rules!
 
 # MRM
-@time @chain pj begin
-    query(not(:class!))
-    query(not(:chain!))
-    generate_mrm(:default, LCB)
-end
+@p pj |> query(not(:class!)) |> query(not(:chain!)) |> generate_mrm(:default, LCB, true)
+@p pj |> query(:topsc => 0.5) |> query(not(:class!)) |> query(not(:chain!)) |> generate_mrm(:default, LCB, true) |> write_mrm("lcb_mrm.csv")
+@p pj |> query(:class!) |> query(not(:chain!)) |> generate_mrm(:default, LCB, true)
+@p pj |> query(:topsc => 0.5) |> query(:class) |> query(not(:chain!)) |> generate_mrm(:default, LCB, true)
 
-@chain pj begin
-    query(:topsc, 0.5)
-    query(not(:class!))
-    query(not(:chain!))
-    generate_mrm(:default, LCB)
-end
-
-@chain pj begin
-    query(:class)
-    query(not(:chain!))
-    generate_mrm(:default, LCB)
-end
-
-@chain pj begin
-    query(:topsc, 0.5)
-    query(:class)
-    query(not(:chain!))
-    generate_mrm(:default, LCB)
-end
+# Chain.jl 
+# @chain project begin
+#     query
+#     query
+# end

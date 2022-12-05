@@ -1,7 +1,8 @@
-# get rid of dataframe => tables.rowtables
-generate_mrm(project::Project, args...; kwargs...) = generate_mrm(project.analytes, args...; kwargs..., anion = project.anion)
-generate_mrm(aquery::Query, args...; kwargs...) = generate_mrm(aquery.result, args...; kwargs..., anion = aquery.project.anion)
-function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool = true; 
+generate_mrm(project::Project, adduct, product, polarity::Bool; kwargs...) = generate_mrm(project.analytes, adduct, product, polarity; kwargs..., anion = project.anion)
+generate_mrm(aquery::Query, adduct, product, polarity::Bool; kwargs...) = generate_mrm(aquery.result, adduct, product, polarity; kwargs..., anion = aquery.project.anion)
+generate_mrm(adduct, product, polarity::Bool, pq::Union{Project, Query}; kwargs...) = generate_mrm(pq, adduct, product, polarity; kwargs...)
+
+function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool; 
                     mz_tol = 0.35, rt_tol = 0.5, 
                     db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG], 
                     anion = :acetate,
@@ -12,38 +13,34 @@ function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, pola
     filter_cpdlist!(cpdlist, product)
     productlist = generate_productlist(cpdlist, product, polarity)
     celist = generate_celist(cpdlist, product)
-    tbl = DataFrame("Compound Name"     => Any[],
-                    "Precursor Ion"     => Float64[],
-                    "Product Ion"       => Float64[],
-                    "Ret Time (min)"    => Float64[],
-                    "Delta Ret Time"    => Float64[],
-                    "Collision Energy"  => Int[],
-                    )
-
-    for (rcpd, mz2, ce) in zip(cpdlist, productlist, celist)
-        if mz2 == 0 
+    tbl = NamedTuple{(:compound, :mz1, :mz2, :rt, :Δrt, :collision_energy), Tuple{Any, Float64, Float64, Float64, Float64, Int64}}[]
+    for (rcpd, ms2, ce) in zip(cpdlist, productlist, celist)
+        if ms2 == 0 
             isnothing(default) && continue
-            mz2 = default
+            ms2 = default
         end
         pushed = false
         ms1 = mz(rcpd.cpd, rcpd.add)
-        for row in eachrow(tbl)
-            (!between(row[2], ms1, mz_tol) || !between(row[3], mz2, mz_tol)) && continue
-            !between(rcpd.rt - rt_tol, row[4], row[5] / 2) && !between(rcpd.rt + rt_tol, row[4], row[5] / 2) && continue
-            row[6] == ce || continue
-            rt_l = min(row[4] - row[5] / 2, rcpd.rt - rt_tol)
-            rt_r = max(row[4] + row[5] / 2, rcpd.rt + rt_tol)
-            row[1] = vectorize(row[1])
-            row[2] = (row[2] * length(row[1]) + ms1) / (length(row[1]) + 1)
-            row[3] = (row[3] * length(row[1]) + mz2) / (length(row[1]) + 1)
-            row[4] = (rt_l + rt_r) / 2
-            row[5] = rt_r - rt_l
-            push!(row[1], repr(rcpd.cpd))
+        for (id, rtbl) in enumerate(tbl)
+            (!between(rtbl.mz1, ms1, mz_tol) || !between(rtbl.mz2, ms2, mz_tol)) && continue
+            !between(rcpd.rt - rt_tol, rtbl.rt, rtbl.Δrt / 2) && !between(rcpd.rt + rt_tol, rtbl.rt, rtbl.Δrt / 2) && continue
+            rtbl.collision_energy == ce || continue
+            rt_l = min(rtbl.rt - rtbl.Δrt / 2, rcpd.rt - rt_tol)
+            rt_r = max(rtbl.rt + rtbl.Δrt / 2, rcpd.rt + rt_tol)
+            tbl[id] = (;
+                compound = vectorize(rtbl.compound),
+                mz1 = (rtbl.mz1 * length(rtbl.compound) + ms1) / (length(rtbl.compound) + 1),
+                mz2 = (rtbl.mz2 * length(rtbl.compound) + ms2) / (length(rtbl.compound) + 1),
+                rt = (rt_l + rt_r) / 2,
+                Δrt = rt_r - rt_l,
+                collision_energy = rtbl.collision_energy
+            )
+            push!(tbl[id].compound, repr(rcpd.cpd))
             pushed = true
         end
-        pushed || (push!(tbl, (repr(rcpd.cpd), ms1, mz2, rcpd.rt, rt_tol * 2, ce)))
+        pushed || (push!(tbl, (compound = repr(rcpd.cpd), mz1 = ms1, mz2 = ms2, rt = rcpd.rt, Δrt = rt_tol * 2, collision_energy = ce)))
     end
-    insertcols!(tbl, "Polarity" => repeat([polarity ? "Positive" : "Negative"], nrow(tbl)))
+    Table(tbl, polarity = repeat([polarity ? "Positive" : "Negative"], size(tbl, 1)))
     #=
     tbl = DataFrame("Compound Name"     => map(repr, cpdlist[:, 1]), 
                     "Precursor Ion"     => map(mz, cpdlist[:, 1], cpdlist[:, 2]),
@@ -53,7 +50,6 @@ function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, pola
                     "Collision Energy"  => celist, 
                     "Polarity"          => repeat([polarity ? "Positive" : "Negative"], n)
     )=#
-    tbl
 end
 
 generate_adduct(adduct::Vector{Symbol}) = @match adduct begin
@@ -103,12 +99,15 @@ filter_cpdlist!(cpdlist, product::LCB) = filter!(cpd -> !isnothing(cpd.cpd.chain
 generate_productlist(cpdlist::Vector, product::Type{LCB}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) = 
     map(cpdlist) do row
         isnothing(row.cpd.chain) && return 0
-        id = findfirst(x -> ==(row.cpd.chain.lcb, x.molecule), @view db[:, 1])
+        id = findfirst(x -> ==(row.cpd.chain.lcb, x.molecule), db[:, 1])
         isnothing(id) ? mz(default_adduct(row.cpd.chain.lcb)) : db[id, 2]
     end
 
 generate_celist(cpdlist::Vector, product::Type{LCB}) = 
     map(cpdlist) do row
-        id = findfirst(x -> ==(row.cpd.class, x[1]) && ==(row.add, x[2]) && ==(x[3], "LCB"), eachrow(SPDB[:CE]))
+        id = findfirst(x -> ==(row.cpd.class, SPDB[:CE].ms1[x]) && ==(row.add, SPDB[:CE].adduct1[x]) && ==(SPDB[:CE].ms2[x], "LCB"), eachindex(SPDB[:CE]))
         isnothing(id) ? 40 : SPDB[:CE].eV[id]
     end
+
+write_mrm(io, tbl::Table) = CSV.write(io, tbl; 
+    header = ["Compound Name", "Precursor Ion", "Product Ion", "Ret Time (min)", "Delta Ret Time", "Collision Energy", "Polarity"])

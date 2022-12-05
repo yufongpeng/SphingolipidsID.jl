@@ -63,42 +63,42 @@ function preis!(
             featuretable.id .= maximum(dt.raw.id) .+ (1:size(featuretable, 1))
             append!(dt.raw, featuretable)
             sort!(dt.raw, [:mz1, :rt])
-            featuretable = filter(:scan => ==(lastindex(dt.mz2)), dt.raw, view = true)
+            featuretable = filterview(x -> ==(x.scan, lastindex(dt.mz2)), dt.raw)
         else
-            origin = filter(:scan => ==(lastindex(dt.mz2)), dt.raw, view = true)
+            origin = filterview(x -> ==(x.scan, lastindex(dt.mz2)), dt.raw)
             prev_id = maximum(origin.id)
             last_id = prev_id
             featuretable.scan .= scan_id
             for ft_id in eachindex(featuretable)
                 rt = featuretable.rt[ft_id]
                 mz1 = featuretable.mz1[ft_id]
-                id = findfirst(id -> abs(origin.rt[id] - rt) <= rt_tol && abs(origin.mz1[id] - mz1) <= mz_tol, 1:size(origin, 1))
+                id = findfirst(id -> abs(origin.rt[id] - rt) <= rt_tol && abs(origin.mz1[id] - mz1) <= mz_tol, eachindex(origin))
                 if isnothing(id)
-                    push!(project.data[source].raw, featuretable[ft_id, :])
+                    push!(project.data[source].raw, featuretable[ft_id])
                     last_id += 1
                     origin.id[end] = last_id
                 else
-                    featuretable.id[ft_id] = origin.id[id]
-                    origin[id, :] = [mean(x) for x in zip(origin[id, :], featuretable[ft_id, :])]
+                    ft = (; featuretable[ft_id]..., id = origin.id[id])
+                    origin[id] = (; (x => mean(v) for (x, v) in zip(propertynames(origin), zip(origin[id], ft)))...)
                 end
             end
             sort!(dt.raw, [:mz1, :rt])
-            featuretable = filter(:id => >(prev_id), dt.raw, view = true)
+            featuretable = filterview(x -> >(x.id, prev_id), dt.raw)
         end
     end
 
     for analyte in project
         analyte.rt = calc_rt(analyte)
     end
-    
-    for ft_id in 1:size(featuretable, 1)
+
+    for ft_id in eachindex(featuretable)
         current_cpd = CompoundSP[]
         area_error = (featuretable.area[ft_id], featuretable.error[ft_id])
         mz1 = featuretable.mz1[ft_id]
         id = featuretable.id[ft_id]
         rt = featuretable.rt[ft_id]
-        for db_id in 1:size(db, 1)
-            abs(db.var"m/z"[db_id] - mz1) > mz_tol && continue
+        for db_id in eachindex(db)
+            abs(db.mz[db_id] - mz1) > mz_tol && continue
             cpds = CompoundSP.(Ref(project), Ref((Species = db.Species[db_id], 
                                                 Abbreviation = db.Abbreviation[db_id], 
                                                 Adduct = db.Adduct[db_id])), 
@@ -183,7 +183,7 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     for analyte in project
         sort!(analyte, lt = isless_class)
         for cpd in analyte
-            sort!(cpd.fragments, :ion1, lt = isless_ion)
+            sort!(cpd.fragments, :ion1; lt = isless_ion)
         end
     end
     printstyled("PreIS> ", color = :green, bold = true)

@@ -1,4 +1,4 @@
-Categories,Main class,Lipid subclass,Abbreviation,chain summed,chain separated,regex,formula,#u1,u1,#u2,u2,default_ion,parent_ion,adduct_ion,isf_ion
+Categories,Main class,Lipid subclass,Abbreviation,chain summed,chain separated,regex,formula,nu1,u1,nu2,u2,default_ion,parent_ion,adduct_ion,isf_ion
 Sphingolipids [SP],Sphingoid bases [SP01],Sphingoid bases,SPB,SPB 18:1;2O,SPB 18:1;2O,"r""^SPB \d+:\d+;\d*O$""",C18H39N,18,CH2,0,H2,"[1, 2]","[1, 2]","[1, 2]","[1, 2]"
 Sphingolipids [SP],Ceramides [SP02],Ceramide,Cer,Cer 42:1;2O,Cer 18:1;2O/24:0,"r""^Cer \d+:\d+;\d*O$""",C36H73NO,36,CH2,0,H2,"[1, 17, 18]","[1, 17, 18]","[1, 2, 17, 18]","[1, 2, 17, 18]"
 Sphingolipids [SP],Ceramides [SP02],Ceramide 1-phosphates,CerP,CerP 38:0;2O,CerP 18:0;2O/20:0,"r""^CerP \d+:\d+;\d*O$""",C36H74NO4P,36,CH2,0,H2,"[1, 13]","[1, 13]","[1, 2, 13]","[1, 2, 13]"
