@@ -41,27 +41,32 @@ macro score(targetconvert, weight, objective)
         SPDB[:SCORE][$parameters]
     end
 end
-apply_score!(aquery::Query, score_fn) = (apply_score!(aquery.project, score_fn; analytes = aquery.result); aquery)
-function apply_score!(project::Project, score_fn; analytes = project.analytes)
-    printstyled("Score> \n", score_fn, "\n", color = :green, bold = true)
+
+apply_score!(object, fn::T; kwargs...) where T <: Function = apply_score!(fn, object; kwargs...)
+apply_score!(score_fn::T, aquery::Query) where T <: Function = (apply_score!(score_fn, aquery.project; analytes = aquery.result); aquery)
+function apply_score!(score_fn::T, project::Project; analytes = project.analytes) where T <: Function
+    printstyled("Score> ", color = :green, bold = true)
+    print(score_fn, "\n")
     for analyte in analytes
-        apply_score!(analyte, score_fn)
+        apply_score!(score_fn, analyte)
     end
     project
 end
-apply_threshold!(aquery::Query, thresh_fn) = (apply_threshold!(aquery.project, thresh_fn; analytes = aquery.result); aquery)
-function apply_threshold!(project::Project, thresh_fn; analytes = project.analytes)
-    printstyled("Threshold> ", thresh_fn, "\n", color = :green, bold = true)
+apply_threshold!(object, fn::T; kwargs...) where T <: Function = apply_threshold!(fn, object; kwargs...)
+apply_threshold!(thresh_fn::T, aquery::Query) where T <: Function = (apply_threshold!(thresh_fn, aquery.project; analytes = aquery.result); aquery)
+function apply_threshold!(thresh_fn::T, project::Project; analytes = project.analytes) where T <: Function
+    printstyled("Threshold> ", color = :green, bold = true)
+    print(thresh_fn, "\n")
     for analyte in analytes
-        apply_threshold!(analyte, thresh_fn)
+        apply_threshold!(thresh_fn, analyte)
     end
     project
 end
 
-apply_score(analyte::AnalyteSP, score_fn) = score_fn(analyte)
-apply_score!(analyte::AnalyteSP, score_fn) = (analyte.scores = score_fn(analyte)) 
-apply_threshold(analyte::AnalyteSP, thresh_fn) = thresh_fn(analyte)
-function apply_threshold!(analyte::AnalyteSP, thresh_fn)
+apply_score(score_fn::T, analyte::AnalyteSP) where T <: Function = score_fn(analyte)
+apply_score!(score_fn::T, analyte::AnalyteSP) where T <: Function = (analyte.scores = score_fn(analyte)) 
+apply_threshold(thresh_fn, analyte::AnalyteSP) = thresh_fn(analyte)
+function apply_threshold!(thresh_fn, analyte::AnalyteSP)
     id = @match analyte.scores begin
             (x, x) && if isnan(x) end   => 1:0     
             (_, x) && if isnan(x) end   => 1:1       

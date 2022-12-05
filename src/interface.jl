@@ -104,7 +104,7 @@ end
 function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
     cpd1 = analyte[id]
     if isnothing(cpd2.chain) 
-        append!(cpd1.fragments, cpd2.fragments; cols = :union)
+        append!(cpd1.fragments, cpd2.fragments)
         unique!(cpd1.fragments)
         i = findmax((cpd1.area[1], cpd2.area[1]))
         cpd1.area = i == 1 ? cpd1.area : cpd2.area
@@ -126,7 +126,7 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
             a.chain = chain
         end
     end
-    append!(cpd1.fragments, cpd2.fragments; cols = :union)
+    append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
     i = findmax((cpd1.area[1], cpd2.area[1]))
     cpd1.area = i == 1 ? cpd1.area : cpd2.area
@@ -137,7 +137,7 @@ end
 union(cpd1::CompoundSP, cpd2::CompoundSP) = union!(copy_wo_project(cpd1), cpd2)
 
 function union!(cpd1::CompoundSP, cpd2::CompoundSP)
-    append!(cpd1.fragments, cpd2.fragments; cols = :union)
+    append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
     i = findmax((cpd1.area[1], cpd2.area[1]))
     cpd1.area = i == 1 ? cpd1.area : cpd2.area
@@ -238,3 +238,18 @@ function isless_ion(ion1, ion2)
     id1 > id2 && return true
     false
 end
+
+sort(tbl::Table, i::Symbol; kwargs...) = tbl[sortperm(getproperty(tbl, i); kwargs...)]
+function sort!(tbl::Table, i::Symbol; kwargs...)
+    tbl[:] = tbl[sortperm(getproperty(tbl, i); kwargs...)]
+end
+sort(tbl::Table, v::Vector{Symbol}; kwargs...) = tbl[sortperm(collect(zip(getproperty.(Ref(tbl), v)...)); kwargs...)]
+sort!(tbl::Table, v::Vector{Symbol}; kwargs...) = (tbl[:] = tbl[sortperm(collect(zip(getproperty.(Ref(tbl), v)...)); kwargs...)])
+sort(tbl::Table, i::AbstractString; kwargs...) = sort(tbl, Symbol(i); kwargs...)
+sort!(tbl::Table, i::AbstractString; kwargs...) = sort!(tbl, Symbol(i); kwargs...)
+sort(tbl::Table, v::Vector{<: AbstractString}; kwargs...) = sort(tbl, Symbol.(v); kwargs...)
+sort!(tbl::Table, v::Vector{<: AbstractString}; kwargs...) = sort!(tbl, Symbol.(v); kwargs...)
+sort(tbl::Table, i::Int; kwargs...) = sort(tbl, propertynames(tbl)[i]; kwargs...)
+sort!(tbl::Table, i::Int; kwargs...) = sort!(tbl, propertynames(tbl)[i]; kwargs...)
+sort(tbl::Table, v::Vector{<: Int}; kwargs...) = sort(tbl, propertynames(tbl)[v]; kwargs...)
+sort!(tbl::Table, v::Vector{<: Int}; kwargs...) = sort!(tbl, propertynames(tbl)[v]; kwargs...)

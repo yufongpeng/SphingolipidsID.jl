@@ -38,11 +38,11 @@ function nmw(formula::AbstractString)
     end
 end
 
-mz(cpd::CompoundSP, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, cpd.chain, DataFrame(), (0, 0), [], [], nothing)))
+mz(cpd::CompoundSP, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, cpd.chain)))
 mz(cpd::CompoundSP, ions::AcylIon{T}) where T = mz.(ions.ions, (cpd.sum .- sumcomp(T()))...)
 mz(cpd::CompoundSP, ion::Ion) = mz(ion)
 mz(cpd::CompoundSP, add::Adduct) = parse_adduct(add)(mw(cpd))
-mz(cpd::CompoundSP, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, nothing, DataFrame(), (0, 0), [], [], nothing)))
+mz(cpd::CompoundSP, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, nothing)))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
 mz(ion::Ion, cb, db, o) = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
 mw(::T, cb, db, o = N) where {N, T <: ACYL{N}} = mw("C") * cb + mw("H") * (2 * cb - 2 * db - 1) + mw("O") * (o + 1)
@@ -59,7 +59,7 @@ mw(lcb::LCB{N, C}) where {N, C} = C * mw("C") + mw("O") * N + (2 * (C - nunsa(lc
 function mw(cpd::CompoundSP)
     cls = class_db_index(cpd.class)
     unit = cls[[:u1, :u2]]
-    init_us = cls[["#u1", "#u2"]]
+    init_us = cls[[:nu1, :nu2]]
     Δu = [cpd.sum[1] - init_us[1], cpd.sum[2] - init_us[2]]
     ms = mw(merge_formula(cls.formula, unit, Δu; sign = (:+, :-)))
     ms + mw("O") * cpd.sum[3]
@@ -82,25 +82,22 @@ function merge_formula(elements::Vector, Δcn::Int, Δdb::Int)
 end
 
 function merge_formula(elements::Vector, units, Δu; sign = ntuple(i -> :+, length(init_unit)))
-    adds = Pair[]
-    for (id, (unit, nu)) in enumerate(zip(units, Δu))
-        isnothing(unit) && break
-        append!(adds, map(unit) do (el, num)
-            el => eval(sign[id])(1) * num  * nu
-        end)
+    adds = mapmany(units, Δu, sign) do unit, nu, s
+        map(unit) do (el, num)
+            el => eval(s)(1) * num  * nu
+        end
     end
 
     mapreduce(*, elements) do element
         el, num = element
-        for (el_add, num_add) in adds
-            el_add == el && (num += num_add)
-        end
+        num += sum(num_add for (el_add, num_add) in adds if el_add == el; init = 0)
         num == 1 ? "$el" : "$el$num"
     end
 end
 
 function add_addition(init_elements, posts)
     init_elements = deepcopy(init_elements)
+    ido = findfirst(x -> x.first == "O", init_elements)
     for post in posts
         m = match(r"(\d*)O(\d*)", post)
         isnothing(m) && continue
@@ -109,9 +106,7 @@ function add_addition(init_elements, posts)
             ["", s]  => parse(Int, s)
             [s, _]   => parse(Int, s)
         end
-        for (id, (el, num)) in enumerate(init_elements)
-            el == "O" && (init_elements[id] = el => num + add)
-        end
+        init_elements[ido] = init_elements[ido].first => init_elements[ido].second + add
     end
     init_elements
 end

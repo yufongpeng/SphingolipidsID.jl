@@ -48,9 +48,9 @@ function Base.show(io::IO, ::MIME"text/plain", score::Score)
     println(io, "∘ Threshold: ", score.parameters.threshold)
 end
 
-fragment_table(cpd) = map(eachrow(cpd.fragments)) do row
+fragment_table(cpd) = map(cpd.fragments) do row
     s = query_raw(cpd.project, row.source, row.id)
-    mz2 = in(:mz2, propertynames(s)) ? s.mz2 : cpd.project.data[row.source].mz2[s.scan]
+    mz2 = in(:mz2, propertynames(s)) ? cpd.project.data[row.source].mz2[s.mz2] : cpd.project.data[row.source].mz2[s.scan]
     mode = isa(cpd.project.data[row.source], PreIS) ? "PreIS" : "MRM"
     (ion1 = row.ion1, mz1 = s.mz1, ion2 = row.ion2, mz2 = mz2, area = s.area, error = s.error, CE = s.collision_energy, rt = s.rt, source = mode)
 end
@@ -174,5 +174,5 @@ function Base.show(io::IO, aquery::Query)
 end
 
 function Base.show(io::IO, pred::Inv)
-    print(io, "Not(", pred.args, ")")
+    print(io, "Not(", pred.arg, ")")
 end

@@ -1,6 +1,9 @@
 function read_adduct_code(file::String) 
-    code = CSV.read(file, DataFrame, header = [:repr, :object])
-    transform!(code, :object => ByRow(eval ∘ Meta.parse), renamecols = false)
+    code = CSV.read(file, Table, header = [:repr, :object])
+    Table(
+        repr = code.repr,
+        object = (eval ∘ Meta.parse).(code.object)
+    )
 end
 
 const ADDUCTCODE = read_adduct_code(joinpath(@__DIR__, "..", "config", "ADDUCTCODE.csv"))
@@ -15,26 +18,32 @@ function read_class_db(file::String,
                         col_name = :Abbreviation, 
                         col_regex = :regex, 
                         col_formula = [:formula, :u1, :u2], 
-                        col_unit = ["#us", "#u2"], 
+                        col_unit = [:nu1, :nu2], 
                         col_ions = [:default_ion, :parent_ion, :adduct_ion, :isf_ion]
                         )
 
-    class_db = CSV.read(file, DataFrame)
-    #regexs = filter(x -> !isnothing(match(r"^regex", x)), names(class_db))
-    transform!(class_db, col_name => ByRow(eval ∘ Meta.parse), renamecols = false)
-    transform!(class_db, col_regex .=> ByRow(eval ∘ Meta.parse), renamecols = false)
-    transform!(class_db, col_formula .=> ByRow(parse_compound ∘ String), renamecols = false)
-    transform!(class_db, col_ions .=> ByRow(x -> SPDB[:ADDUCTCODE].object[(eval ∘ Meta.parse)(x)]), renamecols = false)
-    rename!(class_db, [col_name => :Abbreviation, col_regex => :regex, (col_formula .=> [:formula, :u1, :u2])..., (col_ions .=> [:default_ion, :parent_ion, :adduct_ion, :isf_ion])...])
-    rename!(class_db, col_unit .=> ["#us", "#u2"])
-    class_db
+    class_db = CSV.read(file, Table)
+    parse_ion = x -> SPDB[:ADDUCTCODE].object[(eval ∘ Meta.parse)(x)]
+    Table(
+        Abbreviation = (eval ∘ Meta.parse).(getproperty(class_db, col_name)),
+        regex = (eval ∘ Meta.parse).(getproperty(class_db, col_regex)),
+        formula = (parse_compound ∘ String).(getproperty(class_db, col_formula[1])),
+        nu1 = getproperty(class_db, col_unit[1]),
+        u1 = (parse_compound ∘ String).(getproperty(class_db, col_formula[2])),
+        nu2 = getproperty(class_db, col_unit[2]),
+        u2 = (parse_compound ∘ String).(getproperty(class_db, col_formula[3])),
+        default_ion = parse_ion.(getproperty(class_db, col_ions[1])),
+        parent_ion = parse_ion.(getproperty(class_db, col_ions[2])),
+        adduct_ion = parse_ion.(getproperty(class_db, col_ions[3])),
+        isf_ion = parse_ion.(getproperty(class_db, col_ions[4]))
+    )
 end
 
 const CLASSDB = read_class_db(joinpath(@__DIR__, "..", "config", "CLASSDB.csv"))
 SPDB[:CLASSDB] = CLASSDB
 
-class_db_index(::LCB) = @views SPDB[:CLASSDB][findfirst(==(SPB), SPDB[:CLASSDB][!, :Abbreviation]), :]
-class_db_index(cls::T) where {T <: ClassSP} = @views SPDB[:CLASSDB][findfirst(==(deisomerized(T)), SPDB[:CLASSDB][!, :Abbreviation]), :]
+class_db_index(::LCB) = SPDB[:CLASSDB][findfirst(==(SPB), SPDB[:CLASSDB].Abbreviation)]
+class_db_index(cls::T) where {T <: ClassSP} = SPDB[:CLASSDB][findfirst(==(deisomerized(T)), SPDB[:CLASSDB].Abbreviation)]
 
 library(class::Vector, adduct::Vector{<: Adduct}, range::Vector{<: Tuple}) = library(class, map(repr_adduct, adduct), range)
 #library(class::Vector{Type{<: ClassSP}}, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple}) = library([cls() for cls in class], adduct, range)
@@ -44,13 +53,13 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
         vectorize.(r)
     end
     n = mapreduce(rng -> mapreduce(length, *, rng), +, range) * length(adduct) * length(class)
-    df = DataFrame(
-                    :Abbreviation => Vector{Type{<: ClassSP}}(undef, n),
-                    :Species => Vector{String}(undef, n),
-                    :Formula => Vector{String}(undef, n),
-                    :Adduct => repeat(adduct, Int(n / length(adduct))),
-                    Symbol("m/z") => zeros(Float64, n)
-                    )
+    tbl = Table(
+                    Abbreviation = Vector{Type{<: ClassSP}}(undef, n),
+                    Species = Vector{String}(undef, n),
+                    Formula = Vector{String}(undef, n),
+                    Adduct = repeat(adduct, Int(n / length(adduct))),
+                    mz = zeros(Float64, n)
+                )
 
     i = 1
     #init_cndb == [init_cn, init_db] || throw(ArgumentError("Unmatched carbon and double bonds number of initial compounds."))
@@ -61,11 +70,11 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
     for (cls, rng) in Iterators.product(class, range)            
         # specific for species
         # match cls with Abbreviation first
-        id_compound = findfirst(==(cls), SPDB[:CLASSDB][!, :Abbreviation])
+        id_compound = findfirst(==(cls), SPDB[:CLASSDB].Abbreviation)
         # isnothing(id_compound) && (id_compound = findfirst(abbr -> match(Regex(cls * "-.*"), abbr), CLASSDB[!, :Abbreviation]))
-        init_elements = SPDB[:CLASSDB][id_compound, :formula]
-        unit = SPDB[:CLASSDB][id_compound, [:u1, :u2]]
-        init_us = SPDB[:CLASSDB][id_compound, ["#u1", "#u2"]]
+        init_elements = SPDB[:CLASSDB].formula[id_compound]
+        unit = getproperties(SPDB[:CLASSDB], (:u1, :u2))[id_compound]
+        init_us = getproperties(SPDB[:CLASSDB], (:nu1, :nu2))[id_compound]
 
         if length(rng) == 3
             posts = vectorize(last(rng))
@@ -81,7 +90,7 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
         end
 
         if posts == ""
-            post_sep = [split(SPDB[:CLASSDB][id_compound, :regex].pattern, ";")[2:end]]
+            post_sep = [split(SPDB[:CLASSDB].regex[id_compound].pattern, ";")[2:end]]
             if any(x -> occursin("\\d", x), post_sep[1])
                 throw(ArgumentError("Custom modification, i.e. hydroxylation, glycosylation, etc, must be provided"))
             end
@@ -99,15 +108,15 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
             Δu = [u1 - init_us[1], u2 - init_us[2]]
             newf = merge_formula(elements, unit, Δu; sign = (:+, :-))
             for fn in add_fn
-                df[i, :Abbreviation] = cls
-                df[i, :Species] = merge_species(u1, u2, repr(cls), pre, post)
-                df[i, :Formula] = newf
-                df[i, Symbol("m/z")] = fn(mw(newf))
+                tbl.Abbreviation[i] = cls
+                tbl.Species[i] = merge_species(u1, u2, repr(cls), pre, post)
+                tbl.Formula[i] = newf
+                tbl.mz[i] = fn(mw(newf))
                 i += 1
             end
         end
     end
-    df
+    tbl
 end
 
 library(class, adduct, range) = library(vectorize(class), vectorize(adduct), vectorize(range))
@@ -187,17 +196,20 @@ const CONNECTION = Dict{ClassSP, Any}(
 
 SPDB[:CONNECTION] = CONNECTION
 
-
 function read_ce(file::String) 
-    ce = CSV.read(file, DataFrame; select = 1:5)
-    transform!(ce, :ms1 => ByRow(t -> (eval ∘ Meta.parse)(t)()), :adduct1 => ByRow(x -> SPDB[:ADDUCTCODE].object[x]), renamecols = false)
-    ce.addduct2 = map(ce.adduct2) do adduct
-        @match adduct begin
-            0 => :default
-            _ => SPDB[:ADDUCTCODE].object[adduct]
-        end
-    end
-    ce
+    ce = CSV.read(file, Table; select = 1:5)
+    Table(
+        ms1 = [t() for t in (eval ∘ Meta.parse).(ce.ms1)],
+        adduct1 = [SPDB[:ADDUCTCODE].object[x] for x in ce.adduct1],
+        ms2 = ce.ms2,
+        adduct2 = map(ce.adduct2) do adduct
+            @match adduct begin
+                0 => :default
+                _ => SPDB[:ADDUCTCODE].object[adduct]
+            end
+        end,
+        eV = ce.eV
+    )
 end
 
 const CE = read_ce(joinpath(@__DIR__, "..", "config", "CE.csv"))
