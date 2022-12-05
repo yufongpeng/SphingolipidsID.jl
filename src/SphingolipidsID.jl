@@ -38,7 +38,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
 
         library, rule, 
         
-        featuretable_mzmine, add_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, rsd, re,
+        featuretable_mzmine, fill_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate, filter_duplicate!, rsd, re,
 
         preis, preis!, finish_profile!, 
 
@@ -405,6 +405,7 @@ end
 
 struct MRM <: Data
     raw::DataFrame #id, mz1, mz2, area, ev, rt
+    mz2::Vector{Float64}
     mz_tol::Float64
     polarity::Bool
     additional::Dict

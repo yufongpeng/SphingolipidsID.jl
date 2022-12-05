@@ -173,16 +173,18 @@ intersection(range::AbstractVector) = (maximum(first(r) for r in range), minimum
 
 function equivalent_in_ion2(cpd::CompoundSP, criteria, prec)
     eqin = x -> equivalent_in(x, prec)
-    equivalent_in(criteria, @views filter(:ion1 => eqin, cpd.fragments, view = true)[!, :ion2])
+    equivalent_in(criteria, @views filter(:ion1 => eqin, cpd.fragments, view = true).ion2)
 end
 
 function equivalent_in_ion2(cpd::CompoundSP, criteria::Tuple, prec)
     eqin = x -> equivalent_in(x, prec)
-    any(equivalent_in(frag, criteria) for frag in @views filter(:ion1 => eqin, cpd.fragments, view = true)[!, :ion2])
+    any(equivalent_in(frag, criteria) for frag in @views filter(:ion1 => eqin, cpd.fragments, view = true).ion2)
 end
 
 equivalent_in_ion2(analyte::AnalyteSP, criteria, prec) = any(equivalent_in_ion2(cpd, criteria, prec) for cpd in analyte)
 
-equivalent_in_ion1(cpd::CompoundSP, criteria) = equivalent_in(criteria, @view cpd.fragments[!, :ion1])
-equivalent_in_ion1(cpd::CompoundSP, criteria::Tuple) = any(equivalent_in(frag, criteria) for frag in @view cpd.fragments[!, :ion1])
+equivalent_in_ion1(cpd::CompoundSP, criteria) = equivalent_in(criteria, cpd.fragments.ion1)
+equivalent_in_ion1(cpd::CompoundSP, criteria::Tuple) = any(equivalent_in(frag, criteria) for frag in cpd.fragments.ion1)
 equivalent_in_ion1(analyte::AnalyteSP, criteria) = any(equivalent_in_ion1(cpd, criteria) for cpd in analyte)
+
+calc_rt(analyte::AnalyteSP) = mean(mean(query_raw(cpd.project, cpd.fragments.source[id], cpd.fragments.id[id]).rt for id in 1:size(cpd.fragments, 1)) for cpd in analyte)

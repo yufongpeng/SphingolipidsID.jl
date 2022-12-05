@@ -1,10 +1,12 @@
-@time using SphingolipidsID, Chain
-files = joinpath.(".\\test\\data\\mzmine", readdir(".\\test\\data\\mzmine"))
-fts = featuretable_mzmine.(files)
+using SphingolipidsID, Chain
+files = joinpath.("C:\\users\\sciph\\.julia\\dev\\SphingolipidsID\\test\\data\\mzmine", readdir("C:\\users\\sciph\\.julia\\dev\\SphingolipidsID\\test\\data\\mzmine"))
+fts = featuretable_mzmine.(files);
 
 ces = repeat([[30, 30, 60, 60, 60, 60]], 8)
 insert!(ces, 6, [30, 30, 60 ,60 , 60])
 insert!(ces, 9, [45, 45, 45, 45])
+fill_ce_mzmine!.(fts, ces);
+filter_duplicate!(fts; n = 2);
 ms = [236.238, 250.253, 284.295, 264.269, 262.253, 278.285, 292.3, 266.285, 274.093, 282.28]
 rang = repeat([(400, 1500)], 9)
 insert!(rang, 9, (900, 1650))
@@ -22,8 +24,7 @@ db = reduce(append!, (
 SPDB[:LIBRARY_POS] = db
 
 pj = preis()
-for (m, r, ce, ft) in zip(ms, rang, ces, deepcopy(fts))
-    ft = filter_duplicate(add_ce_mzmine!(ft, ce), n = 2)
+for (m, r, ft) in zip(ms, rang, fts)
     preis!(pj, ft, r, m, true; rt_tol = 0.1)
 end
 finish_profile!(pj)

@@ -14,7 +14,7 @@ function featuretable_mzmine(paths)
     tbl
 end
 
-function add_ce_mzmine!(tbl, eV::Float64)
+function fill_ce_mzmine!(tbl, eV::Float64)
     tbl.collision_energy .= eV
     select!(tbl, Not(:datafile))
     sort!(tbl, [:mz1, :rt])
@@ -22,7 +22,7 @@ function add_ce_mzmine!(tbl, eV::Float64)
     tbl
 end
 
-function add_ce_mzmine!(tbl, eV)
+function fill_ce_mzmine!(tbl, eV)
     mapping = Dict(unique(tbl.datafile) .=> eV)
     tbl.collision_energy = getindex.(Ref(mapping), tbl.datafile)
     select!(tbl, Not(:datafile))
@@ -88,12 +88,15 @@ rsd(v) = std(v) / mean(v)
 re(v) =  - foldl(-, extrema(v)) / mean(v) / 2
 default_error(v) = length(v) > 2 ? rsd(v) : re(v)
 
+filter_duplicate!(tbls::Vector{DataFrame}; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5) = 
+    (tbls[:] = filter_duplicate.(tbls; rt_tol, mz_tol, n, err, err_tol))
+
 function filter_duplicate(tbl::DataFrame; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5)
     ids = Vector{Int}[]
     for (i, ft) in enumerate(eachrow(tbl))
         new = true
         for id in ids
-            if abs(mean(tbl[id, :rt]) - ft.rt) < rt_tol && abs(mean(tbl[id, :mz1]) - ft.mz1) < mz_tol && tbl[id[1], :collision_energy] == ft.collision_energy 
+            if abs(mean(tbl.rt[id]) - ft.rt) < rt_tol && abs(mean(tbl.mz1[id]) - ft.mz1) < mz_tol && tbl.collision_energy[id[1]] == ft.collision_energy 
                 push!(id, i)
                 new = false
                 break
@@ -101,10 +104,10 @@ function filter_duplicate(tbl::DataFrame; rt_tol = 0.1, mz_tol = 0.35, n = 3, er
         end
         new && push!(ids, [i])
     end
-    n > 1 && filter!(id -> (length(id) >= n && err(tbl[id, :area]) <= err_tol), ids)
-    fill!(tbl[!, :id], 0)
+    n > 1 && filter!(id -> (length(id) >= n && err(tbl.area[id]) <= err_tol), ids)
+    fill!(tbl.id, 0)
     for (i, id) in enumerate(ids)
-        tbl[id, :id] .= i
+        tbl.id[id] .= i
     end
     filter!(:id => >(0), tbl)
     combine(groupby(tbl, :id), All() .=> mean, :area => err => :error, renamecols = false)
@@ -146,10 +149,10 @@ function CompoundSP(project::Project, cpd, product, source, id, area)
                 if isnothing(lcb_new) || isnothing(add_new)
                     return nothing
                 else
-                    fragments[1, :ion2] = Ion(add_new, lcb_new) 
+                    fragments.ion2[1] = Ion(add_new, lcb_new) 
                 end
             end
-            chain = Chain(fragments[1, :ion2].molecule, Acyl{acyl_o}())
+            chain = Chain(fragments.ion2[1].molecule, Acyl{acyl_o}())
         end
         x && if x in NANA end       => begin
             hasnana(class) || return nothing

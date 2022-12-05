@@ -110,5 +110,5 @@ generate_productlist(cpdlist::Vector, product::Type{LCB}, polarity; db = SPDB[po
 generate_celist(cpdlist::Vector, product::Type{LCB}) = 
     map(cpdlist) do row
         id = findfirst(x -> ==(row.cpd.class, x[1]) && ==(row.add, x[2]) && ==(x[3], "LCB"), eachrow(SPDB[:CE]))
-        isnothing(id) ? 40 : SPDB[:CE][id, :eV]
+        isnothing(id) ? 40 : SPDB[:CE].eV[id]
     end

@@ -288,7 +288,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw[data.raw.mz2 .== raw_id, :mz])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== raw_id])
         end
 
     end
@@ -311,7 +311,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw[data.raw.mz2 .== raw_id, :mz])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== raw_id])
         end
     end
 end
@@ -326,7 +326,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw[data.raw.mz2 .== rwa_id, :mz])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== rwa_id])
         end
     end
 end
@@ -353,14 +353,14 @@ function _ion_comparison(ratios::Vector{Float64}, project::Project, cpd::Compoun
     gdf = groupby(filter(:ion1 => (x -> equivalent_in(x, prec)), cpd.fragments, view = true), [:source, :ion1])
     for subdf in gdf
         done = true
-        ion1 = subdf[1, :ion1]
+        ion1 = subdf.ion1[1]
         ms1_filter = ms1[findfirst(x -> equivalent(x, ion1), prec)]
-        source = subdf[1, :source]
+        source = subdf.source[1]
         ratio = map(all_ions) do ions
             map(ions) do ion
                 done || return 0
-                id = findfirst(x -> equivalent(ion.ion, x), @view subdf[!, :ion2])
-                isnothing(id) || return query_raw(project, source, subdf[id, :id]).area
+                id = findfirst(x -> equivalent(ion.ion, x), subdf.ion2)
+                isnothing(id) || return query_raw(project, source, subdf.id[id]).area
                 ion_checker(project.data[source], ms1_filter, ion.mz) || (done = false)
                 return 0
             end
@@ -373,7 +373,7 @@ end
 ion_checker(data::PreIS, ms1::Float64, ms2::Float64) = 
     any(between(mz2, ms2, data.mz_tol) && between(ms1, range) for (mz2, range) in zip(data.mz2, data.range))
 ion_checker(data::MRM, ms1::Float64, ms2::Float64) = 
-    any(between(mz2, ms2, data.mz_tol) && any(between(mz1, ms1, data.mz_tol) for mz1 in filter(:mz2 => ==(i), data.raw, view = true)[!, :mz]) for (i, mz2) in enumerate(data.mz2))
+    any(between(mz2, ms2, data.mz_tol) && any(between(mz1, ms1, data.mz_tol) for mz1 in filter(:mz2 => ==(i), data.raw, view = true).mz1) for (i, mz2) in enumerate(data.mz2))
 
 #=
 function ion_checker(project::Project, precursor::Vector, ms1::Vector, rule::IonComparison)

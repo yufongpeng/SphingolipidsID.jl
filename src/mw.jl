@@ -82,19 +82,15 @@ function merge_formula(elements::Vector, Δcn::Int, Δdb::Int)
 end
 
 function merge_formula(elements::Vector, units, Δu; sign = ntuple(i -> :+, length(init_unit)))
-    adds = Pair[]
-    for (id, (unit, nu)) in enumerate(zip(units, Δu))
-        isnothing(unit) && break
-        append!(adds, map(unit) do (el, num)
-            el => eval(sign[id])(1) * num  * nu
-        end)
+    adds = mapmany(units, Δu, sign) do unit, nu, s
+        map(unit) do (el, num)
+            el => eval(s)(1) * num  * nu
+        end
     end
 
     mapreduce(*, elements) do element
         el, num = element
-        for (el_add, num_add) in adds
-            el_add == el && (num += num_add)
-        end
+        num += sum(num_add for (el_add, num_add) in adds if el_add == el; init = 0)
         num == 1 ? "$el" : "$el$num"
     end
 end

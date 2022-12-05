@@ -33,8 +33,8 @@ end
 const CLASSDB = read_class_db(joinpath(@__DIR__, "..", "config", "CLASSDB.csv"))
 SPDB[:CLASSDB] = CLASSDB
 
-class_db_index(::LCB) = @views SPDB[:CLASSDB][findfirst(==(SPB), SPDB[:CLASSDB][!, :Abbreviation]), :]
-class_db_index(cls::T) where {T <: ClassSP} = @views SPDB[:CLASSDB][findfirst(==(deisomerized(T)), SPDB[:CLASSDB][!, :Abbreviation]), :]
+class_db_index(::LCB) = SPDB[:CLASSDB][findfirst(==(SPB), SPDB[:CLASSDB].Abbreviation), :]
+class_db_index(cls::T) where {T <: ClassSP} = SPDB[:CLASSDB][findfirst(==(deisomerized(T)), SPDB[:CLASSDB].Abbreviation), :]
 
 library(class::Vector, adduct::Vector{<: Adduct}, range::Vector{<: Tuple}) = library(class, map(repr_adduct, adduct), range)
 #library(class::Vector{Type{<: ClassSP}}, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple}) = library([cls() for cls in class], adduct, range)
@@ -61,9 +61,9 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
     for (cls, rng) in Iterators.product(class, range)            
         # specific for species
         # match cls with Abbreviation first
-        id_compound = findfirst(==(cls), SPDB[:CLASSDB][!, :Abbreviation])
+        id_compound = findfirst(==(cls), SPDB[:CLASSDB].Abbreviation)
         # isnothing(id_compound) && (id_compound = findfirst(abbr -> match(Regex(cls * "-.*"), abbr), CLASSDB[!, :Abbreviation]))
-        init_elements = SPDB[:CLASSDB][id_compound, :formula]
+        init_elements = SPDB[:CLASSDB].formula[id_compound]
         unit = SPDB[:CLASSDB][id_compound, [:u1, :u2]]
         init_us = SPDB[:CLASSDB][id_compound, ["#u1", "#u2"]]
 
@@ -81,7 +81,7 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
         end
 
         if posts == ""
-            post_sep = [split(SPDB[:CLASSDB][id_compound, :regex].pattern, ";")[2:end]]
+            post_sep = [split(SPDB[:CLASSDB].regex[id_compound].pattern, ";")[2:end]]
             if any(x -> occursin("\\d", x), post_sep[1])
                 throw(ArgumentError("Custom modification, i.e. hydroxylation, glycosylation, etc, must be provided"))
             end
@@ -99,9 +99,9 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
             Δu = [u1 - init_us[1], u2 - init_us[2]]
             newf = merge_formula(elements, unit, Δu; sign = (:+, :-))
             for fn in add_fn
-                df[i, :Abbreviation] = cls
-                df[i, :Species] = merge_species(u1, u2, repr(cls), pre, post)
-                df[i, :Formula] = newf
+                df.Abbreviation[i] = cls
+                df.Species[i] = merge_species(u1, u2, repr(cls), pre, post)
+                df.Formula[i] = newf
                 df[i, Symbol("m/z")] = fn(mw(newf))
                 i += 1
             end
