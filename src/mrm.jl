@@ -109,6 +109,5 @@ generate_celist(cpdlist::Vector, product::Type{LCB}) =
         isnothing(id) ? 40 : SPDB[:CE].eV[id]
     end
 
-
 write_mrm(io, tbl::Table) = CSV.write(io, tbl; 
     header = ["Compound Name", "Precursor Ion", "Product Ion", "Ret Time (min)", "Delta Ret Time", "Collision Energy", "Polarity"])

@@ -90,7 +90,7 @@ function preis!(
     for analyte in project
         analyte.rt = calc_rt(analyte)
     end
-    
+
     for ft_id in eachindex(featuretable)
         current_cpd = CompoundSP[]
         area_error = (featuretable.area[ft_id], featuretable.error[ft_id])
