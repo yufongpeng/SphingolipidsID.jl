@@ -52,6 +52,7 @@ function preis!(
     
     if source > length(project.data)
         featuretable.scan .= 1
+        sort!(featuretable, [:mz1, :rt])
         push!(project.data, PreIS(featuretable, [mz_range], [ms2], mz_tol, polarity, additional))
     else 
         dt = project.data[source]

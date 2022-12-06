@@ -45,14 +45,14 @@ function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = p
         end                                    
         # Chain
         if match_mode[2]
-            id_result_chain = if chain_mode == cpd.results[2].mode
-                match_rules(project, analyte, generate_ms(cpd, chain_mode, project.anion)..., chain_mode, cpd.results[2].rule)
-            elseif chain_mode == :isf  
+            id_result_chain = if chain_mode == :isf  
                 id = findfirst(cpd -> !isnothing(cpd.chain), reverse(analyte))
                 isnothing(id) ? Result(false, EmptyRule()) : match_rules(project, analyte, 
                         generate_ms(cpd, chain_mode, project.anion)..., chain_mode, rule(analyte[end - id + 1].chain))
             elseif isnothing(cpd.chain)
                 Result(false, EmptyRule())
+            elseif chain_mode == cpd.results[2].mode
+                match_rules(project, analyte, generate_ms(cpd, chain_mode, project.anion)..., chain_mode, cpd.results[2].rule)
             else
                 match_rules(project, analyte, generate_ms(cpd, chain_mode, project.anion)..., chain_mode, rule(cpd.chain))
             end
