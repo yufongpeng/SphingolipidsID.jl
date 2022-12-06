@@ -45,14 +45,14 @@ function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = p
         end                                    
         # Chain
         if match_mode[2]
-            id_result_chain = if chain_mode == cpd.results[2].mode
-                match_rules(project, analyte, generate_ms(cpd, chain_mode, project.anion)..., chain_mode, cpd.results[2].rule)
-            elseif chain_mode == :isf  
+            id_result_chain = if chain_mode == :isf  
                 id = findfirst(cpd -> !isnothing(cpd.chain), reverse(analyte))
                 isnothing(id) ? Result(false, EmptyRule()) : match_rules(project, analyte, 
                         generate_ms(cpd, chain_mode, project.anion)..., chain_mode, rule(analyte[end - id + 1].chain))
             elseif isnothing(cpd.chain)
                 Result(false, EmptyRule())
+            elseif chain_mode == cpd.results[2].mode
+                match_rules(project, analyte, generate_ms(cpd, chain_mode, project.anion)..., chain_mode, cpd.results[2].rule)
             else
                 match_rules(project, analyte, generate_ms(cpd, chain_mode, project.anion)..., chain_mode, rule(cpd.chain))
             end
@@ -288,7 +288,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== raw_id])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2_id .== raw_id])
         end
 
     end
@@ -311,7 +311,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== raw_id])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2_id .== raw_id])
         end
     end
 end
@@ -326,7 +326,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== rwa_id])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2_id .== rwa_id])
         end
     end
 end

@@ -4,11 +4,9 @@ using CSV, MLStyle, Statistics, PrettyTables, DataPipes, SplitApplyCombine, Type
 using DataFrames: DataFrame, groupby, combine, All
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB, 
-
+        # config input
         read_adduct_code, read_class_db, read_ce, class_db_index, 
-
-        mw, mz, 
-
+        # Type Class
         ClassSP, SPB, Cer, CerP, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer, 
         HexNAcHex2Cer, HexNAcHex2Cer_, HexNAc_Hex2Cer, HexNAcHex3Cer, HexNAcHex3Cer_, HexNAc_Hex3Cer, Hex_HexNAc_Hex2Cer, ClasswoNANA,
         GM4, GM3, GM2, GM1, GM1_, GM1a, GM1b,
@@ -17,44 +15,44 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         GQ1, GQ1_, GQ1b, GQ1c, GQ1bα,
         GP1, GP1_, GP1c, GP1cα,
         CLS,
-
+        # Type LCB/ACYL
         LCB, LCB2, LCB3, LCB4, SPB2, SPB3, SPB4, NotPhyto, NotPhyto3, NotPhyto4,
         ACYL, Acyl, Acylα, Acylβ, 
         Lcb, Nacyl, Nacylα, Nacylβ, NACYL,
         Chain, 
-
+        # Type Glycan
         Sugar, Glycan, Hex, HexNAc, NeuAc,
-
-        Adduct, Pos, Neg, 
+        # Type Ion/Adduct 
         Ion, ISF,
+        Adduct, Pos, Neg, 
         Protonation, ProtonationNLH2O, ProtonationNL2H2O, ProtonationNL3H2O, DiProtonation, TriProtonation, 
         AddNH4, AddHNH4, Add2NH4, Sodization, SodizationProtonation, DiSodization, 
         Deprotonation, DeprotonationNLH2O, DiDeprotonation, TriDeprotonation, AddOAc, AddHCOO, 
         LossCH2O, AddO, AddC2H2O, LossCH8NO, LossC2H8NO, AddC3H5NO, AddC2H5NO,
 
+        # Core Data structures
         CompoundSP, AnalyteSP, 
         #IonPlus, IonComparison, RuleMode, RuleUnion, AcylIon,
-
         Data, PreIS, MRM, Project, Query, 
-
+        # Create library/rule
         library, rule, 
-        
-        featuretable_mzmine, fill_ce_mzmine!, featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
-
+        # Data inputs
+        featuretable_mzmine, fill_mz2!, fill_ce!, featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
+        # PreIS
         preis, preis!, finish_profile!, 
-
+        # ID
         apply_rules!, id_product, 
-
+        # Query
         query, not, cpd, lcb, acyl, acylα, acylβ,
-
+        # Score
         nfrags, @score, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!,
+        # Data output: MRM
+        generate_mrm, nMRM, write_mrm, 
+        # Utils
+        new_project, mw, mz
 
-        generate_mrm, nMRM, write_mrm
-
-
-
-import Base: show, print, isless, isempty, keys, length, union, union!, deleteat!, 
-        iterate, getindex, view, firstindex, lastindex, sort, sort!, push!, pop!, popat!, popfirst!, reverse, reverse!
+import Base: show, print, isless, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!, 
+            union, union!, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!
 
 const SPDB = Dict{Symbol, Any}()
 const ISOMER = Dict{Type, Tuple}()

@@ -94,16 +94,16 @@ generate_cpdlist(analytes::AbstractVector{AnalyteSP}, polarity::Bool, anion) =
     # Even less allocation for 1st
 
 filter_cpdlist!(cpdlist, product) = cpdlist
-filter_cpdlist!(cpdlist, product::LCB) = filter!(cpd -> !isnothing(cpd.cpd.chain), cpdlist)
+filter_cpdlist!(cpdlist, ::LCB) = filter!(cpd -> !isnothing(cpd.cpd.chain), cpdlist)
 
-generate_productlist(cpdlist::Vector, product::Type{LCB}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) = 
+generate_productlist(cpdlist::Vector, ::Type{LCB}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) = 
     map(cpdlist) do row
         isnothing(row.cpd.chain) && return 0
         id = findfirst(x -> ==(row.cpd.chain.lcb, x.molecule), db[:, 1])
         isnothing(id) ? mz(default_adduct(row.cpd.chain.lcb)) : db[id, 2]
     end
 
-generate_celist(cpdlist::Vector, product::Type{LCB}) = 
+generate_celist(cpdlist::Vector, ::Type{LCB}) = 
     map(cpdlist) do row
         id = findfirst(x -> ==(row.cpd.class, SPDB[:CE].ms1[x]) && ==(row.add, SPDB[:CE].adduct1[x]) && ==(SPDB[:CE].ms2[x], "LCB"), eachindex(SPDB[:CE]))
         isnothing(id) ? 40 : SPDB[:CE].eV[id]

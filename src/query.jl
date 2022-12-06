@@ -65,12 +65,14 @@ function query(aquery::Query, qq::CompoundID; view = aquery.view, fn = identity)
     qf, sym = @match match begin
         (::Type{Nothing}, sum, ::Type{Nothing}, ::Type{Nothing})    => (cpd -> (==(cpd.sum, sum)), :sum)
         (::Type{Nothing}, sum, lcb, acyl)                           => (cpd -> (==(cpd.sum, sum) && 
+                                                                                !isnothing(cpd.chain) && 
                                                                                 isa(cpd.chain.lcb, lcb)) && 
                                                                                 isa(cpd.chain.acyl, acyl), 
                                                                         :chain)
         (class, sum, ::Type{Nothing}, ::Type{Nothing})              => (cpd -> (isa(cpd.class, class) && ==(cpd.sum, sum)), :cpd)
         (class, sum, lcb, acyl)                                     => (cpd -> (isa(cpd.class, class) &&
                                                                                 ==(cpd.sum, sum) && 
+                                                                                !isnothing(cpd.chain) && 
                                                                                 isa(cpd.chain.lcb, lcb)) && 
                                                                                 isa(cpd.chain.acyl, acyl),
                                                                         :cpd)

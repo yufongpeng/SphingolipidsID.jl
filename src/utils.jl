@@ -12,6 +12,46 @@ function nMRM(tbl::DataFrame, precision::Float64 = 0.1; end_time = maximum(tbl[!
     sort!(collect(trans), by = (x -> x.second))
 end
 
+new_project(aquery::Query) = new_project(aquery.project; analytes = aquery.view ? copy_wo_project.(aquery.result) : aquery.result)
+function new_project(project::Project; analytes = copy_wo_project.(project.analytes))
+    project_new = Project(analytes, project.data, project.anion)
+    for analyte in project_new
+        for cpd in analyte
+            cpd.project = project_new
+        end
+    end
+    project_new
+end
+
+# user interface for query
+lcb(c::Int, d::Int, n::Int) = Lcb(c, d, n)
+acyl(c::Int, d::Int, n::Int) = Nacyl(c, d, n)
+acylα(c::Int, d::Int, n::Int) = Nacylα(c, d, n)
+acylβ(c::Int, d::Int, n::Int) = Nacylβ(c, d, n)
+cpd(class::Type{<: ClassSP}, sum::NTuple{3, Int}, lcb::Lcb, acyl::NACYL) = CompoundID{class}(sum, lcb, acyl)
+cpd(class::Type{<: ClassSP}, c::Int, n::Int, o::Int, lcb::Lcb, acyl::NACYL) = CompoundID{class}((c, n, o), lcb, acyl)
+cpd(class::Type{<: ClassSP}, sum::NTuple{3, Int}) = CompoundID{class}(sum, nothing, nothing)
+cpd(class::Type{<: ClassSP}, c::Int, n::Int, o::Int) = CompoundID{class}((c, n, o), nothing, nothing)
+cpd(sum::NTuple{3, Int}, lcb::Lcb, acyl::NACYL) = CompoundID{Nothing}(sum, lcb, acyl)
+cpd(c::Int, n::Int, o::Int, lcb::Lcb, acyl::NACYL) = CompoundID{Nothing}((c, n, o), lcb, acyl)
+cpd(sum::NTuple{3, Int}) = CompoundID{Nothing}(sum, nothing, nothing)
+cpd(c::Int, n::Int, o::Int) = CompoundID{Nothing}((c, n, o), nothing, nothing)
+cpd(lcb::Lcb, acyl::NACYL) = cpd(Nothing, lcb, acyl)
+cpd(class, lcb::Lcb, acyl::NACYL) = CompoundID{class}((lcb.cb + acyl.cb, lcb.db + acyl.db, lcb.ox + acyl.ox), lcb, acyl)
+
+convert_type(::Type{LCB}, lcb::Lcb) = @match (lcb.db + lcb.ox, lcb.ox) begin
+    (2, N) => LCB2{N, lcb.cb}
+    (3, N) => LCB3{N, lcb.cb}
+    (4, N) => LCB4{N, lcb.cb}
+end
+convert_type(::Type{LCB}, lcb) = Nothing
+
+convert_type(::Type{ACYL}, acyl::Nacylα) = Acylα{acyl.ox}
+convert_type(::Type{ACYL}, acyl::Nacylβ) = Acylβ{acyl.ox}
+convert_type(::Type{ACYL}, acyl::Nacyl) = Acyl{acyl.ox}
+convert_type(::Type{ACYL}, acyl) = Nothing
+convert_internal(cpd::CompoundID{C}) where C = (C, cpd.sum, convert_type(LCB, cpd.lcb), convert_type(ACYL, cpd.acyl))
+
 # private
 # isomer
 deisomerized(::GM1) = GM1()
@@ -93,35 +133,6 @@ connected(cls1::Cer, cls2::Cer) = true
 isf(cls::ClassSP) = hasisomer(cls) ? isf(cls.isomer) : push!(isf(SPDB[:CONNECTION][cls]), cls)
 isf(cls::Tuple) = union!((push!(isf(SPDB[:CONNECTION][cls1]), cls1) for cls1 in cls)...)
 isf(cls::Cer) = ClassSP[cls]
-
-# user interface for query
-lcb(c::Int, d::Int, n::Int) = Lcb(c, d, n)
-acyl(c::Int, d::Int, n::Int) = Nacyl(c, d, n)
-acylα(c::Int, d::Int, n::Int) = Nacylα(c, d, n)
-acylβ(c::Int, d::Int, n::Int) = Nacylβ(c, d, n)
-cpd(class::Type{<: ClassSP}, sum::NTuple{3, Int}, lcb::Lcb, acyl::NACYL) = CompoundID{class}(sum, lcb, acyl)
-cpd(class::Type{<: ClassSP}, c::Int, n::Int, o::Int, lcb::Lcb, acyl::NACYL) = CompoundID{class}((c, n, o), lcb, acyl)
-cpd(class::Type{<: ClassSP}, sum::NTuple{3, Int}) = CompoundID{class}(sum, nothing, nothing)
-cpd(class::Type{<: ClassSP}, c::Int, n::Int, o::Int) = CompoundID{class}((c, n, o), nothing, nothing)
-cpd(sum::NTuple{3, Int}, lcb::Lcb, acyl::NACYL) = CompoundID{Nothing}(sum, lcb, acyl)
-cpd(c::Int, n::Int, o::Int, lcb::Lcb, acyl::NACYL) = CompoundID{Nothing}((c, n, o), lcb, acyl)
-cpd(sum::NTuple{3, Int}) = CompoundID{Nothing}(sum, nothing, nothing)
-cpd(c::Int, n::Int, o::Int) = CompoundID{Nothing}((c, n, o), nothing, nothing)
-cpd(lcb::Lcb, acyl::NACYL) = cpd(Nothing, lcb, acyl)
-cpd(class, lcb::Lcb, acyl::NACYL) = CompoundID{class}((lcb.cb + acyl.cb, lcb.db + acyl.db, lcb.ox + acyl.ox), lcb, acyl)
-
-convert_type(::Type{LCB}, lcb::Lcb) = @match (lcb.db + lcb.ox, lcb.ox) begin
-    (2, N) => LCB2{N, lcb.cb}
-    (3, N) => LCB3{N, lcb.cb}
-    (4, N) => LCB4{N, lcb.cb}
-end
-convert_type(::Type{LCB}, lcb) = Nothing
-
-convert_type(::Type{ACYL}, acyl::Nacylα) = Acylα{acyl.ox}
-convert_type(::Type{ACYL}, acyl::Nacylβ) = Acylβ{acyl.ox}
-convert_type(::Type{ACYL}, acyl::Nacyl) = Acyl{acyl.ox}
-convert_type(::Type{ACYL}, acyl) = Nothing
-convert_internal(cpd::CompoundID{C}) where C = (C, cpd.sum, convert_type(LCB, cpd.lcb), convert_type(ACYL, cpd.acyl))
 
 macro rule(expr)
     expr = pipe2rule(expr)
