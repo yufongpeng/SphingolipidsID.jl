@@ -23,7 +23,7 @@ function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, pola
         ms1 = mz(rcpd.cpd, rcpd.add)
         for (id, rtbl) in enumerate(tbl)
             (!between(rtbl.mz1, ms1, mz_tol) || !between(rtbl.mz2, ms2, mz_tol)) && continue
-            !between(rcpd.rt - rt_tol, rtbl.rt, rtbl.Δrt / 2) && !between(rcpd.rt + rt_tol, rtbl.rt, rtbl.Δrt / 2) && continue
+            #!between(rcpd.rt - rt_tol, rtbl.rt, rtbl.Δrt / 2) && !between(rcpd.rt + rt_tol, rtbl.rt, rtbl.Δrt / 2) && continue
             rtbl.collision_energy == ce || continue
             rt_l = min(rtbl.rt - rtbl.Δrt / 2, rcpd.rt - rt_tol)
             rt_r = max(rtbl.rt + rtbl.Δrt / 2, rcpd.rt + rt_tol)
@@ -94,6 +94,7 @@ generate_cpdlist(analytes::AbstractVector{AnalyteSP}, polarity::Bool, anion) =
     # Even less allocation for 1st
 
 filter_cpdlist!(cpdlist, product) = cpdlist
+filter_cpdlist!(cpdlist, ::Ion{<: Pos, NeuAc}) = filter!(cpd -> isa(cpd.cpd.class, CLS.fg.nana), cpdlist)
 filter_cpdlist!(cpdlist, ::LCB) = filter!(cpd -> !isnothing(cpd.cpd.chain), cpdlist)
 
 generate_productlist(cpdlist::Vector, ::Type{LCB}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) = 
@@ -102,10 +103,19 @@ generate_productlist(cpdlist::Vector, ::Type{LCB}, polarity; db = SPDB[polarity 
         id = findfirst(x -> ==(row.cpd.chain.lcb, x.molecule), db[:, 1])
         isnothing(id) ? mz(default_adduct(row.cpd.chain.lcb)) : db[id, 2]
     end
+generate_productlist(cpdlist::Vector, ion::Ion{<: Pos, NeuAc}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) = 
+    repeat([db[findfirst(==(ion), db[:, 1]), 2]], size(cpdlist, 1))
 
 generate_celist(cpdlist::Vector, ::Type{LCB}) = 
     map(cpdlist) do row
         id = findfirst(x -> ==(row.cpd.class, SPDB[:CE].ms1[x]) && ==(row.add, SPDB[:CE].adduct1[x]) && ==(SPDB[:CE].ms2[x], "LCB"), eachindex(SPDB[:CE]))
+        isnothing(id) ? 40 : SPDB[:CE].eV[id]
+    end
+
+generate_celist(cpdlist::Vector, ion::Ion{<: Pos, NeuAc}) = 
+    map(cpdlist) do row
+        id = findfirst(x -> ==(row.cpd.class, SPDB[:CE].ms1[x]) && ==(row.add, SPDB[:CE].adduct1[x]) && 
+                            ==(SPDB[:CE].ms2[x], "NeuAc") && ==(ion.adduct, SPDB[:CE].adduct2[x]), eachindex(SPDB[:CE]))
         isnothing(id) ? 40 : SPDB[:CE].eV[id]
     end
 

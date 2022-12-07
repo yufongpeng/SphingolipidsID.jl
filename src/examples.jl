@@ -44,9 +44,9 @@ apply_rules!(pj; match_mode = :chain)
 
 # Queries
 query(pj, cpd(Cer, (36, 1, 2)))
-@p pj |> query(GM1) |> query(:rt => (3, 4))
-@p pj |> query(HexNAcHex3Cer) |> query(cpd(lcb(18, 1, 2), acyl(16, 0, 0))) |> __[1]
-@p pj |> query(acyl(24, 0, 1)) |> query(:mz => (810, 813))
+@p pj  query(GM1)  query(:rt => (3, 4))
+@p pj  query(HexNAcHex3Cer)  query(cpd(lcb(18, 1, 2), acyl(16, 0, 0)))  __[1]
+@p pj  query(acyl(24, 0, 1))  query(:mz => (810, 813))
 
 @p pj |>
     query(:class) |>
@@ -54,17 +54,20 @@ query(pj, cpd(Cer, (36, 1, 2)))
     query((HexCer, cpd(36, 1, 2), cpd(34, 1, 2))) |>
     query(lcb(18, 1, 2)) 
 
-@p pj |> query(lcb(18, 1, 2)) |> query(CLS.nana[1])
-@p pj |> query(lcb(18, 1, 2)) |> query(CLS.series.as)
-@p pj |> query(not(:chain!)) |> query(not(:class!)) |> query(CLS.fg.sulfate)
+@p pj  query(lcb(18, 1, 2))  query(CLS.nana[1])
+@p pj  query(lcb(18, 1, 2))  query(CLS.series.as)
+@p pj  query(not(:chain!))  query(not(:class!))  query(CLS.fg.sulfate)
 # Partial id
-@p pj |> query(CLS.fg.nana) |> query(:chain!) |> apply_rules!
+@p pj  query(CLS.fg.nana)  query(:chain!)  apply_rules!
 
 # MRM
-@p pj |> query(not(:class!)) |> query(not(:chain!)) |> generate_mrm(:default, LCB, true)
-@p pj |> query(:topsc => 0.5) |> query(not(:class!)) |> query(not(:chain!)) |> generate_mrm(:default, LCB, true) |> write_mrm("lcb_mrm.csv")
-@p pj |> query(:class!) |> query(not(:chain!)) |> generate_mrm(:default, LCB, true)
-@p pj |> query(:topsc => 0.5) |> query(:class) |> query(not(:chain!)) |> generate_mrm(:default, LCB, true)
+@p pj  query(not(:class!))  query(not(:chain!))  generate_mrm(:default, LCB, true)
+t1 = @p pj query(not(:class!))  query(not(:chain!)) query(:topsc => 0.5) generate_mrm(:default, LCB, true)
+t2 = @p pj query(not(:class!))  query(not(:chain!)) query(:topsc => 0.5) generate_mrm(:default, Ion(ProtonationNL2H2O(), NeuAc()), true)
+append!(t1, t2) |> nMRM
+@p t1 write_mrm("mrm_list.csv")
+@p pj  query(:class!)  query(not(:chain!))  generate_mrm(:default, LCB, true)
+@p pj  query(:topsc => 0.5)  query(:class)  query(not(:chain!))  generate_mrm(:default, LCB, true)
 
 # Chain.jl 
 # @chain project begin
