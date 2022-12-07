@@ -105,7 +105,7 @@ function query_score(aquery::Query, topN = 0.5)
 
     for id in id1
         cpd = last(analytes[id])
-        push!(get!(dict, (cpd.class, cpd.sum, cpd.chain), Tuple{Float64, Int}[]), (mean(analytes[id].scores), id))
+        push!(get!(dict, (cpd.class, cpd.sum, cpd.chain), Tuple{Float64, Int}[]), (mean(filter(!isnan, analytes[id].scores)), id))
     end
 
     for id in id2
@@ -115,12 +115,12 @@ function query_score(aquery::Query, topN = 0.5)
             cpd.sum == ky[2] || continue
             (hasisomer(cpd.class) ? in(ky[1], cpd.class.isomer) : ==(ky[1], cpd.class)) || continue
             (isnothing(cpd.chain) || nhydroxyl(cpd.chain.acyl) == nhydroxyl(ky[3].acyl)) && 
-                (pushed = true; push!(vl, (mean(analytes[id].scores), id)))
+                (pushed = true; push!(vl, (mean(filter(!isnan, analytes[id].scores)), id)))
         end
-        pushed || push!(dict, (cpd.class, cpd.sum, cpd.chain) => [(mean(analytes[id].scores), id)])
+        pushed || push!(dict, (cpd.class, cpd.sum, cpd.chain) => [(mean(filter(!isnan, analytes[id].scores)), id)])
     end
     final = Int[] 
-    len = topN >= 1 ? (vl -> topN) : (vl -> round(Int, length(vl) * topN * (1 + eps(Float64))))
+    len = topN >= 1 ? (vl -> topN) : (vl -> max(1, round(Int, length(vl) * topN * (1 + eps(Float64)))))
     for vl in values(dict)
         sort!(vl, by = first)
         for _ in 1:len(vl)

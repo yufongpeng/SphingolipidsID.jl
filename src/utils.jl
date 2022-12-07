@@ -1,10 +1,10 @@
 # public
 nfrags(cpd::CompoundSP) = size(cpd.fragments, 1)
-function nMRM(tbl::DataFrame, precision::Float64 = 0.1; end_time = maximum(tbl[!, "Ret Time (min)"] .+ tbl[!, "Delta Ret Time"]))
+function nMRM(tbl::Table, precision::Float64 = 0.1; end_time = maximum(tbl.rt .+ tbl.Δrt))
     trans = Dict(0:precision:end_time .=> 0)
-    for r in eachrow(tbl)
+    for id in eachindex(tbl)
         for k in keys(trans)
-            if k <= r["Ret Time (min)"] + r["Delta Ret Time"] / 2 && k >= r["Ret Time (min)"] - r["Delta Ret Time"] / 2
+            if k <= tbl.rt[id] + tbl.Δrt[id] / 2 && k >= tbl.rt[id] - tbl.Δrt[id] / 2
                 trans[k] += 1
             end
         end
