@@ -246,7 +246,7 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
             last(project).rt = calc_rt(last(project))
             break
         end
-        todel && continue
+        todel && (push!(del, i); continue)
         any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), last(analyte).fragments.ion1) || push!(del, i)
     end
     unique!(del)

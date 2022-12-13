@@ -97,6 +97,12 @@ nhydroxyl(::LCB{N, C}) where {N, C} = N
 nhydroxyl(::ACYL{N}) where N = N
 ndb(chain) = nunsa(chain) - nhydroxyl(chain)
 sumcomp(chain) = (ncb(chain), ndb(chain), nhydroxyl(chain))
+nhydroxyl(ion::Ion) = nhydroxyl(ion.molecule)
+nhydroxyl(::Ion{Protonation, T}) where {N, C, T <: LCB{N, C}} = N
+nhydroxyl(::Ion{ProtonationNLH2O, T}) where {N, C, T <: LCB{N, C}} = N - 1
+nhydroxyl(::Ion{ProtonationNL2H2O, T}) where {N, C, T <: LCB{N, C}} = N - 2
+nhydroxyl(::Ion{ProtonationNL3H2O, T}) where {N, C, T <: LCB{N, C}} = N - 3
+
 
 is4e(lcb::LCB{3}) = false
 is4e(lcb::LCB2{2}) = false

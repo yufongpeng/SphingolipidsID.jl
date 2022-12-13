@@ -15,12 +15,10 @@ macro score(targetconvert, weight, objective)
     replace_int = @λ begin
         x::Int  => Expr(:call, :get!, :dict, x, 0)
         :all    => Expr(:call, :sum, Expr(:call, :values, :dict))
+        x::Expr => Expr(x.head, map(replace_int, x.args)...)
         x       => x
     end
-    objective = @match objective begin
-        ::Expr  => Expr(objective.head, map(replace_int, objective.args)...)
-        ::Int   => replace_int(objective)
-    end
+    objective = replace_int(objective)
     #threshold = Expr(threshold.head, threshold.args[1], :x, threshold.args[3])
     return quote
         transform_score(dict) = $objective

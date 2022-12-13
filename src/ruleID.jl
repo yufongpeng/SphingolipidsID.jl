@@ -24,7 +24,7 @@ function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = p
         if match_mode[1]
             r = if class_mode == cpd.results[1].mode 
                 cpd.results[1].rule 
-            elseif ==(cpd.class, Cer()) && ((cpd.sum[3] < 1) || (!isnothing(cpd.chain) && (isa(cpd.chain.lcb, SPB2))))
+            elseif ==(cpd.class, Cer()) && ((cpd.sum[3] < 2) || (!isnothing(cpd.chain) && !is4e(cpd.chain.lcb) && nhydroxyl(cpd.chain.acyl) == 0))
                 rule(cpd.class, false)
             else
                 rule(cpd.class, class_rule)

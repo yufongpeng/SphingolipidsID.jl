@@ -37,17 +37,18 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # Create library/rule
         library, rule, 
         # Data inputs
-        featuretable_mzmine, fill_mz2!, fill_ce!, featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
+        featuretable_mzmine, sort_data!, sort_data, fill_mz2!, fill_ce!, featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
         # PreIS
         preis, preis!, finish_profile!, 
         # ID
         apply_rules!, id_product, 
+        # Score
+        nfrags, @score, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!, 
+        normalized_sig_diff, abs_sig_diff, 
         # Query
         query, not, cpd, lcb, acyl, acylα, acylβ,
-        # Score
-        nfrags, @score, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!,
         # Data output: MRM
-        generate_mrm, nMRM, write_mrm, 
+        generate_mrm, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm, 
         # Utils
         new_project, mw, mz
 
@@ -438,11 +439,12 @@ include("mw.jl")
 include("library.jl")
 include("rule.jl")
 include("data.jl")
+include("mrm.jl")
 include("preis.jl")
 include("ruleID.jl")
 include("score.jl")
 include("query.jl")
-include("mrm.jl")
+include("gen_mrm.jl")
 
 # S: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-237.2224
 # DHS: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-239.2224

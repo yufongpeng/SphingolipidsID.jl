@@ -1,9 +1,9 @@
 using SphingolipidsID, DataPipes
-files = joinpath.(".\\test\\data\\mzmine", readdir(".\\test\\data\\mzmine"))
-fts = featuretable_mzmine.(files);
+file1 = joinpath.(".\\test\\data\\mzmine3.3", readdir(".\\test\\data\\mzmine3.3"))
+file2 = joinpath.(".\\test\\data\\mzmine3.2", readdir(".\\test\\data\\mzmine3.2"))
+fts = @p [file1, file2] map(map(featuretable_mzmine, _)) zip(__...) map(append!(_...)) map(sort_data!);
 
-ces = repeat([[30, 30, 60, 60, 60, 60]], 8)
-insert!(ces, 6, [30, 30, 60 ,60 , 60])
+ces = repeat([[60, 60, 30, 30, 60, 60]], 9)
 insert!(ces, 9, [45, 45, 45, 45])
 fts = fill_ce!.(fts, ces);
 
@@ -12,7 +12,7 @@ rang = repeat([(400, 1500)], 9)
 insert!(rang, 9, (900, 1650))
 fts = fill_mz2!.(fts, ms);
 
-fts = filter_duplicate!.(fts; n = 2);
+fts = filter_duplicate!.(fts; n = 3, err_tol = 0.7);
 
 # Custom DB
 db = reduce(append!, (
@@ -30,8 +30,8 @@ pj = preis()
 for (r, ft) in zip(rang, fts)
     preis!(pj, ft, r, true; rt_tol = 0.1)
 end
-finish_profile!(pj)
-# ID: Class, 1315
+finish_profile!(pj; err_tol = 0.5)
+# ID: Class, 1047/1112
 apply_rules!(pj)
 apply_rules!(pj; match_mode = :class)
 # ID: Chain
@@ -40,13 +40,18 @@ apply_rules!(pj; match_mode = :chain)
 @p pj |>
     apply_score!(@score chain 1 -1) |> apply_threshold!(<=(1)) |>
     apply_score!(@score chain 1 (0 + 1) / all) |> apply_threshold!(>=(0.5))
+    #apply_score!(@score chain 1 1 / all)
     # apply_score!(@score chain => (analyte, cpd) -> size(cpd.fragments, 1) (0 + 1)) |> apply_threshold!(>=(2))
 
 # Queries
-query(pj, cpd(Cer, (36, 1, 2)))
+query(pj, cpd(GM3, (36, 1, 2)))
 @p pj  query(GM1)  query(:rt => (3, 4))
-@p pj  query(HexNAcHex3Cer)  query(cpd(lcb(18, 1, 2), acyl(16, 0, 0)))  __[1]
+@p pj  query(HexNAcHex3Cer)  query(cpd(lcb(18, 1, 2), acyl(16, 0, 0))) 
 @p pj  query(acyl(24, 0, 1))  query(:mz => (810, 813))
+@p pj  query(cpd(GM3, 42, 1, 2))
+@p pj  query(cpd(Cer, 42, 0, 3))
+@p pj  query(:mz => (780, 781))  query(SHexCer)
+@p pj  query(cpd(Hex2Cer, 36, 1, 2))
 
 @p pj |>
     query(:class) |>
@@ -62,15 +67,27 @@ query(pj, cpd(Cer, (36, 1, 2)))
 
 # MRM
 @p pj  query(not(:class!))  query(not(:chain!))  generate_mrm(:default, LCB, true)
-t1 = @p pj query(not(:class!))  query(not(:chain!)) query(:topsc => 0.5) generate_mrm(:default, LCB, true)
-t2 = @p pj query(not(:class!))  query(not(:chain!)) query(:topsc => 0.5) generate_mrm(:default, Ion(ProtonationNL2H2O(), NeuAc()), true)
-append!(t1, t2) |> nMRM
+t1 = @p pj  query(not(:class!))  query(not(:chain!))  query(:topsc => 0.5)  generate_mrm(:default, LCB, true)
+t2 = @p pj  query((CLS.fg.nana, CLS.series.as)) query(not(Hex2Cer)) query(not(:class!))  query(not(:chain!))  query(:topsc => 0.5) generate_mrm(:default, LCB, true)
+t3 = @p pj  query(not(:class!))  query(not(:chain!))  query(:topsc => 0.5)  generate_mrm(:default, Ion(ProtonationNL2H2O(), NeuAc()), true)
+append!(t1, t2)
+append!(t1, t3) |> nMRM
 @p t1 write_mrm("mrm_list.csv")
 @p pj  query(:class!)  query(not(:chain!))  generate_mrm(:default, LCB, true)
 @p pj  query(:topsc => 0.5)  query(:class)  query(not(:chain!))  generate_mrm(:default, LCB, true)
 
 # Chain.jl 
 # @chain project begin
-#     query
-#     query
+#      query
+#      query
 # end
+
+ft = featuretable_masshunter_mrm(".\\test\\data\\agilent\\qc0.csv");
+ft1 = filter_duplicate!(deepcopy(ft), n = 3, err_tol = 0.25)
+ft2 = filter_duplicate!(deepcopy(ft), n = 6, err_tol = 0.25)
+
+mrm1 = MRM(ft1);
+mrm2 = MRM(ft2);
+
+@p pj query(mrm1) query(not(:class!))  query(not(:chain!)) generate_mrm(:default, LCB, true) write_mrm("mrm_list.csv")
+@p pj query(mrm2) query(not(:class!))  query(not(:chain!)) generate_mrm(:default, LCB, true)

@@ -93,7 +93,37 @@ function query(aquery::Query, qq::Symbol; view = aquery.view, fn = identity)
     finish_query!(aquery, :id, qq, fn, findall(fn ∘ qf, aquery.result), view)
 end
 
-function query_score(aquery::Query, topN = 0.5)
+function query(aquery::Query, mrm::MRM; 
+                view = aquery.view, fn = identity, compatible = false, db_product = SPDB[mrm.polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
+                mode::Symbol = :default)
+    products = @p mrm.mz2 map(id_product(_, mrm.polarity; db = db_product, mz_tol = mrm.mz_tol))
+    if compatible
+        qf = cpd -> begin
+            _, ms1 = generate_ms(cpd, mode, aquery.project.anion)
+            any(!isempty(products[i]) && any(iscompatible(cpd, product) for product in products[i]) && 
+                any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ==(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
+        end
+    else
+        qf = cpd -> begin
+            _, ms1 = generate_ms(cpd, mode, aquery.project.anion)
+            any(!isempty(products[i]) && any(iscomponent(cpd, product) for product in products[i]) && 
+                any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ==(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
+        end
+    end
+    finish_query!(aquery, :validated_by, "mrm", fn, findall(fn ∘ qf, last.(aquery)), view)
+end
+
+normalized_sig_diff(Δ) = 
+    (global_scores, local_scores, prev_score, current_score) -> _normalized_sig_diff(global_scores, local_scores, prev_score, current_score, Δ)
+
+_normalized_sig_diff(global_scores, local_scores, prev_score, current_score, Δ) = (prev_score - current_score) < Δ
+
+abs_sig_diff(Δ) = 
+    (global_scores, local_scores, prev_score, current_score) -> _abs_sig_diff(global_scores, local_scores, prev_score, current_score, Δ)
+
+_abs_sig_diff(global_scores, local_scores, prev_score, current_score, Δ) = (prev_score - current_score) < Δ
+
+function query_score(aquery::Query, topN = 0.5; is_wild_card = normalized_sig_diff(0.1))
     analytes = aquery.result
     # no isomer => has isomer
     id1 = Int[]
@@ -109,23 +139,33 @@ function query_score(aquery::Query, topN = 0.5)
     end
 
     for id in id2
+        sc = mean(filter(!isnan, analytes[id].scores))
         cpd = last(analytes[id])
         pushed = false
         for (ky, vl) in dict
             cpd.sum == ky[2] || continue
             (hasisomer(cpd.class) ? in(ky[1], cpd.class.isomer) : ==(ky[1], cpd.class)) || continue
             (isnothing(cpd.chain) || nhydroxyl(cpd.chain.acyl) == nhydroxyl(ky[3].acyl)) && 
-                (pushed = true; push!(vl, (mean(filter(!isnan, analytes[id].scores)), id)))
+                (pushed = true; push!(vl, (sc, id)))
         end
-        pushed || push!(dict, (cpd.class, cpd.sum, cpd.chain) => [(mean(filter(!isnan, analytes[id].scores)), id)])
+        pushed || push!(dict, (cpd.class, cpd.sum, cpd.chain) => [(sc, id)])
     end
     final = Int[] 
     len = topN >= 1 ? (vl -> topN) : (vl -> max(1, round(Int, length(vl) * topN * (1 + eps(Float64)))))
+    global_scores = first.(vcat(values(dict)...))
     for vl in values(dict)
-        sort!(vl, by = first)
+        sort!(vl, by = first, lt = isless_nan_min)
+        local_scores = copy(vl)
+        prev_score = 0.0
         for _ in 1:len(vl)
             isempty(vl) && break
-            push!(final, pop!(vl)[2])
+            prev_score, id = pop!(vl)
+            push!(final, id)
+        end
+        while !isempty(vl)
+            current_score, id = pop!(vl)
+            is_wild_card(global_scores, local_scores, prev_score, current_score) || break
+            push!(final, id)
         end
     end
     final

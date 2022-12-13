@@ -2,22 +2,37 @@ function featuretable_mzmine(path)
     head = split(readline(path), ",")
     idmain = findall(x -> any(==(x, text) for text in ["id", "rt", "mz", "height", "area"]), head)
     idfwhm = findall(x-> endswith(x, "fwhm"), head)
+    idsym = findall(x-> endswith(x, "asymmetry_factor"), head)
     tbl = CSV.read(path, Table; select = idmain)
-    head = [:mz, :rt, :height, :area]
-    tbl = Table(; (head .=> getproperty.(Ref(tbl), head))...)
     n = size(tbl, 1)
     fwhm = CSV.read(path, Table; select = idfwhm)
-    id = findfirst.(!ismissing, fwhm)
+    sym = CSV.read(path, Table; select = idsym)
     datafile = Dict(propertynames(fwhm) .=> map(col -> match(r".*:(.*):.*", string(col))[1], propertynames(fwhm)))
-    tbl = Table(Table(id = zeros(Int, n), mz1 = tbl.mz, mz2 = zeros(Float64, n)), tbl, collision_energy = zeros(Int, n), FWHM = zeros(Float64, n), symmetry = ones(Float64, n), datafile = getindex.(Ref(datafile), id); mz = nothing)
-    sort!(tbl, :datafile)
-    println("DataFiles Order: ")
-    for i in unique(tbl.datafile)
-        println(" ", i)
-    end
+    id = findfirst.(!ismissing, fwhm)
+    tbl = Table(
+        id = zeros(Int, n), 
+        mz1 = tbl.mz, 
+        mz2 = zeros(Float64, n), 
+        rt = tbl.rt,
+        height = tbl.height, 
+        area = tbl.area,
+        collision_energy = zeros(Int, n), 
+        FWHM = getindex.(fwhm, id), 
+        symmetry = get.(sym, replace!(findfirst.(!ismissing, sym), nothing => :_symmetry), 1.0), 
+        datafile = getindex.(Ref(datafile), id)
+    )
     tbl
 end
 
+sort_data(tbl::Table) = sort_data!(tbl)
+function sort_data!(tbl::Table)
+    sort!(tbl, :datafile)
+    for i in unique(tbl.datafile)
+        println(" ", i)
+    end
+    println()
+    tbl
+end
 function fill_mz2!(tbl::Table, mz2::Float64)
     fill!(tbl.mz2, mz2)
     tbl
@@ -77,8 +92,7 @@ function featuretable_masshunter_mrm(path)
         elseif l == ""
             push!(ends, i - 1)
             status = false
-        else
-            #if occursin("No integration results available", l)
+        elseif occursin("No integration results available", l)
             pop!(starts)
             pop!(data)
             status = false
@@ -205,4 +219,93 @@ function id_product(ms2, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMEN
         between(ms2, row[2], mz_tol) && push!(products, row[1])
     end
     products
+end
+
+function read_mrm(path::String; vendor = :agilent)
+    tbl = CSV.read(path, Table)
+    if vendor == :agilent
+        Table(
+            compound = [occursin("[", x) ? eval(Meta.parse(x)) : x for x in getproperty(tbl, Symbol("Compound Name"))],
+            mz1 = getproperty(tbl, Symbol("Precursor Ion")),
+            mz2 = getproperty(tbl, Symbol("Product Ion")),
+            rt = getproperty(tbl, Symbol("Ret Time (min)")),
+            Δrt = getproperty(tbl, Symbol("Delta Ret Time")),
+            collision_energy = getproperty(tbl, Symbol("Collision Energy")),
+            polarity = getproperty(tbl, Symbol("Polarity"))
+        )
+    end
+end
+
+union_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5) = union_mrm!(deepcopy(tbl1), tbl2; mz_tol, rt_tol)
+function union_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+    sort!(tbl1, [:mz1, :rt])
+    for id2 in eachindex(tbl2)
+        pushed = false
+        ms1 = tbl2.mz1[id2]
+        ms2 = tbl2.mz2[id2]
+        ce = tbl2.collision_energy[id2]
+        for id1 in eachindex(tbl1)
+            (!between(tbl1.mz1[id1], ms1, mz_tol) || !between(tbl1.mz2[id1], ms2, mz_tol)) && continue
+            tbl1.collision_energy[id1] == ce || continue
+            rt_l = min(tbl1.rt[id1] - tbl1.Δrt[id1] / 2, tbl2.rt[id2] - tbl2.Δrt[id2] / 2)
+            rt_r = max(tbl1.rt[id1] + tbl1.Δrt[id1] / 2, tbl2.rt[id2] + tbl2.Δrt[id2] / 2)
+            n = length(vectorize(tbl1.compound[id1]))
+            tbl1[id1] = (;
+                compound = vectorize(tbl1.compound[id1]),
+                mz1 = (tbl1.mz1[id1] * n + ms1) / (n + 1),
+                mz2 = (tbl1.mz2[id1] * n + ms2) / (n + 1),
+                rt = (rt_l + rt_r) / 2,
+                Δrt = rt_r - rt_l,
+                collision_energy = tbl1.collision_energy[id1],
+                polarity = tbl1.polarity[id1]
+            )
+            union!(tbl1.compound[id1], vectorize(tbl2.compound[id2]))
+            pushed = true
+        end
+        pushed || push!(tbl1, (compound = tbl2.compound[id2], mz1 = ms1, mz2 = ms2, rt = tbl2.rt[id2], Δrt = rt_tol * 2, collision_energy = ce, polarity = tbl2.polarity[id2]))
+    end
+    sort!(tbl1, [:mz1, :rt])
+end
+
+diff_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5) = diff_mrm!(deepcopy(tbl1), tbl2; mz_tol, rt_tol)
+function diff_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+    sort!(tbl1, [:mz1, :rt])
+    extended = Int[]
+    l = size(tbl1, 1)
+    for id2 in eachindex(tbl2)
+        pushed = false
+        ms1 = tbl2.mz1[id2]
+        ms2 = tbl2.mz2[id2]
+        ce = tbl2.collision_energy[id2]
+        for id1 in eachindex(tbl1)
+            (!between(tbl1.mz1[id1], ms1, mz_tol) || !between(tbl1.mz2[id1], ms2, mz_tol)) && continue
+            tbl1.collision_energy[id1] == ce || continue
+            rt_l = min(tbl1.rt[id1] - tbl1.Δrt[id1] / 2, tbl2.rt[id2] - tbl2.Δrt[id2] / 2)
+            rt_r = max(tbl1.rt[id1] + tbl1.Δrt[id1] / 2, tbl2.rt[id2] + tbl2.Δrt[id2] / 2)
+            n = length(vectorize(tbl1.compound[id1]))
+            isempty(setdiff(vectorize(tbl2.compound[id2]), vectorize(tbl1.compound[id1]))) || push!(extended, id1)
+            tbl1[id1] = (;
+                compound = vectorize(tbl1.compound[id1]),
+                mz1 = (tbl1.mz1[id1] * n + ms1) / (n + 1),
+                mz2 = (tbl1.mz2[id1] * n + ms2) / (n + 1),
+                rt = (rt_l + rt_r) / 2,
+                Δrt = rt_r - rt_l,
+                collision_energy = tbl1.collision_energy[id1],
+                polarity = tbl1.polarity[id1]
+            )
+            union!(tbl1.compound[id1], vectorize(tbl2.compound[id2]))
+            pushed = true
+        end
+        pushed && continue
+        push!(new, id2)
+        push!(tbl1, (compound = tbl2.compound[id2], mz1 = ms1, mz2 = ms2, rt = tbl2.rt[id2], Δrt = rt_tol * 2, collision_energy = ce, polarity = tbl2.polarity[id2]))
+    end
+    (extended = tbl1[extended], new = size(tbl1, 1) > l ? tbl1[l + 1:end] : nothing)
+end
+
+function write_mrm(io, tbl::Table; vendor = :agilent) 
+    if vendor == :agilent
+        CSV.write(io, tbl; 
+            header = ["Compound Name", "Precursor Ion", "Product Ion", "Ret Time (min)", "Delta Ret Time", "Collision Energy", "Polarity"])
+    end
 end

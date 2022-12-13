@@ -106,7 +106,7 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
     if isnothing(cpd2.chain) 
         append!(cpd1.fragments, cpd2.fragments)
         unique!(cpd1.fragments)
-        i = findmax((cpd1.area[1], cpd2.area[1]))
+        _, i = findmax((cpd1.area[1], cpd2.area[1]))
         cpd1.area = i == 1 ? cpd1.area : cpd2.area
         return cpd1
     end
@@ -128,7 +128,7 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
     end
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
-    i = findmax((cpd1.area[1], cpd2.area[1]))
+    _, i = findmax((cpd1.area[1], cpd2.area[1]))
     cpd1.area = i == 1 ? cpd1.area : cpd2.area
     sort!(analyte, lt = isless_class)
     cpd1
@@ -139,7 +139,7 @@ union(cpd1::CompoundSP, cpd2::CompoundSP) = union!(copy_wo_project(cpd1), cpd2)
 function union!(cpd1::CompoundSP, cpd2::CompoundSP)
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
-    i = findmax((cpd1.area[1], cpd2.area[1]))
+    _, i = findmax((cpd1.area[1], cpd2.area[1]))
     cpd1.area = i == 1 ? cpd1.area : cpd2.area
     if isnothing(cpd2.chain) 
         return cpd1
@@ -174,8 +174,61 @@ function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0])
 end
 
 # variant of interface
+function iscomponent(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
+    no = nhydroxyl(ion)
+    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || cpd1.chain.lcb == ion.molecule)
+end
+iscomponent(cpd1::CompoundSP, ion::Ion{S, <: ACYL}) where S = iscompatible(cpd1, ion)
+iscomponent(cpd1::CompoundSP, ::Ion{S, NeuAc}) where S = isa(cpd1.class, CLS.fg.nana)
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{NeuAc, NeuAc}}}) where S = 
+    isa(cpd1.class, CLS.series.b) || isa(cpd1.class, CLS.series.c) || isa(cpd1.class, GT1a) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1c)
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{NeuAc, NeuAc, NeuAc}}}) where S = isa(cpd1.class, CLS.series.c)
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex}}}) where S = 
+    (isa(cpd1.class, CLS.series.as) && !isa(cpd1.class, Hex2Cer)) ||
+    (isa(cpd1.class, CLS.series.a) && !isa(cpd1.class, GM3)) ||
+    (isa(cpd1.class, CLS.series.b) && !isa(cpd1.class, GD3)) ||
+    (isa(cpd1.class, CLS.series.c) && !isa(cpd1.class, GT3)) ||
+    isa(cpd1.class, HexNAcHex2Cer) ||
+    isa(cpd1.class, HexNAcHex3Cer)
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc}}}) where S = 
+    isa(cpd1.class, CLS.fg.nana) && iscomponent(cpd1, Ion(S(), Glycan(HexNAc(), Hex())))
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc, NeuAc}}}) where S = 
+    (isa(cpd1.class, CLS.series.b) && !isa(cpd1.class, GD3)) ||
+    (isa(cpd1.class, CLS.series.c) && !isa(cpd1.class, GT3)) ||
+    isa(cpd1.class, GT1a) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1c) || isa(cpd1.class, GD1α)
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, NeuAc}}}) where S = 
+    isa(cpd1.class, GP1cα) || isa(cpd1.class, GQ1bα) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1α)
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{Hex, NeuAc}}}) where S = 
+    isa(cpd1.class, CLS.fg.nana)
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{Hex, NeuAc, NeuAc}}}) where S = 
+    isa(cpd1.class, CLS.series.b) ||
+    isa(cpd1.class, CLS.series.c) ||
+    isa(cpd1.class, GT1a) || 
+    isa(cpd1.class, GD1c)
+
 iscompatible(cpd1::CompoundSP, cpd2::CompoundSP) = 
     isclasscompatible(cpd1.class, cpd2.class) && ischaincompatible(cpd1, cpd2)
+
+iscompatible(cpd1::CompoundSP, ion::Ion) = iscomponent(cpd1, ion)
+iscompatible(cpd1::CompoundSP, ion::Ion{S, <: ClassSP}) where S = 
+    isclasscompatible(cpd1.class, ion.molecule)
+
+function iscompatible(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
+    no = nhydroxyl(ion)
+    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || 
+        nhydroxyl(cpd1.chain.lcb) >= no && ischaincompatible(cpd1.chain.lcb, ion.molecule))
+end
+
+function iscompatible(cpd1::CompoundSP, ion::Ion{S, <: ACYL}) where S 
+    no = nhydroxyl(ion)
+    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || 
+        nhydroxyl(cpd1.chain.acyl) == no)
+end
 
 isclasscompatible(cls1::ClassSP, cls2::ClassSP) = cls1 == cls2 || begin
     class1 = hasisomer(cls1) ? cls1.isomer : (cls1, )
@@ -190,13 +243,20 @@ ischaincompatible(chain1::Nothing, chain2::Chain) = true
 ischaincompatible(chain1::Chain, chain2::Nothing) = true
 ischaincompatible(chain1::Nothing, chain2::Nothing) = true
 
-ischaincompatible(chain1::Chain, chain2::Chain) = ischaincompatible(chain1.lcb, chain2.lcb)
+ischaincompatible(chain1::Chain, chain2::Chain) = ischaincompatible(chain1.lcb, chain2.lcb) && ischaincompatible(chain1.acyl, chain2.acyl)
 ischaincompatible(lcb1::LCB, lcb2::LCB) = 
     @match (lcb1, lcb2) begin
         ::Tuple{<: LCB2{N1, C}, <: LCB2{N2, C}} where {C, N1, N2}   => true
         ::Tuple{<: LCB3{N1, C}, <: LCB3{N2, C}} where {C, N1, N2}   => true
         ::Tuple{<: LCB4{N1, C}, <: LCB4{N2, C}} where {C, N1, N2}   => true
         _                                                           => false
+    end
+
+ischaincompatible(acyl1::ACYL, acyl2::ACYL) = 
+    @match (acyl1, acyl2) begin
+        ::Tuple{<: Acyl{N}, <: ACYL{N}} where N => true
+        ::Tuple{<: ACYL{N}, <: Acyl{N}} where N => true
+        _                                       => acyl1 == acyl2
     end
 
 ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(chain2) && sumcomp(chain1.lcb) == sumcomp(chain2.lcb) 
@@ -226,7 +286,7 @@ function isless_class(cpd1::CompoundSP, cpd2::CompoundSP)
     any(connected(cls2, cls1) for (cls1, cls2) in Iterators.product(class1, class2))
 end
 isless_ion(ion1) = true
-function isless_ion(ion1, ion2)
+function isless_ion(ion1::Ion{S, <: ClassSP}, ion2::Ion{T, <: ClassSP}) where {S, T}
     id = class_db_index(ion1.molecule)
     level = (:default_ion, :parent_ion, :adduct_ion)
     id1 = findfirst(p -> in(ion1.adduct, getproperty(id, p)), level)
@@ -238,6 +298,11 @@ function isless_ion(ion1, ion2)
     id1 > id2 && return true
     false
 end
+
+isless_ion(a, b) = isless(a, b) 
+
+isless_nan_min(a, b) = isnan(a) || !isnan(b) && isless(a, b)
+isless_nan_max(a, b) = isnan(b) || !isnan(a) && isless(a, b)
 
 sort(tbl::Table, i::Symbol; kwargs...) = tbl[sortperm(getproperty(tbl, i); kwargs...)]
 function sort!(tbl::Table, i::Symbol; kwargs...)
