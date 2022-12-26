@@ -1,6 +1,7 @@
 module SphingolipidsID
 
-using CSV, MLStyle, Statistics, PrettyTables, DataPipes, SplitApplyCombine, TypedTables
+using CSV, MLStyle, Statistics, PrettyTables, DataPipes, SplitApplyCombine, TypedTables, Clustering, Plots, GLM, AnovaGLM
+export plotlyjs, gr
 using DataFrames: DataFrame, groupby, combine, All
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB, 
@@ -50,7 +51,9 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # Data output: MRM
         generate_mrm, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm, 
         # Utils
-        new_project, mw, mz
+        new_project, mw, mz, cluster_ion!, set_cluster_class!, apply_cluster!, assign_parent!, assign_isf_parent!
+        # Plots
+        plot_rt_mz1
 
 import Base: show, print, isless, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!, 
             union, union!, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!
@@ -317,6 +320,7 @@ mutable struct AnalyteSP
     rt::Float64
     states::Vector{Int}
     scores::Tuple{Float64, Float64}
+    manual_check::Int
 end
 # ==()
 
@@ -397,7 +401,7 @@ abstract type Data end
 
 # precursor/product, ion => name, ms/mz => m/z, mw => molecular weight
 struct PreIS <: Data
-    raw::Table #id, mz1, scan(index of mz2), area, ev, rt 
+    raw::Table #id, mz1, mz2_id, area, ev, rt, alignment, isf 
     range::Vector{Tuple{Float64, Float64}} 
     mz2::Vector{Float64}
     mz_tol::Float64
@@ -406,18 +410,18 @@ struct PreIS <: Data
 end
 
 struct MRM <: Data
-    raw::Table #id, mz1, mz2, area, ev, rt
+    raw::Table #id, mz1, mz2_id, area, ev, rt, alignment, isf 
     mz2::Vector{Float64}
     mz_tol::Float64
     polarity::Bool
     additional::Dict
 end
 
-
 struct Project
     analytes::Vector{AnalyteSP}
     data::Vector{Data}
     anion
+    alignment::Int
 end
 
 mutable struct Query
@@ -441,6 +445,8 @@ include("rule.jl")
 include("data.jl")
 include("mrm.jl")
 include("preis.jl")
+include("rt.jl")
+include("plots.jl")
 include("ruleID.jl")
 include("score.jl")
 include("query.jl")

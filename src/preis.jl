@@ -1,4 +1,4 @@
-preis(anion = :acetate) = Project(AnalyteSP[], Data[], anion)
+preis(anion = :acetate) = Project(AnalyteSP[], Data[], anion, 1)
 preis(
         featuretable, 
         mz_range,
@@ -10,7 +10,7 @@ preis(
         anion = :acetate,
         data = -1,
         additional = Dict()
-    ) = preis!(Project(AnalyteSP[], Data[], anion), deepcopy(featuretable), mz_range, polarity; db, db_product, mz_tol, rt_tol, data, additional)
+    ) = preis!(Project(AnalyteSP[], Data[], anion, 1), deepcopy(featuretable), mz_range, polarity; db, db_product, mz_tol, rt_tol, data, additional)
 
 preis(
         project::Project,
@@ -63,7 +63,12 @@ function preis!(
     else; data end
     
     if source > length(project.data)
-        featuretable = Table(copy(featuretable); mz2_id = (@p eachindex(featuretable) |> map(findfirst(x -> in(_, x), mz2_loc))), mz2 = nothing)
+        featuretable = Table(copy(featuretable); 
+            mz2_id = (@p eachindex(featuretable) |> map(findfirst(x -> in(_, x), mz2_loc))), 
+            mz2 = nothing, 
+            alignment = zeros(Float64, size(featuretable, 1)), 
+            isf = zeros(Int, size(featuretable, 1))
+        )
         push!(project.data, PreIS(featuretable, mz_range, mz2s, mz_tol, polarity, additional))
         dt = last(project.data)
         newid = 0
@@ -76,7 +81,13 @@ function preis!(
             if isnothing(mz2_id)
                 push!(dt.mz2, subft.mz2[1])
                 push!(dt.range, popfirst!(mz_range))
-                subft = Table(copy(subft), id = maximum(dt.raw.id) .+ eachindex(subft), mz2_id = repeat([lastindex(dt.mz2)], size(subft, 1)), mz2 = nothing)
+                subft = Table(copy(subft), 
+                    id = maximum(dt.raw.id) .+ eachindex(subft), 
+                    mz2_id = repeat([lastindex(dt.mz2)], size(subft, 1)), 
+                    mz2 = nothing, 
+                    alignment = zeros(Float64, size(subft, 1)),
+                    isf = zeros(Int, size(subft, 1))
+                )
                 append!(dt.raw, subft)
             else
                 prev_id = maximum(dt.raw.id)
@@ -85,14 +96,24 @@ function preis!(
                 if !between(lb, dt.range[mz2_id]) && !between(ub, dt.range[mz2_id])
                     push!(dt.mz2, subft.mz2[1])
                     push!(dt.range, (lb, ub))
-                    subft = Table(copy(subft); mz2_id = repeat([lastindex(dt.mz2)], size(subft, 1)), mz2 = nothing)
+                    subft = Table(copy(subft); 
+                        mz2_id = repeat([lastindex(dt.mz2)], size(subft, 1)), 
+                        mz2 = nothing, 
+                        alignment = zeros(Float64, size(subft, 1)),
+                        isf = zeros(Int, size(subft, 1))
+                    )
                     continue
                 end
                 dt.range[mz2_id] = (min(dt.range[mz2_id][1], lb), max(dt.range[mz2_id][2], ub))
                 subg = @p dt.raw |> group(==(_.mz2_id, mz2_id))
                 setdiff!(dt.raw, subg[true])
                 origin = subg[true]
-                subft = Table(copy(subft); mz2_id = repeat([mz2_id], size(subft, 1)), mz2 = nothing)
+                subft = Table(copy(subft); 
+                    mz2_id = repeat([mz2_id], size(subft, 1)), 
+                    mz2 = nothing, 
+                    alignment = zeros(Float64, size(subft, 1)),
+                    isf = zeros(Int, size(subft, 1))
+                )
                 for ft_id in eachindex(subft)
                     rt = subft.rt[ft_id]
                     mz1 = subft.mz1[ft_id]
@@ -155,7 +176,7 @@ function preis!(
             subanalytes = @views [analyte for analyte in project if abs(analyte.rt - rt) <= rt_tol]
             if isempty(subanalytes) 
                 for cpd in current_cpd
-                    push!(project, AnalyteSP([cpd], rt, [0, 0]))
+                    push!(project, AnalyteSP([cpd], rt, [0, 0, 0, 0, 0]))
                 end
                 continue
             end
@@ -180,7 +201,7 @@ function preis!(
                         end
                         pushed && continue
                         if length(connected_id) < length(analyte)
-                            push!(project, AnalyteSP(copy_wo_project.(analyte[connected_id]), analyte.rt, [0, 0]))
+                            push!(project, AnalyteSP(copy_wo_project.(analyte[connected_id]), analyte.rt, [0, 0, 0, 0, 0]))
                             analyte = last(project)
                         end
                         push!(analyte, copy_wo_project(cpd))
@@ -201,7 +222,7 @@ function preis!(
                         analyte.rt = calc_rt(analyte)
                     end
                 end
-                agg || push!(project, AnalyteSP([cpd], rt, [0, 0]))
+                agg || push!(project, AnalyteSP([cpd], rt, [0, 0, 0, 0, 0]))
             end
         end
     end
@@ -222,35 +243,45 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     del = Int[]
     for (i, analyte) in enumerate(project)
         area_error = last(analyte).area
-        todel = true
-        if area_error[2] <= err_tol
-            todel = false
-            for a in @view project[setdiff(eachindex(project), del, i)]
-                abs(a.rt - analyte.rt) > rt_tol && continue
-                id = findfirst(cpd -> iscompatible(cpd, last(analyte)), a)
-                isnothing(id) && continue
-                any(cpd.area[1] >= area_error[1] for cpd in @view a[id + 1:end]) || continue
-                push!(del, i)
-                todel = true
-                union!(a, analyte)
-                a.rt = calc_rt(a)
-            end
-            todel && continue
+        todel = false
+        for a in @view project[setdiff(eachindex(project), del, i)]
+            abs(a.rt - analyte.rt) > rt_tol && continue
+            id = findfirst(cpd -> iscompatible(cpd, last(analyte)), a)
+            isnothing(id) && continue
+            any(cpd.area[1] >= area_error[1] && cpd.area[2] <= err_tol for cpd in @view a[id:end]) || continue
+            todel = true
+            union!(a, analyte)
+            a.rt = calc_rt(a)
         end
+
+        todel && (push!(del, i); continue)
 
         for (i, cpd) in Iterators.reverse(enumerate(analyte))
             cpd.area[1] < area_error[1] && continue
             cpd.area[2] > err_tol && continue
             any(iscompatible(last(a), cpd) for a in project if abs(a.rt - analyte.rt) <= rt_tol) && continue            
-            push!(project, AnalyteSP(copy_wo_project.(analyte[1:i]), analyte.rt, [0, 0]))
+            push!(project, AnalyteSP(copy_wo_project.(analyte[1:i]), analyte.rt, [0, 0, 0, 0, 0]))
             last(project).rt = calc_rt(last(project))
             break
         end
-        todel && (push!(del, i); continue)
-        any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), last(analyte).fragments.ion1) || push!(del, i)
+        analyte.states[4] = area_error[2] > err_tol ? 1 : -1        
+        analyte.states[5] = any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), last(analyte).fragments.ion1) ? -1 : 1
     end
     unique!(del)
     deleteat!(project, del)
+    del = Int[]
+    for (i, analyte) in enumerate(project)
+        analyte.states[5] > 0 || continue
+        cpd1 = last(analyte)
+        todel = any(@view project[setdiff(eachindex(project), i)]) do a
+            cpd2 = last(a)
+            isclasscompatible(cpd1.class, cpd2.class) && ischaincompatible(cpd1.chain, cpd2.chain)
+        end
+        todel && push!(del, i)
+    end
+    unique!(del)
+    deleteat!(project, del)
+    assign_isf_parent!(project)
     for analyte in project
         for cpd in analyte
             cpd.project = project
@@ -258,3 +289,23 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     end
     project
 end
+
+assign_isf_parent!(project::Project) = 
+    for analyte in project
+        for cpd in @view analyte[1:end - 1]
+            set_raw!.(Ref(project), cpd.fragments.source, cpd.fragments.id, :isf, 1)
+            
+        end
+        cpd = last(analyte)
+        id = findall(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragments.ion1)
+        set_raw_if!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, -1, <(1))
+        id = setdiff(eachindex(cpd.fragments), id)
+        set_raw!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, 1)
+    end
+
+assign_parent!(project::Project) = 
+    for analyte in project
+        cpd = last(analyte)
+        id = findall(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragments.ion1)
+        set_raw!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, -1)
+    end

@@ -15,12 +15,11 @@ end
 query(qq, aquery::Query; kwargs...) = query(aquery, qq; kwargs...)
 
 function query(aquery::Query, qq::Pair{Symbol, <: Any}; view = aquery.view, fn = identity)
-    score = @match qq.first begin
-        :topscore => true
-        :topsc    => true
-        _         => false
+    @match qq.first begin
+        :topscore   => return finish_query!(aquery, qq.first, qq.second, fn, query_score(aquery, qq.second), view)
+        :topsc      => return finish_query!(aquery, qq.first, qq.second, fn, query_score(aquery, qq.second), view)
+        _           => nothing
     end
-    score && return finish_query!(aquery, qq.first, qq.second, fn, query_score(aquery, qq.second), view)
     qf = @match qq.first begin
         :rt => analyte -> between(analyte.rt, qq.second)
         :mw => analyte -> between(mw(last(analyte)), qq.second)
@@ -84,11 +83,14 @@ function query(aquery::Query, qq::Symbol; view = aquery.view, fn = identity)
     qf = @match qq begin
         :class  => analyte -> ==(analyte.states[1], 1)
         :chain  => analyte -> ==(analyte.states[2], 1)
+        :rt     => analyte -> ==(analyte.states[3], 1)
         :class_ => analyte -> ==(analyte.states[1], 0)
         :chain_ => analyte -> ==(analyte.states[2], 0)
+        :rt_    => analyte -> ==(analyte.states[3], 0)
         :class! => analyte -> ==(analyte.states[1], -1)
         :chain! => analyte -> ==(analyte.states[2], -1)
-        :both   => analyte -> all(==(1), analyte.states)
+        :rt!    => analyte -> ==(analyte.states[3], -1)
+        :all    => analyte -> all(==(1), analyte.states)
     end
     finish_query!(aquery, :id, qq, fn, findall(fn ∘ qf, aquery.result), view)
 end
@@ -111,6 +113,29 @@ function query(aquery::Query, mrm::MRM;
         end
     end
     finish_query!(aquery, :validated_by, "mrm", fn, findall(fn ∘ qf, last.(aquery)), view)
+end
+
+function coelution(project::Project; analytes = project.analytes, polarity::Bool = true, mz_tol = 0.35, rt_tol = 0.1)
+    result = NamedTuple{(:mz1, :rt, :analytes), Tuple{Vector{Float64}, Vector{Float64}, SubArray{AnalyteSP}}}[]
+    for analyte in analytes
+        frags = last(analyte).fragments
+        id = findfirst(i -> isa(frags.mz1[i].adduct, Pos) == polarity, reverse(eachindex(frags)))
+        isnothing(id) && continue
+        mz = query_raw(project, frags.source[id], frags.id[id], :mz1)
+        rt = query_raw(project, frags.source[id], frags.id[id], :rt)
+        pushed = false
+        for group in result
+            abs(mean(group.mz1) - mz) > mz_tol && continue
+            abs(mean(group.rt - rt)) > rt_tol && continue
+            push!(group.mz1, mz)
+            push!(group.rt, rt)
+            push!(group.analytes, analyte)
+            pushed = true
+            break
+        end
+        pushed || push!(result, (mz1 = [mz], rt = [rt], analytes = [analyte]))
+    end
+    result
 end
 
 normalized_sig_diff(Δ) = 
@@ -192,5 +217,12 @@ function query(aquery::Query, qqs::Tuple; view = true)
 end
 
 query_raw(project::Project, source, id) = project.data[source].raw[findfirst(==(id), project.data[source].raw.id)]
+query_raw(project::Project, source, id, col) = getproperty(project.data[source].raw, col)[findfirst(==(id), project.data[source].raw.id)]
+set_raw!(project::Project, source, id, col, val) = (getproperty(project.data[source].raw, col)[findfirst(==(id), project.data[source].raw.id)] = val)
+function set_raw_if!(project::Project, source, id, col, val, crit) 
+    i = findfirst(==(id), project.data[source].raw.id)
+    crit(getproperty(project.data[source].raw, col)[i]) || return
+    getproperty(project.data[source].raw, col)[i] = val
+end
 
 # filter/comparator

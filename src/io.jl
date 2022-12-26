@@ -100,7 +100,10 @@ end
 function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     class = analyte.states[1] == 1 ? "🟢" : analyte.states[1] == -1 ? "🔴" : "🟡" 
     chain = analyte.states[2] == 1 ? "🟢"  : analyte.states[2] == -1 ? "🔴" : "🟡" 
-    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " ($class,$chain):")
+    rt = analyte.states[3] == 1 ? "🟢"  : analyte.states[3] == -1 ? "🔴" : "🟡"
+    diq = analyte.states[4] == -1 ? "🟢"  : analyte.states[4] == 1 ? "🔴" : "🟡"
+    isf = analyte.states[5] == -1 ? "🟢"  : analyte.states[5] == 1 ? "🔴" : "🟡"
+    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " ($diq,$isf;$class,$chain,$rt):")
     print(io, "\n∘ Score: ", analyte.scores)
     print(io, "\n∘ Compounds:")
     for cpd in analyte
@@ -114,7 +117,10 @@ end
 function Base.show(io::IO, analyte::AnalyteSP)
     class = analyte.states[1] == 1 ? "🟢" : analyte.states[1] == -1 ? "🔴" : "🟡" 
     chain = analyte.states[2] == 1 ? "🟢"  : analyte.states[2] == -1 ? "🔴" : "🟡" 
-    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " ($class,$chain)")
+    rt = analyte.states[3] == 1 ? "🟢"  : analyte.states[3] == -1 ? "🔴" : "🟡"
+    diq = analyte.states[4] == -1 ? "🟢"  : analyte.states[4] == 1 ? "🔴" : "🟡"
+    isf = analyte.states[5] == -1 ? "🟢"  : analyte.states[5] == 1 ? "🔴" : "🟡"
+    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " ($diq,$isf;$class,$chain,$rt)")
 end
 
 function Base.show(io::IO, data::PreIS)

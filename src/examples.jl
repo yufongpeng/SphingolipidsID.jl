@@ -1,4 +1,4 @@
-using SphingolipidsID, DataPipes
+using SphingolipidsID, DataPipes, SplitApplyCombine, TypedTables
 file1 = joinpath.(".\\test\\data\\mzmine3.3", readdir(".\\test\\data\\mzmine3.3"))
 file2 = joinpath.(".\\test\\data\\mzmine3.2", readdir(".\\test\\data\\mzmine3.2"))
 fts = @p [file1, file2] map(map(featuretable_mzmine, _)) zip(__...) map(append!(_...)) map(sort_data!);
@@ -30,8 +30,20 @@ pj = preis()
 for (r, ft) in zip(rang, fts)
     preis!(pj, ft, r, true; rt_tol = 0.1)
 end
-finish_profile!(pj; err_tol = 0.5)
-# ID: Class, 1047/1112
+pj # 1950
+finish_profile!(pj; err_tol = 0.5) # 1186
+
+# visualize, clustering
+plotlyjs()
+plot_rt_mz1(pj, 1; legend = :outertopright)
+plot_rt_mz1(filterview(x -> x.isf < 0, pj.data[1].raw); legend = :outertopright)
+cluster_ion!(pj, 1; min_cluster_size = 10, extend = true, error_tol = 0.5)
+plot_rt_mz1(pj, 1; legend = :outertopright)
+set_cluster_class!(pj, 1, [Cer, HexCer, Union{SHexCer, Hex2Cer, HexNAcHex2Cer}, Union{Hex3Cer, HexNAcHex2Cer}, Union{GM3, HexNAcHex3Cer}])
+plot_rt_mz1(pj, 1; legend = :outertopright)
+apply_cluster!(pj)
+
+# ID: Class, 1047/1112/1053
 apply_rules!(pj)
 apply_rules!(pj; match_mode = :class)
 # ID: Chain
@@ -40,10 +52,12 @@ apply_rules!(pj; match_mode = :chain)
 @p pj |>
     apply_score!(@score chain 1 -1) |> apply_threshold!(<=(1)) |>
     apply_score!(@score chain 1 (0 + 1) / all) |> apply_threshold!(>=(0.5))
-    #apply_score!(@score chain 1 1 / all)
+    # apply_score!(@score chain 1 1 / all)
     # apply_score!(@score chain => (analyte, cpd) -> size(cpd.fragments, 1) (0 + 1)) |> apply_threshold!(>=(2))
 
 # Queries
+@p pj query(not(:class!)) query(not(:chain!)) query(not(:rt!))
+@p pj query(:rt) query(GM3)
 query(pj, cpd(GM3, (36, 1, 2)))
 @p pj  query(GM1)  query(:rt => (3, 4))
 @p pj  query(HexNAcHex3Cer)  query(cpd(lcb(18, 1, 2), acyl(16, 0, 0))) 
@@ -66,6 +80,7 @@ query(pj, cpd(GM3, (36, 1, 2)))
 @p pj  query(CLS.fg.nana)  query(:chain!)  apply_rules!
 
 # MRM
+@p pj query(not(:class!)) query(not(:chain!)) query(not(:rt!)) query(:topsc => 0.5) generate_mrm(:default, LCB, true)
 @p pj  query(not(:class!))  query(not(:chain!))  generate_mrm(:default, LCB, true)
 t1 = @p pj  query(not(:class!))  query(not(:chain!))  query(:topsc => 0.5)  generate_mrm(:default, LCB, true)
 t2 = @p pj  query((CLS.fg.nana, CLS.series.as)) query(not(Hex2Cer)) query(not(:class!))  query(not(:chain!))  query(:topsc => 0.5) generate_mrm(:default, LCB, true)

@@ -159,7 +159,7 @@ union(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(copy_wo_project(analyte
 union(analyte1::AnalyteSP, cpds::Vector{CompoundSP}) = union!(copy_wo_project(analyte1), cpds)
 union!(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(analyte1, analyte2.compounds, analyte2.states)
 
-function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0])
+function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 0, 0, 0])
     for cpd2 in cpds
         id = findfirst(cpd1 -> iscompatible(cpd1, cpd2), analyte1)
         if isnothing(id)
@@ -262,7 +262,7 @@ ischaincompatible(acyl1::ACYL, acyl2::ACYL) =
 ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(chain2) && sumcomp(chain1.lcb) == sumcomp(chain2.lcb) 
 
 copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.sum, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
-copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), deepcopy(analyte.scores))
+copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), deepcopy(analyte.scores), analyte.manual_check)
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
 
 equivalent_in(ion, collection) = any(equivalent(ion, x) for x in collection)
