@@ -1,117 +1,168 @@
-function cluster_ion!(project, data_id; formula = @formula(rt ~ mz1), dev = 1, radius = 0.0, error_tol = 0.5, extend = true, pval_cluster = 0.001, kwargs...)
-    haskey(project.data[data_id].additional, :clusters) && delete!(project.data[data_id].additional, :clusters)
-    tbl = @p project.data[data_id].raw filterview(_.isf < 0 && _.error <= error_tol) deepcopy
-    maxrt = round(maximum(tbl.rt))
-    radius = radius > 0 ? radius : maxrt / 20
-    scale = - foldl(-, extrema(tbl.mz1)) / maxrt
-    tbl.mz1 ./= scale
-    clusters = map(dbscan(hcat(tbl.rt, tbl.mz1)', radius; kwargs...)) do cluster
-        cluster.core_indices
-    end
-   
-    # test adjacent lm(rt ~ mz1 ^2 * cluster) vs lm(rt ~ mz1 ^2) if not significant, merge clusters
-    uswts = (1 .- 1 ./ (1 .+ abs.(tbl.mz1[clusters[1]] .- median(tbl.mz1[clusters[1]]))))
-    wts =  uswts .* length(tbl.mz1[clusters[1]]) ./ sum(uswts)
-    models = [lm(formula, tbl[clusters[1]]; wts)]
-    if length(clusters) > 1
-        f = @match formula.rhs begin
-            ::Tuple => FormulaTerm(formula.lhs, (Term(:cluster), formula.rhs..., map(formula.rhs) do r
-                    @match r begin
-                        ::Tuple => InteractionTerm((r..., Term(:cluster)))
-                        _       => InteractionTerm((r, Term(:cluster)))
-                    end
-                end...))
-            _       => FormulaTerm(formula.lhs, (Term(:cluster), formula.rhs, InteractionTerm((formula.rhs, Term(:cluster)))))
-        end
-        i = 1
-        while i < length(clusters)
-            j = i + 1
-            subt = Table(tbl[union(clusters[i], clusters[j])], 
-                        cluster = vcat(repeat([0], length(clusters[i])), repeat([1], length(clusters[j])))
-                    )
-            uswts = (1 .- 1 ./ (1 .+ abs.(subt.mz1 .- median(subt.mz1)))) 
-            wts = uswts .* length(subt.mz1) ./ sum(uswts)
-            l1 = lm(formula, subt; wts)
-            l2 = lm(f, subt; wts)
-            if last(pval(anova(l1, l2))) <= pval_cluster
-                uswts = (1 .- 1 ./ (1 .+ abs.(tbl.mz1[clusters[j]] .- median(tbl.mz1[clusters[j]]))))
-                wts =  uswts .* length(tbl.mz1[clusters[j]]) ./ sum(uswts)
-                push!(models, lm(formula, tbl[clusters[j]]; wts))
-                i += 1
-            else
-                union!(clusters[i], popat!(clusters, j))
-                models[i] = l1
-            end
-        end
-    end
-    extend || return project.data[data_id].additional[:clusters] = Table(
-        class = repeat(Any[ClassSP], length(clusters)),
-        id = map(clusters) do cluster
-            tbl.id[cluster]
-        end
-    )
-    assign_parent!(project)
-    ids = map(clusters) do cluster
-        tbl.id[cluster]
-    end
-    tbl = @p project.data[data_id].raw filterview(_.isf < 0) deepcopy
-    tbl.mz1 ./= scale
-    clusters = map(ids) do id
-        findall(x -> in(x, id), tbl.id)
-    end
-    to_clustered = setdiff(eachindex(tbl.id), union(clusters...))
-    distances = [abs(tbl.rt[i] - predict(model, tbl[i:i])[1]) for (i, model) in Iterators.product(to_clustered, models)]
-    while !isempty(to_clustered)
-        dist, id = findmin(distances)
-        i, j = Tuple(id)
-        dist > dev && break
-        push!(clusters[j], to_clustered[i])
-        distances = distances[setdiff(eachindex(to_clustered), [i]), :]
-        deleteat!(to_clustered, i)
-        uswts = (1 .- 1 ./ (1 .+ abs.(tbl.mz1[clusters[j]] .- median(tbl.mz1[clusters[j]]))))
-        wts =  uswts .* length(tbl.mz1[clusters[j]]) ./ sum(uswts)
-        models[j] = lm(formula, tbl[clusters[j]]; wts)
-        distances[:, j] = map(to_clustered) do point
-            abs.(tbl.rt[point] .- predict(models[j], tbl[point:point])[1])
-        end
-    end
-    project.data[data_id].additional[:clusters] = Table(
-            class = repeat(Any[ClassSP], length(clusters)),
-            id = map(clusters) do cluster
-                tbl.id[cluster]
-            end
-        )
-end
+group_analyte(analytes) = @p analytes groupview(deisomerized(class(_))) map((first ∘ parentindices)(_))
+generate_clusters!(aquery::AbstractQuery; kwargs...) = (generate_clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
+generate_clusters!(project::Project; analytes = project.analytes) = 
+    replace_clusters!(project, group_analyte(analytes))
 
-set_cluster_class!(project, data_id, iterated) = 
-    haskey(project.data[data_id].additional, :clusters) ? (project.data[data_id].additional[:clusters].class .= iterated) : throw(ErrorException("Data_$data_id does not have clustering results. Try run `cluster_ion!(project, $data_id)`"))
-
-function apply_cluster!(project; mode = ≥(0.5), data_id = 1, analytes = project.analytes)
-    haskey(project.data[data_id].additional, :clusters) || throw(ErrorException("Data_$data_id does not have clustering results. Try run `cluster_ion!(project, $data_id)` and `set_cluster_class!(project, $data_id, class"))
-    classes = map(analytes) do analyte
-        cpd = last(analyte)
-        frag = filterview(x -> x.source == data_id, cpd.fragments)
-        classes = map(Iterators.reverse(frag.id)) do id
-            id_cluster = findfirst(x -> in(id, x), project.data[data_id].additional[:clusters].id)
-            isnothing(id_cluster) ? nothing : project.data[data_id].additional[:clusters].class[id_cluster]
-        end
-        filter!(!isnothing, classes)
-    end
-    vote!(analytes, classes, mode)
+analytes2clusters!(aquery::AbstractQuery; kwargs...) = (analytes2clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
+function analytes2clusters!(project::Project; new = false, scale = 0.0, radius = 0.0, analytes = project.analytes, kwargs...)
+    valid_id = collect((first ∘ parentindices)(analytes))
+    groups = @p project.clusters map(filter(x -> in(x, valid_id), _)) filter(!isempty)
+    ret = @p groups map(map(rt, @views project.analytes[_]))
+    maxrt = maximum(maximum(r) for r in ret)
+    mass = @p groups map(map(mw, @views project.analytes[_]))
+    scale = scale > 0 ? scale : median(map(m -> quantile(m, 0.9) - quantile(m, 0.1), mass)) * 2 / maxrt
+    mass = @p mass map(_ / scale)
+    radius = radius > 0 ? radius : maxrt / 20 * sqrt(2)
+    clusters = @p zip(ret, mass) map(dbscan(hcat(_...)', radius; kwargs...)) map(map(getproperty(:core_indices), _))
+    clusters = @p zip(clusters, groups) map(map(x -> _[2][x], _[1]))
+    clusters_possible = get!(project.appendix, :clusters_possible, Dictionary{ClassSP, Vector{Vector{Int}}}())
+    new && empty!(clusters_possible)
+    @p zip(keys(groups), clusters) foreach(union!(empty!(get!(clusters_possible, _[1], Vector{Int}[])), _[2]))
+    display(project.appendix[:clusters_possible])
     project
 end
 
-vote!(analytes::Vector{AnalyteSP}, classes::Vector{Vector}, mode::T) where {S, T <: Base.Fix2{S, Float64}} = 
-    for (analyte, class) in zip(analytes, classes)
-        isempty(class) && (analyte.states[3] = 0; continue)
-        analyte.states[3] = mode(count(x -> isa(last(analyte).class, x), class) / length(class)) ? 1 : -1
+@as_record UnitRange
+@as_record StepRange
+convert_negidx(x, i) = i > 0 ? i : lastindex(x) + i 
+index_fn_v(i::Vector, n::Int) = map(index_fn, i)
+index_fn_v(i, n::Int) = repeat([index_fn(i)], n)
+index_fn(i) = @match i begin
+    ::Function              => i
+    nothing                 => (x -> Int[])
+    i::Int && if i > 0 end  => (x -> getindex(x, i))
+    i::Int                  => (x -> getindex(x, lastindex(x) + i))
+    UnitRange(s, e)         => (x -> getindex(x, UnitRange(convert_negidx(x, s), convert_negidx(x, e))))
+    StepRange(s, p, e)      => (x -> getindex(x, StepRange(convert_negidx(x, s), p, convert_negidx(x, e))))
+    ::Vector{Int}           => (x -> getindex(x, i))
+end
+    
+function select_clusters!(project::Project; by = identity, new = false, kwargs...)
+    clusters_possible = project.appendix[:clusters_possible]
+    targets = collect(keys(clusters_possible))
+    fn = convert(Vector{Any}, index_fn_v(by, length(targets)))
+    for (key, val) in kwargs
+        id = findfirst(==(eval(key)()), targets)
+        isnothing(id) && continue
+        fn[id] = index_fn(val)
     end
+    clusters_candidate = get!(project.appendix, :clusters_candidate, Dictionary{ClassSP, Vector{Int}}())
+    new && empty!(clusters_candidate)
+    for (key, val) in zip(targets, fn)
+        union!(get!(clusters_candidate, key, Int[]), val(clusters_possible[key])...)
+    end
+    filter!(!isempty, clusters_candidate)
+    display(clusters_candidate)
+    project
+end
 
-vote!(analytes::Vector{AnalyteSP}, classes::Vector{Vector}, mode::T) where {S, T <: Base.Fix2{S, Int}} = 
-    for (analyte, class) in zip(analytes, classes)
-        isempty(class) && (analyte.states[3] = 0; continue)
-        analyte.states[3] = mode(count(x -> isa(last(analyte).class, x), class)) ? 1 : -1
+find__ =  @λ begin
+    Expr(head, args...) => any(find__, args)
+    :__                 => true
+    _                   => false
+end
+
+replace__ = @λ begin
+    Expr(head, args...) => Expr(head, map(replace__, args)...)
+    :__                 => :tbl
+    _                   => x
+end
+
+macro model()
+    return quote identity end
+end
+model_fn(expr) = expr == QuoteNode(:default) ? :identity : Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), find__(expr) ? replace__(expr) : Expr(expr.head, push!(expr.args, :tbl)...)))
+macro model(expr)
+    return quote $(model_fn(expr)) end
+end
+
+macro model(expr...)
+    expr = model_fn.(expr)
+    return quote map(eval, $expr) end
+end
+
+function model_clusters!(model, project::Project)
+    model = model == :default ? @model(lm(@formula(rt ~ mw + cluster))) : model
+    haskey(project.appendix, :clusters_model) && delete!(project.appendix, :clusters_model)
+    haskey(project.appendix, :clusters_formula) && delete!(project.appendix, :clusters_formula)
+    insert!(project.appendix, :clusters_formula, model)
+    @p pairs(project.appendix[:clusters_candidate]) |> 
+        map(Table(
+                mw = map(mw, @views project.analytes[_[2]]), 
+                rt = map(rt, @views project.analytes[_[2]]), 
+                cluster = repeat([_[1]], length(_[2]))
+            )) |>
+        reduce(vcat) |>
+        model |>
+        insert!(project.appendix, :clusters_model)
+    display(project.appendix[:clusters_model])
+    project
+end
+
+compare_models(project::Project, models::Tuple) = compare_models(project, models...)
+function compare_models(project::Project, models...)
+    models = replace(collect(models), identity => project.appendix[:clusters_formula])
+    tbl = @p pairs(project.appendix[:clusters_candidate]) |> 
+        map(Table(
+                mw = map(mw, @views project.analytes[_[2]]), 
+                rt = map(rt, @views project.analytes[_[2]]), 
+                cluster = repeat([_[1]], length(_[2]))
+            )) |>
+        reduce(vcat)
+    anova(map(f -> f(tbl), models)...)
+end
+
+function generate_clusters_prediction!(project::Project; replaces...)
+    replaces = @p pairs(Dictionary(replaces)) map(eval(first(_))() => last(_)()) filter(in(last(_), project.appendix[:clusters_model].mf.schema.schema[Term(:cluster)].contrasts.levels))
+    println(replaces)
+    function fn(model, analyte::AnalyteSP, rt_tol)
+        cluster = replace!(ClassSP[deisomerized(class(analyte))], replaces...)[1]
+        in(cluster, model.mf.schema.schema[Term(:cluster)].contrasts.levels) ? 
+            abs(rt(analyte) - predict(model, [(mw = mw(analyte), cluster = cluster)])[1]) <= rt_tol : false
     end
+    haskey(project.appendix, :clusters_predict) && delete!(project.appendix, :clusters_predict)
+    insert!(project.appendix, :clusters_predict, fn)
+    project
+end
+
+function expand_clusters!(project::Project; rt_tol = 1)
+    pred = project.appendix[:clusters_predict]
+    for (i, analyte) in enumerate(project)
+        pred(project.appendix[:clusters_model], analyte, rt_tol) && 
+            push!(get!(project.appendix[:clusters_candidate], deisomerized(class(analyte)), Int[]), i) 
+    end
+    foreach(unique!, project.appendix[:clusters_candidate])
+    display(project.appendix[:clusters_candidate])
+    project
+end
+
+function show_clusters(project::Project) 
+    printstyled("Current clusters:\n", color = :green)
+    display(project.clusters) 
+    printstyled("Possible clusters:\n", color = :green)
+    display(get(project.appendix, :clusters_possible, Dictionary{ClassSP, Vector{Vector{Int}}}()))
+    printstyled("Candidate clusters:\n", color = :green)
+    display(get(project.appendix, :clusters_candidate, Dictionary{ClassSP, Vector{Int}}()))
+    return
+end
+
+replace_clusters!(project::Project, new_clusters = project.appendix[:clusters_candidate]) = (empty!(project.clusters); update_clusters!(project, new_clusters))
+
+function update_clusters!(project::Project, new_clusters = project.appendix[:clusters_candidate])
+    @p pairs(new_clusters) foreach(union!(get!(project.clusters, _[1], Int[]), _[2]))
+    display(project.clusters)
+    project
+end
+
+apply_clusters!(aquery::AbstractQuery; kwargs...) = (apply_clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
+function apply_clusters!(project::Project; analytes = project.analytes)
+    for (i, analyte) in enumerate(analytes)
+        cls = deisomerized(class(analyte))
+        analyte.states[3] = in(cls, keys(project.clusters)) ? (in((first ∘ parentindices)(analytes)[i], project.clusters[cls]) ? 1 : -1) : 0
+    end
+    project
+end
+    
 #=
 
 function align!(project::Project, align_to::id, compatible = false, db_product = SPDB[mrm.polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],

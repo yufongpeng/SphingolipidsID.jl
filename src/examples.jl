@@ -33,21 +33,11 @@ end
 pj # 1950
 finish_profile!(pj; err_tol = 0.5) # 1186
 
-# visualize, clustering
-plotlyjs()
-plot_rt_mz1(pj, 1; legend = :outertopright)
-plot_rt_mz1(filterview(x -> x.isf < 0, pj.data[1].raw); legend = :outertopright)
-cluster_ion!(pj, 1; min_cluster_size = 10, extend = true, error_tol = 0.5)
-plot_rt_mz1(pj, 1; legend = :outertopright)
-set_cluster_class!(pj, 1, [Cer, HexCer, Union{SHexCer, Hex2Cer, HexNAcHex2Cer}, Union{Hex3Cer, HexNAcHex2Cer}, Union{GM3, HexNAcHex3Cer}])
-plot_rt_mz1(pj, 1; legend = :outertopright)
-apply_cluster!(pj)
-
-# ID: Class, 1047/1112/1053
 apply_rules!(pj)
-apply_rules!(pj; match_mode = :class)
+# ID: Class, 1047/1112/1053
+# apply_rules!(pj; match_mode = :class)
 # ID: Chain
-apply_rules!(pj; match_mode = :chain)
+# apply_rules!(pj; match_mode = :chain)
 # Score
 @p pj |>
     apply_score!(@score chain 1 -1) |> apply_threshold!(<=(1)) |>
@@ -56,40 +46,64 @@ apply_rules!(pj; match_mode = :chain)
     # apply_score!(@score chain => (analyte, cpd) -> size(cpd.fragments, 1) (0 + 1)) |> apply_threshold!(>=(2))
 
 # Queries
-@p pj query(not(:class!)) query(not(:chain!)) query(not(:rt!))
-@p pj query(:rt) query(GM3)
 query(pj, cpd(GM3, (36, 1, 2)))
-@p pj  query(GM1)  query(:rt => (3, 4))
-@p pj  query(HexNAcHex3Cer)  query(cpd(lcb(18, 1, 2), acyl(16, 0, 0))) 
-@p pj  query(acyl(24, 0, 1))  query(:mz => (810, 813))
-@p pj  query(cpd(GM3, 42, 1, 2))
-@p pj  query(cpd(Cer, 42, 0, 3))
-@p pj  query(:mz => (780, 781))  query(SHexCer)
-@p pj  query(cpd(Hex2Cer, 36, 1, 2))
-
-@p pj |>
-    query(:class) |>
-    query(not(:chain!)) |>
+aq = @p pj query(not(:class!)) query(not(:chain!)) reuse
+@p aq query(GM1) query(:rt => (3, 4))
+@p pj query(GM1) query(:rt => (3, 4))
+@p aq query(:rt) query(GM3) plot_rt_mw
+@p aq query(Hex2Cer) plot_rt_mw(; groupby = sumcomps)
+@p aq query(Hex3Cer) plot_rt_mw(; groupby = acyls)
+@p aq query(SHexCer) plot_rt_mw(; groupby = chains)
+@p aq query(HexNAcHex3Cer) plot_rt_mw(; groupby = lcbs)
+@p pj query(HexNAcHex3Cer) query(cpd(lcb(18, 1, 2), acyl(16, 0, 0))) 
+@p pj query(acyl(24, 0, 1)) query(:mz => (810, 813)) plot_rt_mw
+@p pj query(cpd(GM3, 42, 1, 2))
+@p pj query(cpd(Cer, 42, 0, 3))
+@p pj query(:mz => (780, 781)) query(SHexCer)
+@p pj query(cpd(Hex2Cer, 36, 1, 2))
+@p aq |>
     query((HexCer, cpd(36, 1, 2), cpd(34, 1, 2))) |>
     query(lcb(18, 1, 2)) 
 
-@p pj  query(lcb(18, 1, 2))  query(CLS.nana[1])
-@p pj  query(lcb(18, 1, 2))  query(CLS.series.as)
-@p pj  query(not(:chain!))  query(not(:class!))  query(CLS.fg.sulfate)
+@p pj query(lcb(18, 1, 2)) query(CLS.nana[1]) plot_rt_mw
+@p pj query(lcb(18, 1, 2)) query(CLS.series.as)
+@p aq query(CLS.fg.sulfate)
 # Partial id
-@p pj  query(CLS.fg.nana)  query(:chain!)  apply_rules!
+@p pj query(CLS.fg.nana) query(:chain!) apply_rules!
+
+# visualize, clustering
+plotlyjs()
+generate_clusters!(pj)
+plot_rt_mw(pj; cluster = :clusters)
+plot_rt_mw(aq)
+@p aq |>
+    query(not(GM1)) |> 
+    query(not(SHexHexCer)) |> 
+    analytes2clusters!(; min_cluster_size = 10, new = true) |>
+    plot_rt_mw(; clusters = :possible)
+
+@p aq query(HexNAcHex2Cer) analytes2clusters!(; min_cluster_size = 2, radius = 2) plot_rt_mw(; clusters = :possible)
+@p aq query(SHexCer) analytes2clusters!(; min_cluster_size = 2, radius = 1) plot_rt_mw(; clusters = :possible)
+@p aq query(HexCer) analytes2clusters!(; min_cluster_size = 10, radius = 1) plot_rt_mw(; clusters = :possible)
+show_clusters(pj)
+@p pj select_clusters!(; by = first, new = true, Hex2Cer = 1:2, Hex3Cer = 1:2, HexNAcHex2Cer = nothing) plot_rt_mw(; clusters = :candidate)
+@p pj model_clusters!(:default) plot_rt_mw(; model = true, clusters = :candidate, linewidth = 2)
+compare_models(pj, @model(lm(@formula(rt ~ mw))), @model(), @model(lm(@formula(rt ~ mw * mw + cluster))))
+compare_models(pj, @model(lm(@formula(rt ~ mw)), :default, lm(@formula(rt ~ mw * cluster))))
+@p pj generate_clusters_prediction!(; HexNAcHex2Cer = Hex3Cer) expand_clusters! replace_clusters! plot_rt_mw(; clusters = :clusters)
+apply_clusters!(pj)
 
 # MRM
 @p pj query(not(:class!)) query(not(:chain!)) query(not(:rt!)) query(:topsc => 0.5) generate_mrm(:default, LCB, true)
-@p pj  query(not(:class!))  query(not(:chain!))  generate_mrm(:default, LCB, true)
-t1 = @p pj  query(not(:class!))  query(not(:chain!))  query(:topsc => 0.5)  generate_mrm(:default, LCB, true)
-t2 = @p pj  query((CLS.fg.nana, CLS.series.as)) query(not(Hex2Cer)) query(not(:class!))  query(not(:chain!))  query(:topsc => 0.5) generate_mrm(:default, LCB, true)
-t3 = @p pj  query(not(:class!))  query(not(:chain!))  query(:topsc => 0.5)  generate_mrm(:default, Ion(ProtonationNL2H2O(), NeuAc()), true)
+@p pj query(not(:class!)) query(not(:chain!)) generate_mrm(:default, LCB, true)
+t1 = @p pj query(not(:class!)) query(not(:chain!)) query(:topsc => 0.5) generate_mrm(:default, LCB, true)
+t2 = @p pj query((CLS.fg.nana, CLS.series.as)) query(not(Hex2Cer)) query(not(:class!)) query(not(:chain!)) query(:topsc => 0.5) generate_mrm(:default, LCB, true)
+t3 = @p pj query(not(:class!)) query(not(:chain!)) query(:topsc => 0.5) generate_mrm(:default, Ion(ProtonationNL2H2O(), NeuAc()), true)
 append!(t1, t2)
 append!(t1, t3) |> nMRM
 @p t1 write_mrm("mrm_list.csv")
-@p pj  query(:class!)  query(not(:chain!))  generate_mrm(:default, LCB, true)
-@p pj  query(:topsc => 0.5)  query(:class)  query(not(:chain!))  generate_mrm(:default, LCB, true)
+@p pj query(:class!) query(not(:chain!)) generate_mrm(:default, LCB, true)
+@p pj query(:topsc => 0.5) query(:class) query(not(:chain!)) generate_mrm(:default, LCB, true)
 
 # Chain.jl 
 # @chain project begin
@@ -104,5 +118,5 @@ ft2 = filter_duplicate!(deepcopy(ft), n = 6, err_tol = 0.25)
 mrm1 = MRM(ft1);
 mrm2 = MRM(ft2);
 
-@p pj query(mrm1) query(not(:class!))  query(not(:chain!)) generate_mrm(:default, LCB, true) write_mrm("mrm_list.csv")
-@p pj query(mrm2) query(not(:class!))  query(not(:chain!)) generate_mrm(:default, LCB, true)
+@p pj query(mrm1) query(not(:class!)) query(not(:chain!)) generate_mrm(:default, LCB, true) write_mrm("mrm_list.csv")
+@p pj query(mrm2) query(not(:class!)) query(not(:chain!)) generate_mrm(:default, LCB, true)

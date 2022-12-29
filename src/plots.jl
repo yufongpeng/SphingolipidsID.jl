@@ -1,30 +1,65 @@
-plot_rt_mz1(tbl; legend = false, xlabel = "Retention Time (min)", ylabel = "m/z", title = "Features", kwargs...) = 
-    scatter(tbl.rt, tbl.mz1; legend, xlabel, ylabel, title, kwargs...)
-
-function plot_rt_mz1(project, data_id; cluster = true, xlabel = "Retention Time (min)", ylabel = "m/z", title = "Features of Data_$data_id", kwargs...)
-    if haskey(project.data[data_id].additional, :clusters) && cluster
-        kwargs = Dict{Symbol, Any}(kwargs)
-        label = pop!(kwargs, :label, cluster_label(project.data[data_id].additional[:clusters]))
-        color = pop!(kwargs, :color, repeat([:auto], length(label) + 1))
-        scatter()
-        id = setdiff(project.data[data_id].raw.id, union(project.data[data_id].additional[:clusters].id...))
-        scatter!((@p project.data[data_id].raw filterview(in(_.id, id)) getproperties(__, (:rt, :mz1)))
-                    ; label = "None", color = popfirst!(color), alpha = 0.2)
-        for id in project.data[data_id].additional[:clusters].id
-            scatter!((@p project.data[data_id].raw filterview(in(_.id, id)) getproperties(__, (:rt, :mz1)))
-                    ; label = popfirst!(label), color = popfirst!(color))
-        end
-        scatter!(; xlabel, ylabel, title, NamedTuple(kwargs)...) |> display
-    else
-        scatter(project.data[data_id].raw.rt, project.data[data_id].raw.mz1; xlabel, ylabel, title, kwargs...) |> display
+plot_rt_mw(aquery::AbstractQuery; kwargs...) = plot_rt_mw(aquery.project; analytes = aquery.result, kwargs...)
+function plot_rt_mw(project::Project; 
+                    analytes = project.analytes, 
+                    all = true, 
+                    clusters = nothing,
+                    groupby = deisomerized ∘ class,
+                    model = false,
+                    xlabel = "Retention Time (min)", 
+                    ylabel = "Molecular weight", 
+                    title = "Analytes", 
+                    kwargs...)
+    ==(clusters, :possible) && return foreach(unique(map(deisomerized ∘ class, analytes))) do cls
+        plot_rt_mw(project, cls; all, xlabel, ylabel, deepcopy(kwargs)...)
     end
+    gana = groupview(groupby, analytes)
+    if !isnothing(clusters)
+        used_clusters = @match clusters begin
+            :clusters  => project.clusters
+            :candidate => project.appendix[:clusters_candidate]
+        end
+        gana = @p pairs(gana) |> 
+                    map(filter(x -> in(x, get(used_clusters, _[1], Int[])), (first ∘ parentindices)(_[2]))) |>
+                    filter(!isempty(_)) |>
+                    map(@view project.analytes[_])
+    end
+    mass = @p gana map(map(mw, _))
+    ret = @p gana map(map(rt, _))
+    scatter()
+    all && scatter!((@p project.analytes[setdiff(eachindex(project.analytes), map(first ∘ parentindices, gana)...)] map((rt = rt(_), mw = mw(_)))); 
+                    label = "Others", alpha = 0.2, get_attributes!(kwargs)...)
+    for key in keys(gana)
+        scatter!(ret[key], mass[key]; label = "$key", get_attributes!(kwargs)...)
+    end
+    (model && haskey(project.appendix, :clusters_model)) || return scatter!(; xlabel, ylabel, title, legend = :outertopright, get_attributes!(kwargs)...) |> display
+    lim_mass = all ? extrema(mw.(project.analytes)) : map(((f, x), ) -> f(x), zip([first, last], extrema(extrema.(mass))))
+    lim_rt = all ? extrema(rt.(project.analytes)) : map(((f, x), ) -> f(x), zip([first, last], extrema(extrema.(ret))))
+    cls = project.appendix[:clusters_model].mf.data.cluster |> unique
+    mwrange = range(lim_mass..., length = 100) 
+    tbl = Table(mw = repeat(mwrange, length(cls)), cluster = repeat(cls, inner = length(mwrange)))
+    tbl = Table(tbl, rt = predict(project.appendix[:clusters_model], tbl))
+    @p tbl filter!(between(_.rt, lim_rt))
+    gtbl = groupview(getproperty(:cluster), tbl)
+    for tbl in gtbl
+        plot!(tbl.rt, tbl.mw; label = "Model_$(first(tbl.cluster))", get_attributes!(kwargs)...)
+    end
+    scatter!(; xlabel, ylabel, title, legend = :outertopright, get_attributes!(kwargs)...) |> display
 end
 
-cluster_label(clusters) = 
-    allequal(clusters.class) ? collect(eachindex(clusters)) : union_repr.(clusters.class)
+function plot_rt_mw(project::Project, cls; all = true, xlabel = "Retention Time (min)", ylabel = "Molecular weight", title = cls, kwargs...)
+    clusters = project.appendix[:clusters_possible][isa(cls, Type) ? cls() : cls]
+    mass = @p clusters map(map(mw, @views project.analytes[_]))
+    ret = @p clusters map(map(rt, @views project.analytes[_]))
+    scatter()
+    all && scatter!((@p project.analytes[setdiff(eachindex(project.analytes), clusters...)] map((rt = rt(_), mw = mw(_)))); 
+                    label = "Others", alpha = 0.2, get_attributes!(kwargs)...)
+    for key in keys(clusters)
+        scatter!(ret[key], mass[key]; label = "$key", get_attributes!(kwargs)...)
+    end
+    scatter!(; xlabel, ylabel, title, legend = :outertopright, get_attributes!(kwargs)...) |> display
+end
 
-union_repr(x) = repr(x)
-union_repr(x::Union) = join(map(propertynames(x)) do i
-    union_repr(getproperty(x, i))
-end, ", ")
+get_attributes!(x::Base.Pairs) = @p keys(x) map(_ => get_attributes!(getproperty(values(x), _))) filter(!isnothing(_[2]))
+get_attributes!(v::Vector) = isempty(v) ? nothing : popfirst!(v)
+get_attributes!(v) = v
 

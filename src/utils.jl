@@ -12,7 +12,7 @@ function nMRM(tbl::Table, precision::Float64 = 0.1; end_time = maximum(tbl.rt .+
     sort!(collect(trans), by = (x -> x.second))
 end
 
-new_project(aquery::Query) = new_project(aquery.project; analytes = aquery.view ? copy_wo_project.(aquery.result) : aquery.result)
+new_project(aquery::AbstractQuery) = new_project(aquery.project; analytes = aquery.view ? copy_wo_project.(aquery.result) : aquery.result)
 function new_project(project::Project; analytes = copy_wo_project.(project.analytes))
     project_new = Project(analytes, project.data, project.anion)
     for analyte in project_new
@@ -205,3 +205,35 @@ equivalent_in_ion1(cpd::CompoundSP, criteria::Tuple) = any(equivalent_in(frag, c
 equivalent_in_ion1(analyte::AnalyteSP, criteria) = any(equivalent_in_ion1(cpd, criteria) for cpd in analyte)
 
 calc_rt(analyte::AnalyteSP) = mean(mean(query_raw(cpd.project, cpd.fragments.source[id], cpd.fragments.id[id]).rt for id in eachindex(cpd.fragments)) for cpd in analyte)
+
+class(analyte::AnalyteSP) = class(last(analyte))
+class(cpd::CompoundSP) = cpd.class
+sumcomp(analyte::AnalyteSP) = sumcomp(last(analyte))
+sumcomp(cpd::CompoundSP) = cpd.sum
+chain(analyte::AnalyteSP) = chain(last(analyte))
+chain(cpd::CompoundSP) = cpd.chain
+lcb(analyte::AnalyteSP) = lcb(last(analyte))
+lcb(cpd::CompoundSP) = lcb(cpd.chain)
+lcb(chain::Chain) = chain.lcb
+lcb(::Nothing) = nothing
+acyl(analyte::AnalyteSP) = acyl(last(analyte))
+acyl(cpd::CompoundSP) = acyl(cpd.chain)
+acyl(chain::Chain) = chain.acyl
+acyl(::Nothing) = nothing
+rt(analyte::AnalyteSP) = analyte.rt
+
+lcbs = lcb
+acyls(analyte::AnalyteSP) = acyls(last(analyte))
+acyls(::Nothing) = nothing
+function acyls(cpd::CompoundSP) 
+    spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
+    string("Acyl ", cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
+end
+chains(analyte::AnalyteSP) = chains(last(analyte))
+chains(::Nothing) = nothing
+function chains(cpd::CompoundSP) 
+    spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
+    string(spb_c, ":", spb_db, ";", "O", spb_o > 1 ? spb_o : "", "/", cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
+end
+sumcomps(analyte::AnalyteSP) = sumcomps(last(analyte))
+sumcomps(cpd::CompoundSP) = string(cpd.sum[1], ":", cpd.sum[2], ";", "O", cpd.sum[3] > 1 ? cpd.sum[3] : "")

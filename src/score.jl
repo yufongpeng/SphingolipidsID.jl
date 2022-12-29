@@ -41,7 +41,7 @@ macro score(targetconvert, weight, objective)
 end
 
 apply_score!(object, fn::T; kwargs...) where T <: Function = apply_score!(fn, object; kwargs...)
-apply_score!(score_fn::T, aquery::Query) where T <: Function = (apply_score!(score_fn, aquery.project; analytes = aquery.result); aquery)
+apply_score!(score_fn::T, aquery::AbstractQuery) where T <: Function = (apply_score!(score_fn, aquery.project; analytes = aquery.result); aquery)
 function apply_score!(score_fn::T, project::Project; analytes = project.analytes) where T <: Function
     printstyled("Score> ", color = :green, bold = true)
     print(score_fn, "\n")
@@ -51,7 +51,7 @@ function apply_score!(score_fn::T, project::Project; analytes = project.analytes
     project
 end
 apply_threshold!(object, fn::T; kwargs...) where T <: Function = apply_threshold!(fn, object; kwargs...)
-apply_threshold!(thresh_fn::T, aquery::Query) where T <: Function = (apply_threshold!(thresh_fn, aquery.project; analytes = aquery.result); aquery)
+apply_threshold!(thresh_fn::T, aquery::AbstractQuery) where T <: Function = (apply_threshold!(thresh_fn, aquery.project; analytes = aquery.result); aquery)
 function apply_threshold!(thresh_fn::T, project::Project; analytes = project.analytes) where T <: Function
     printstyled("Threshold> ", color = :green, bold = true)
     print(thresh_fn, "\n")

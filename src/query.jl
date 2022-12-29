@@ -13,6 +13,9 @@ function query(project::Project, qq; view = true)
 end
 
 query(qq, aquery::Query; kwargs...) = query(aquery, qq; kwargs...)
+reuse(aquery::Query) = ReUseable(aquery)
+query(qq, reuseable::ReUseable; kwargs...) = query(reuseable, qq; kwargs...)
+query(reuseable::ReUseable, qq; kwargs...) = query(reuse_copy(reuseable.query), qq; kwargs...)
 
 function query(aquery::Query, qq::Pair{Symbol, <: Any}; view = aquery.view, fn = identity)
     @match qq.first begin

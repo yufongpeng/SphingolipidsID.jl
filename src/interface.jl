@@ -1,36 +1,36 @@
 isempty(::ClassSP) = false
 
 length(project::Project) = length(project.analytes)
-length(aquery::Query) = length(aquery.result)
+length(aquery::AbstractQuery) = length(aquery.result)
 length(analyte::AnalyteSP) = length(analyte.compounds)
 
 iterate(project::Project) = iterate(project.analytes)
 iterate(project::Project, i) = iterate(project.analytes, i)
-iterate(aquery::Query) = iterate(aquery.result)
-iterate(aquery::Query, i) = iterate(aquery.result, i)
+iterate(aquery::AbstractQuery) = iterate(aquery.result)
+iterate(aquery::AbstractQuery, i) = iterate(aquery.result, i)
 iterate(analyte::AnalyteSP) = iterate(analyte.compounds)
 iterate(analyte::AnalyteSP, i) = iterate(analyte.compounds, i)
 
 getindex(project::Project, i) = getindex(project.analytes, i)
-getindex(aquery::Query, i) = getindex(aquery.result, i)
+getindex(aquery::AbstractQuery, i) = getindex(aquery.result, i)
 getindex(analyte::AnalyteSP, i) = getindex(analyte.compounds, i)
 
 view(project::Project, i) = view(project.analytes, i)
-view(aquery::Query, i) = view(aquery.result, i)
+view(aquery::AbstractQuery, i) = view(aquery.result, i)
 view(analyte::AnalyteSP, i) = view(analyte.compounds, i)
 
 firstindex(project::Project) = firstindex(project.analytes)
-firstindex(aquery::Query) = firstindex(aquery.result)
+firstindex(aquery::AbstractQuery) = firstindex(aquery.result)
 firstindex(analyte::AnalyteSP) = firstindex(analyte.compounds)
 
 lastindex(project::Project) = lastindex(project.analytes)
-lastindex(aquery::Query) = lastindex(aquery.result)
+lastindex(aquery::AbstractQuery) = lastindex(aquery.result)
 lastindex(analyte::AnalyteSP) = lastindex(analyte.compounds)
 
 sort(project::Project; kwargs...) = sort!(deepcopy(project); kwargs...)
 sort!(project::Project; kwargs...) = sort!(project.analytes; kwargs...)
-sort(aquery::Query; kwargs...) = sort!(copy_wo_project(aquery); kwargs...)
-sort!(aquery::Query; kwargs...) = sort!(aquery.result; kwargs...)
+sort(aquery::AbstractQuery; kwargs...) = sort!(copy_wo_project(aquery); kwargs...)
+sort!(aquery::AbstractQuery; kwargs...) = sort!(aquery.result; kwargs...)
 sort(analyte::AnalyteSP; kwargs...) = sort!(copy_wo_project(analyte); kwargs...)
 sort!(analyte::AnalyteSP; kwargs...) = sort!(analyte.compounds; kwargs...)
 
@@ -58,8 +58,7 @@ deleteat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analytes), parentindices(analytes)[1][del])
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analytes), parentindices(analytes)[1][del])
 
-
-function delete!(aquery::Query, target::Symbol) 
+function delete!(aquery::AbstractQuery, target::Symbol) 
     delete!(aquery.project, target; analytes = query.result)
     aquery.view ? (printstyled("Please re-query to get the correct result\n"; bold = true, color = :red); aquery.project) : aquery
 end
@@ -76,13 +75,13 @@ function delete!(project::Project, target::Symbol; analytes = project.analytes)
 end
 
 keys(project::Project) = LinearIndices(project.analytes)
-keys(aquery::Query) = LinearIndices(aquery.result)
+keys(aquery::AbstractQuery) = LinearIndices(aquery.result)
 keys(analyte::AnalyteSP) = LinearIndices(analyte.compounds)
 
 reverse(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(deepcopy(project), start, stop)
 reverse!(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(project.analytes, start, stop)
-reverse(aquery::Query, start::Int = 1, stop::Int = length(aquery)) = reverse!(copy_wo_project(aquery), start, stop)
-reverse!(aquery::Query, start::Int = 1, stop::Int = length(aquery)) = reverse!(aquery.result, start, stop)
+reverse(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = reverse!(copy_wo_project(aquery), start, stop)
+reverse!(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = reverse!(aquery.result, start, stop)
 reverse(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reverse!(copy_wo_project(analyte), start, stop)
 reverse!(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reverse!(analyte.compounds, start, stop)
 
@@ -172,6 +171,8 @@ function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 
     analyte1.states = min.(analyte1.states, states2)
     analyte1
 end
+
+getproperty(reuseable::ReUseable, sym::Symbol) = sym == :query ? getfield(reuseable, :query) : getfield(getfield(reuseable, :query), sym)
 
 # variant of interface
 function iscomponent(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
@@ -264,6 +265,10 @@ ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(ch
 copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.sum, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
 copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), deepcopy(analyte.scores), analyte.manual_check)
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
+reuse_copy(aquery::Query) = Query(aquery.project, reuse_copy(aquery.result), deepcopy(aquery.query), true)
+reuse_copy(v::Vector) = copy(v)
+reuse_copy(v::T) where {T <: SubArray} = T(parent(v), v.indices, v.offset1, v.stride1)
+
 
 equivalent_in(ion, collection) = any(equivalent(ion, x) for x in collection)
 function equivalent(ion1::Ion{<: Pos, <: LCB}, ion2::Ion{<: Pos, <: LCB})

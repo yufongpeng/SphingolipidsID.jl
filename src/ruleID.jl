@@ -1,6 +1,6 @@
 # ==================================================================================
 # Rule-based ID
-apply_rules!(aquery::Query; match_mode::Symbol = :both, kwargs...) = (apply_rules!(aquery.project; match_mode, analytes = aquery.result, kwargs...); aquery)
+apply_rules!(aquery::AbstractQuery; match_mode::Symbol = :both, kwargs...) = (apply_rules!(aquery.project; match_mode, analytes = aquery.result, kwargs...); aquery)
 function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = project.analytes, 
                         class_mode::Symbol = :default, 
                         chain_mode::Symbol = :isf, 

@@ -1,5 +1,5 @@
 generate_mrm(project::Project, adduct, product, polarity::Bool; kwargs...) = generate_mrm(project.analytes, adduct, product, polarity; kwargs..., anion = project.anion)
-generate_mrm(aquery::Query, adduct, product, polarity::Bool; kwargs...) = generate_mrm(aquery.result, adduct, product, polarity; kwargs..., anion = aquery.project.anion)
+generate_mrm(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...) = generate_mrm(aquery.result, adduct, product, polarity; kwargs..., anion = aquery.project.anion)
 generate_mrm(adduct, product, polarity::Bool, pq::Union{Project, Query}; kwargs...) = generate_mrm(pq, adduct, product, polarity; kwargs...)
 
 function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool; 

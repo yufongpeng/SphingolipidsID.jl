@@ -155,6 +155,7 @@ function Base.show(io::IO, pj::Project)
     end
 end
 
+Base.show(io::IO, reuseable::ReUseable) = Base.show(io, reuseable.query)
 function Base.show(io::IO, aquery::Query)
     print(io, "Query with ", length(aquery), " analytes: \n")
     print(io, "∘ Queries: ")

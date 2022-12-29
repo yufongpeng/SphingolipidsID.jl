@@ -1,4 +1,4 @@
-preis(anion = :acetate) = Project(AnalyteSP[], Data[], anion, 1)
+preis(anion = :acetate) = Project(AnalyteSP[], Data[], anion, Dictionary{ClassSP, Vector{Int}}(), 1, Dictionary{Symbol, Any}())
 preis(
         featuretable, 
         mz_range,
@@ -10,7 +10,7 @@ preis(
         anion = :acetate,
         data = -1,
         additional = Dict()
-    ) = preis!(Project(AnalyteSP[], Data[], anion, 1), deepcopy(featuretable), mz_range, polarity; db, db_product, mz_tol, rt_tol, data, additional)
+    ) = preis!(Project(AnalyteSP[], Data[], anion, Dictionary{ClassSP, Vector{Int}}(), 1, Dictionary{Symbol, Any}()), deepcopy(featuretable), mz_range, polarity; db, db_product, mz_tol, rt_tol, data, additional)
 
 preis(
         project::Project,

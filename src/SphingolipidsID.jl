@@ -1,6 +1,6 @@
 module SphingolipidsID
 
-using CSV, MLStyle, Statistics, PrettyTables, DataPipes, SplitApplyCombine, TypedTables, Clustering, Plots, GLM, AnovaGLM
+using CSV, MLStyle, Statistics, PrettyTables, DataPipes, SplitApplyCombine, TypedTables, Dictionaries, Clustering, Plots, GLM, AnovaGLM
 export plotlyjs, gr
 using DataFrames: DataFrame, groupby, combine, All
 using UnitfulMoles: parse_compound, ustrip, @u_str
@@ -47,16 +47,18 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         nfrags, @score, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!, 
         normalized_sig_diff, abs_sig_diff, 
         # Query
-        query, not, cpd, lcb, acyl, acylα, acylβ,
+        query, not, cpd, lcb, acyl, acylα, acylβ, reuse,
         # Data output: MRM
         generate_mrm, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm, 
         # Utils
-        new_project, mw, mz, cluster_ion!, set_cluster_class!, apply_cluster!, assign_parent!, assign_isf_parent!
+        new_project, mw, mz, class, lcbs, acyls, chains, sumcomps, rt, assign_parent!, assign_isf_parent!, 
+        generate_clusters!, analytes2clusters!, select_clusters!, model_clusters!, compare_models, @model, generate_clusters_prediction!, 
+        expand_clusters!, update_clusters!, replace_clusters!, show_clusters, apply_clusters!,
         # Plots
-        plot_rt_mz1
+        plot_rt_mw
 
 import Base: show, print, isless, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!, 
-            union, union!, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!
+            union, union!, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy
 
 const SPDB = Dict{Symbol, Any}()
 const ISOMER = Dict{Type, Tuple}()
@@ -420,15 +422,22 @@ end
 struct Project
     analytes::Vector{AnalyteSP}
     data::Vector{Data}
-    anion
+    anion::Symbol
+    clusters::Dictionary
     alignment::Int
+    appendix::Dictionary
 end
 
-mutable struct Query
+abstract type AbstractQuery end
+mutable struct Query <: AbstractQuery
     project::Project
     result::AbstractVector
     query::Vector
     view::Bool
+end
+
+struct ReUseable <: AbstractQuery
+    query::Query
 end
 
 struct Inv
