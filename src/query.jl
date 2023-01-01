@@ -17,10 +17,10 @@ reuse(aquery::Query) = ReUseable(aquery)
 query(qq, reuseable::ReUseable; kwargs...) = query(reuseable, qq; kwargs...)
 query(reuseable::ReUseable, qq; kwargs...) = query(reuse_copy(reuseable.query), qq; kwargs...)
 
-function query(aquery::Query, qq::Pair{Symbol, <: Any}; view = aquery.view, fn = identity)
+function query(aquery::Query, qq::Pair{Symbol, <: Any}; view = aquery.view, fn = identity, kwargs...)
     @match qq.first begin
-        :topscore   => return finish_query!(aquery, qq.first, qq.second, fn, query_score(aquery, qq.second), view)
-        :topsc      => return finish_query!(aquery, qq.first, qq.second, fn, query_score(aquery, qq.second), view)
+        :topscore   => return finish_query!(aquery, qq.first, qq.second, fn, query_score(aquery, qq.second; kwargs...), view)
+        :topsc      => return finish_query!(aquery, qq.first, qq.second, fn, query_score(aquery, qq.second; kwargs...), view)
         _           => nothing
     end
     qf = @match qq.first begin
@@ -33,66 +33,72 @@ function query(aquery::Query, qq::Pair{Symbol, <: Any}; view = aquery.view, fn =
 end
 
 function query(aquery::Query, qq::Type{<: ClassSP}; view = aquery.view, fn = identity)
-    qf(cpd) = fn(
-        isa(cpd.class, qq) || 
-        hasisomer(cpd.class) && 
-        any(isa(isomer, qq) for isomer in cpd.class.isomer)
+    qf(analyte) = fn(
+        isa(class(analyte), qq) || 
+        hasisomer(class(analyte)) && 
+        any(isa(isomer, qq) for isomer in class(analyte).isomer)
     )
-    finish_query!(aquery, :class, qq, fn, findall(qf, last.(aquery)), view)
+    finish_query!(aquery, :class, qq, fn, findall(qf, aquery), view)
 end
 
 function query(aquery::Query, qq::Lcb; view = aquery.view, fn = identity)
     match = convert_type(LCB, qq)
-    qf(cpd) = fn(!isnothing(cpd.chain) && isa(cpd.chain.lcb, match))
-    finish_query!(aquery, :lcb, qq, fn, findall(qf, last.(aquery)), view)
+    qf(analyte) = fn(!isnothing(_chain(analyte)) && isa(_lcb(analyte), match))
+    finish_query!(aquery, :lcb, qq, fn, findall(qf, aquery), view)
 end
 
 function query(aquery::Query, qq::NACYL; view = aquery.view, fn = identity)
     match = convert_type(ACYL, qq)
-    qf(cpd) = fn(
-        !isnothing(cpd.chain) && 
-        isa(cpd.chain.acyl, match) && 
-        all((cpd.sum .- sumcomp(cpd.chain.lcb)) .== (qq.cb, qq.db, qq.ox))
+    qf(analyte) = fn(
+        !isnothing(_chain(analyte)) && 
+        isa(_acyl(analyte), match) && 
+        all((sumcomp(analyte) .- sumcomp(_lcb(analyte))) .== (qq.cb, qq.db, qq.ox))
     )
-    finish_query!(aquery, :acyl, qq, fn, findall(qf, last.(aquery)), view)
+    finish_query!(aquery, :acyl, qq, fn, findall(qf, aquery), view)
 end
 
 function query(aquery::Query, qq::Type{<: LCB}; view = aquery.view, fn = identity)
-    qf(cpd) = fn(!isnothing(cpd.chain) && isa(cpd.chain.lcb, qq))
-    finish_query!(aquery, :lcb, qq, fn, findall(qf, last.(aquery)), view)
+    qf(analyte) = fn(!isnothing(_chain(analyte)) && isa(_lcb(analyte), qq))
+    finish_query!(aquery, :lcb, qq, fn, findall(qf, aquery), view)
 end
 
 function query(aquery::Query, qq::CompoundID; view = aquery.view, fn = identity)
     match = convert_internal(qq)
     qf, sym = @match match begin
-        (::Type{Nothing}, sum, ::Type{Nothing}, ::Type{Nothing})    => (cpd -> (==(cpd.sum, sum)), :sum)
-        (::Type{Nothing}, sum, lcb, acyl)                           => (cpd -> (==(cpd.sum, sum) && 
-                                                                                !isnothing(cpd.chain) && 
-                                                                                isa(cpd.chain.lcb, lcb)) && 
-                                                                                isa(cpd.chain.acyl, acyl), 
+        (::Type{Nothing}, sum, ::Type{Nothing}, ::Type{Nothing})    => (analyte -> (==(sumcomp(analyte), sum)), :sum)
+        (::Type{Nothing}, sum, lcb, acyl)                           => (analyte -> (==(sumcomp(analyte), sum) && 
+                                                                                !isnothing(_chain(analyte)) && 
+                                                                                isa(_lcb(analyte), lcb)) && 
+                                                                                isa(_acyl(analyte), acyl), 
                                                                         :chain)
-        (class, sum, ::Type{Nothing}, ::Type{Nothing})              => (cpd -> (isa(cpd.class, class) && ==(cpd.sum, sum)), :cpd)
-        (class, sum, lcb, acyl)                                     => (cpd -> (isa(cpd.class, class) &&
-                                                                                ==(cpd.sum, sum) && 
-                                                                                !isnothing(cpd.chain) && 
-                                                                                isa(cpd.chain.lcb, lcb)) && 
-                                                                                isa(cpd.chain.acyl, acyl),
+        (cls, sum, ::Type{Nothing}, ::Type{Nothing})                => (analyte -> (isa(class(analyte), cls) && ==(sumcomp(analyte), sum)), :cpd)
+        (cls, sum, lcb, acyl)                                       => (analyte -> (isa(class(analyte), cls) &&
+                                                                                ==(sumcomp(analyte), sum) && 
+                                                                                !isnothing(_chain(analyte)) && 
+                                                                                isa(_lcb(analyte), lcb)) && 
+                                                                                isa(_acyl(analyte), acyl),
                                                                         :cpd)
     end
-    finish_query!(aquery, sym, qq, fn, findall(fn ∘ qf, last.(aquery)), view)
+    finish_query!(aquery, sym, qq, fn, findall(fn ∘ qf, aquery), view)
 end
 
 function query(aquery::Query, qq::Symbol; view = aquery.view, fn = identity)
     qf = @match qq begin
-        :class  => analyte -> ==(analyte.states[1], 1)
-        :chain  => analyte -> ==(analyte.states[2], 1)
-        :rt     => analyte -> ==(analyte.states[3], 1)
-        :class_ => analyte -> ==(analyte.states[1], 0)
-        :chain_ => analyte -> ==(analyte.states[2], 0)
-        :rt_    => analyte -> ==(analyte.states[3], 0)
-        :class! => analyte -> ==(analyte.states[1], -1)
-        :chain! => analyte -> ==(analyte.states[2], -1)
-        :rt!    => analyte -> ==(analyte.states[3], -1)
+        :class  => analyte -> ==(analyte.states[states_id(:class)], 1)
+        :chain  => analyte -> ==(analyte.states[states_id(:chain)], 1)
+        :rt     => analyte -> ==(analyte.states[states_id(:rt)], 1)
+        :error  => analyte -> ==(analyte.states[states_id(:error)], 1)
+        :isf    => analyte -> ==(analyte.states[states_id(:isf)], 1)
+        :class_ => analyte -> ==(analyte.states[states_id(:class)], 0)
+        :chain_ => analyte -> ==(analyte.states[states_id(:chain)], 0)
+        :rt_    => analyte -> ==(analyte.states[states_id(:rt)], 0)
+        :error_ => analyte -> ==(analyte.states[states_id(:error)], 0)
+        :isf_   => analyte -> ==(analyte.states[states_id(:isf)], 0)
+        :class! => analyte -> ==(analyte.states[states_id(:class)], -1)
+        :chain! => analyte -> ==(analyte.states[states_id(:chain)], -1)
+        :rt!    => analyte -> ==(analyte.states[states_id(:rt)], -1)
+        :error! => analyte -> ==(analyte.states[states_id(:error)], -1)
+        :isf!   => analyte -> ==(analyte.states[states_id(:isf)], -1)
         :all    => analyte -> all(==(1), analyte.states)
     end
     finish_query!(aquery, :id, qq, fn, findall(fn ∘ qf, aquery.result), view)
@@ -151,32 +157,30 @@ abs_sig_diff(Δ) =
 
 _abs_sig_diff(global_scores, local_scores, prev_score, current_score, Δ) = (prev_score - current_score) < Δ
 
-function query_score(aquery::Query, topN = 0.5; is_wild_card = normalized_sig_diff(0.1))
+function query_score(aquery::Query, topN = 0.5; is_wild_card = normalized_sig_diff(0.1), score_fn = x -> mean(filter(!isnan, x)))
     analytes = aquery.result
     # no isomer => has isomer
     id1 = Int[]
     id2 = Int[]
     for (i, analyte) in enumerate(analytes)
-        (hasisomer(last(analyte).class) || hasisomer(last(analyte).chain)) ? push!(id2, i) : push!(id1, i)
+        (hasisomer(class(analyte)) || hasisomer(_chain(analyte))) ? push!(id2, i) : push!(id1, i)
     end
     dict = Dict{Tuple{<: ClassSP, NTuple{3, Int}, <: Union{Chain, Nothing}}, Vector{Tuple{Float64, Int}}}()
 
     for id in id1
-        cpd = last(analytes[id])
-        push!(get!(dict, (cpd.class, cpd.sum, cpd.chain), Tuple{Float64, Int}[]), (mean(filter(!isnan, analytes[id].scores)), id))
+        push!(get!(dict, (class(analytes[id]), sumcomp(analytes[id]), _chain(analytes[id])), Tuple{Float64, Int}[]), (score_fn(analytes[id].scores), id))
     end
 
     for id in id2
-        sc = mean(filter(!isnan, analytes[id].scores))
-        cpd = last(analytes[id])
+        sc = score_fn(analytes[id].scores)
         pushed = false
         for (ky, vl) in dict
-            cpd.sum == ky[2] || continue
-            (hasisomer(cpd.class) ? in(ky[1], cpd.class.isomer) : ==(ky[1], cpd.class)) || continue
-            (isnothing(cpd.chain) || nhydroxyl(cpd.chain.acyl) == nhydroxyl(ky[3].acyl)) && 
+            sumcomp(analytes[id]) == ky[2] || continue
+            (hasisomer(class(analytes[id])) ? in(ky[1], class(analytes[id]).isomer) : ==(ky[1], class(analytes[id]))) || continue
+            (isnothing(_chain(analytes[id])) || nhydroxyl(_acyl(analytes[id])) == nhydroxyl(ky[3].acyl)) && 
                 (pushed = true; push!(vl, (sc, id)))
         end
-        pushed || push!(dict, (cpd.class, cpd.sum, cpd.chain) => [(sc, id)])
+        pushed || push!(dict, (class(analytes[id]), sumcomp(analytes[id]), _chain(analytes[id])) => [(sc, id)])
     end
     final = Int[] 
     len = topN >= 1 ? (vl -> topN) : (vl -> max(1, round(Int, length(vl) * topN * (1 + eps(Float64)))))

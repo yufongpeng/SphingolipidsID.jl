@@ -44,14 +44,14 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # ID
         apply_rules!, id_product, 
         # Score
-        nfrags, @score, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!, 
+        nfrags, @cpdscore, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!, 
         normalized_sig_diff, abs_sig_diff, 
         # Query
         query, not, cpd, lcb, acyl, acylα, acylβ, reuse,
         # Data output: MRM
         generate_mrm, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm, 
         # Utils
-        new_project, mw, mz, class, lcbs, acyls, chains, sumcomps, rt, assign_parent!, assign_isf_parent!, 
+        new_project, mw, mz, class, chain, sumcomps, rt, assign_parent!, assign_isf_parent!, 
         generate_clusters!, analytes2clusters!, select_clusters!, model_clusters!, compare_models, @model, generate_clusters_prediction!, 
         expand_clusters!, update_clusters!, replace_clusters!, show_clusters, apply_clusters!,
         # Plots
@@ -321,7 +321,7 @@ mutable struct AnalyteSP
     compounds::Vector{CompoundSP}
     rt::Float64
     states::Vector{Int}
-    scores::Tuple{Float64, Float64}
+    scores::Vector{Float64}
     manual_check::Int
 end
 # ==()

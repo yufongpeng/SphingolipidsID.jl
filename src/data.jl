@@ -211,7 +211,7 @@ function CompoundSP(project::Project, cpd, product, source, id, area)
     )
 end
 
-AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64, states::Vector{Int}) = AnalyteSP(compounds, rt, states, (NaN, NaN), 0)
+AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64) = AnalyteSP(compounds, rt, repeat([0], 5), repeat([0.0], 5), 0)
 
 function id_product(ms2, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG], mz_tol = 0.35)
     products = Ion[]

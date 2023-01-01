@@ -56,22 +56,16 @@ function select_clusters!(project::Project; by = identity, new = false, kwargs..
     project
 end
 
-find__ =  @λ begin
-    Expr(head, args...) => any(find__, args)
-    :__                 => true
+find_tbl =  @λ begin
+    Expr(head, args...) => any(find_tbl, args)
+    :tbl                => true
     _                   => false
-end
-
-replace__ = @λ begin
-    Expr(head, args...) => Expr(head, map(replace__, args)...)
-    :__                 => :tbl
-    _                   => x
 end
 
 macro model()
     return quote identity end
 end
-model_fn(expr) = expr == QuoteNode(:default) ? :identity : Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), find__(expr) ? replace__(expr) : Expr(expr.head, push!(expr.args, :tbl)...)))
+model_fn(expr) = expr == QuoteNode(:default) ? :identity : Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), find_tbl(expr) ? expr : Expr(expr.head, push!(expr.args, :tbl)...)))
 macro model(expr)
     return quote $(model_fn(expr)) end
 end
@@ -114,7 +108,6 @@ end
 
 function generate_clusters_prediction!(project::Project; replaces...)
     replaces = @p pairs(Dictionary(replaces)) map(eval(first(_))() => last(_)()) filter(in(last(_), project.appendix[:clusters_model].mf.schema.schema[Term(:cluster)].contrasts.levels))
-    println(replaces)
     function fn(model, analyte::AnalyteSP, rt_tol)
         cluster = replace!(ClassSP[deisomerized(class(analyte))], replaces...)[1]
         in(cluster, model.mf.schema.schema[Term(:cluster)].contrasts.levels) ? 
@@ -158,7 +151,7 @@ apply_clusters!(aquery::AbstractQuery; kwargs...) = (apply_clusters!(aquery.proj
 function apply_clusters!(project::Project; analytes = project.analytes)
     for (i, analyte) in enumerate(analytes)
         cls = deisomerized(class(analyte))
-        analyte.states[3] = in(cls, keys(project.clusters)) ? (in((first ∘ parentindices)(analytes)[i], project.clusters[cls]) ? 1 : -1) : 0
+        analyte.states[states_id(:rt)] = in(cls, keys(project.clusters)) ? (in((first ∘ parentindices)(analytes)[i], project.clusters[cls]) ? 1 : -1) : 0
     end
     project
 end

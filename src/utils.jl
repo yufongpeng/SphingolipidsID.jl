@@ -210,30 +210,40 @@ class(analyte::AnalyteSP) = class(last(analyte))
 class(cpd::CompoundSP) = cpd.class
 sumcomp(analyte::AnalyteSP) = sumcomp(last(analyte))
 sumcomp(cpd::CompoundSP) = cpd.sum
-chain(analyte::AnalyteSP) = chain(last(analyte))
-chain(cpd::CompoundSP) = cpd.chain
-lcb(analyte::AnalyteSP) = lcb(last(analyte))
-lcb(cpd::CompoundSP) = lcb(cpd.chain)
-lcb(chain::Chain) = chain.lcb
-lcb(::Nothing) = nothing
-acyl(analyte::AnalyteSP) = acyl(last(analyte))
-acyl(cpd::CompoundSP) = acyl(cpd.chain)
-acyl(chain::Chain) = chain.acyl
-acyl(::Nothing) = nothing
+_chain(analyte::AnalyteSP) = _chain(last(analyte))
+_chain(cpd::CompoundSP) = cpd.chain
+_lcb(analyte::AnalyteSP) = _lcb(last(analyte))
+_lcb(cpd::CompoundSP) = _lcb(cpd.chain)
+_lcb(chain::Chain) = chain.lcb
+_lcb(::Nothing) = nothing
+_acyl(analyte::AnalyteSP) = _acyl(last(analyte))
+_acyl(cpd::CompoundSP) = _acyl(cpd.chain)
+_acyl(chain::Chain) = chain.acyl
+_acyl(::Nothing) = nothing
 rt(analyte::AnalyteSP) = analyte.rt
 
-lcbs = lcb
-acyls(analyte::AnalyteSP) = acyls(last(analyte))
-acyls(::Nothing) = nothing
-function acyls(cpd::CompoundSP) 
+lcb(analyte::AnalyteSP) = _lcb(last(analyte))
+lcb(cpd::CompoundSP) = _lcb(cpd.chain)
+lcb(chain::Chain) = chain.lcb
+acyl(analyte::AnalyteSP) = acyl(last(analyte))
+acyl(::Nothing) = nothing
+function acyl(cpd::CompoundSP) 
     spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
     string("Acyl ", cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
 end
-chains(analyte::AnalyteSP) = chains(last(analyte))
-chains(::Nothing) = nothing
-function chains(cpd::CompoundSP) 
+chain(analyte::AnalyteSP) = chain(last(analyte))
+chain(::Nothing) = nothing
+function chain(cpd::CompoundSP) 
     spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
     string(spb_c, ":", spb_db, ";", "O", spb_o > 1 ? spb_o : "", "/", cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
 end
 sumcomps(analyte::AnalyteSP) = sumcomps(last(analyte))
 sumcomps(cpd::CompoundSP) = string(cpd.sum[1], ":", cpd.sum[2], ";", "O", cpd.sum[3] > 1 ? cpd.sum[3] : "")
+
+states_id = @λ begin
+    :class  => 1
+    :chain  => 2
+    :rt     => 3
+    :error  => 4
+    :isf    => 5
+end

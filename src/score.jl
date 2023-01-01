@@ -1,6 +1,6 @@
 SPDB[:SCORE] = Dict{NamedTuple, Function}()
 
-macro score(targetconvert, weight, objective)
+macro cpdscore(targetconvert, weight, objective)
     target, converter = @match targetconvert begin
         :class                                  => (:class, :first)   
         :chain                                  => (:chain, :last)   
@@ -22,56 +22,44 @@ macro score(targetconvert, weight, objective)
     #threshold = Expr(threshold.head, threshold.args[1], :x, threshold.args[3])
     return quote
         transform_score(dict) = $objective
-        transform_score_v(dict) = @match $parameters.target begin
-            :class => (transform_score(dict), NaN) 
-            :chain => (NaN, transform_score(dict)) 
-            :both  => (transform_score(dict), transform_score(dict)) 
-        end
-        function score_fn(analyte::AnalyteSP)
+        function score_fn!(analyte::AnalyteSP)
             dict = Dict{Int, Float64}()
+            id = @match $parameters.target begin
+                :class => states_id(:class)
+                :chain => states_id(:chain)
+                :both  => [states_id(:class), states_id(:chain)]
+            end
             for cpd in analyte
                 uw = $converter(cpd.states)
                 dict[uw] = get!(dict, uw, 0) + $weight(analyte, cpd)
             end
-            transform_score_v(dict)
+            setindex!(analyte.scores, transform_score(dict), id)
         end
-        push!(SPDB[:SCORE], $parameters => score_fn)
+        push!(SPDB[:SCORE], $parameters => score_fn!)
         SPDB[:SCORE][$parameters]
     end
 end
 
 apply_score!(object, fn::T; kwargs...) where T <: Function = apply_score!(fn, object; kwargs...)
-apply_score!(score_fn::T, aquery::AbstractQuery) where T <: Function = (apply_score!(score_fn, aquery.project; analytes = aquery.result); aquery)
-function apply_score!(score_fn::T, project::Project; analytes = project.analytes) where T <: Function
+apply_score!(score_fn!::T, aquery::AbstractQuery) where T <: Function = (apply_score!(score_fn!, aquery.project; analytes = aquery.result); aquery)
+function apply_score!(score_fn!::T, project::Project; analytes = project.analytes) where T <: Function
     printstyled("Score> ", color = :green, bold = true)
-    print(score_fn, "\n")
-    for analyte in analytes
-        apply_score!(score_fn, analyte)
-    end
+    print(score_fn!, "\n")
+    @p analytes foreach(apply_score!(score_fn!, _))
     project
 end
 apply_threshold!(object, fn::T; kwargs...) where T <: Function = apply_threshold!(fn, object; kwargs...)
-apply_threshold!(thresh_fn::T, aquery::AbstractQuery) where T <: Function = (apply_threshold!(thresh_fn, aquery.project; analytes = aquery.result); aquery)
-function apply_threshold!(thresh_fn::T, project::Project; analytes = project.analytes) where T <: Function
+apply_threshold!(target, thresh_fn::T, aquery::AbstractQuery) where T <: Function = (apply_threshold!(target, thresh_fn, aquery.project; analytes = aquery.result); aquery)
+function apply_threshold!(target, thresh_fn::T, project::Project; analytes = project.analytes) where T <: Function
     printstyled("Threshold> ", color = :green, bold = true)
     print(thresh_fn, "\n")
-    for analyte in analytes
-        apply_threshold!(thresh_fn, analyte)
-    end
+    @p analytes foreach(apply_threshold!(target, thresh_fn, _))
     project
 end
 
-apply_score(score_fn::T, analyte::AnalyteSP) where T <: Function = score_fn(analyte)
-apply_score!(score_fn::T, analyte::AnalyteSP) where T <: Function = (analyte.scores = score_fn(analyte)) 
-apply_threshold(thresh_fn, analyte::AnalyteSP) = thresh_fn(analyte)
-function apply_threshold!(thresh_fn, analyte::AnalyteSP)
-    id = @match analyte.scores begin
-            (x, x) && if isnan(x) end   => 1:0     
-            (_, x) && if isnan(x) end   => 1:1       
-            (x, _) && if isnan(x) end   => 2:2
-            (_, _)          => 1:2
-    end
-    map(id) do i
+apply_score!(score_fn!::T, analyte::AnalyteSP) where T <: Function = score_fn!(analyte) 
+function apply_threshold!(target, thresh_fn::T, analyte::AnalyteSP) where T <: Function
+    map(states_id.(vectorize(target))) do i
         r = thresh_fn(analyte.scores[i])
         r || (analyte.states[i] = -1)
         r

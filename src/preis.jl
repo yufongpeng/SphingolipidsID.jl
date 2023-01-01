@@ -176,7 +176,7 @@ function preis!(
             subanalytes = @views [analyte for analyte in project if abs(analyte.rt - rt) <= rt_tol]
             if isempty(subanalytes) 
                 for cpd in current_cpd
-                    push!(project, AnalyteSP([cpd], rt, [0, 0, 0, 0, 0]))
+                    push!(project, AnalyteSP([cpd], rt))
                 end
                 continue
             end
@@ -201,7 +201,7 @@ function preis!(
                         end
                         pushed && continue
                         if length(connected_id) < length(analyte)
-                            push!(project, AnalyteSP(copy_wo_project.(analyte[connected_id]), analyte.rt, [0, 0, 0, 0, 0]))
+                            push!(project, AnalyteSP(copy_wo_project.(analyte[connected_id]), analyte.rt))
                             analyte = last(project)
                         end
                         push!(analyte, copy_wo_project(cpd))
@@ -222,7 +222,7 @@ function preis!(
                         analyte.rt = calc_rt(analyte)
                     end
                 end
-                agg || push!(project, AnalyteSP([cpd], rt, [0, 0, 0, 0, 0]))
+                agg || push!(project, AnalyteSP([cpd], rt))
             end
         end
     end
@@ -260,22 +260,20 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
             cpd.area[1] < area_error[1] && continue
             cpd.area[2] > err_tol && continue
             any(iscompatible(last(a), cpd) for a in project if abs(a.rt - analyte.rt) <= rt_tol) && continue            
-            push!(project, AnalyteSP(copy_wo_project.(analyte[1:i]), analyte.rt, [0, 0, 0, 0, 0]))
+            push!(project, AnalyteSP(copy_wo_project.(analyte[1:i]), analyte.rt))
             last(project).rt = calc_rt(last(project))
             break
         end
-        analyte.states[4] = area_error[2] > err_tol ? 1 : -1        
-        analyte.states[5] = any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), last(analyte).fragments.ion1) ? -1 : 1
+        analyte.states[states_id(:error)] = area_error[2] > err_tol ? -1 : 1        
+        analyte.states[states_id(:isf)] = any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), last(analyte).fragments.ion1) ? 1 : -1
     end
     unique!(del)
     deleteat!(project, del)
     del = Int[]
     for (i, analyte) in enumerate(project)
-        analyte.states[5] > 0 || continue
-        cpd1 = last(analyte)
+        analyte.states[states_id(:isf)] < 0 || continue
         todel = any(@view project[setdiff(eachindex(project), i)]) do a
-            cpd2 = last(a)
-            isclasscompatible(cpd1.class, cpd2.class) && ischaincompatible(cpd1.chain, cpd2.chain)
+            isclasscompatible(class(analyte), class(a)) && ischaincompatible(_chain(analyte), _chain(a))
         end
         todel && push!(del, i)
     end

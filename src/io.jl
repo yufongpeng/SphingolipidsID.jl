@@ -67,9 +67,14 @@ function Base.show(io::IO, cpd::CompoundID{C}) where C
     end
 end
 
+states_color = @λ begin
+    1  => "🟢"
+    0  => "🟡"
+    -1 => "🔴"
+end
+
 function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
-    class = cpd.states[1] == 1 ? "🟢" : cpd.states[1] == -1 ? "🔴" : "🟡" 
-    chain = cpd.states[2] == 1 ? "🟢"  : cpd.states[2] == -1 ? "🔴" : "🟡"
+    class, chain = states_color.(analyte.states)
     print(io, "Compound with ", size(cpd.fragments, 1), " fragments ($class,$chain):")
     print(io, "\n∘ ID: ")
     show(io, MIME"text/plain"(), cpd.class)
@@ -98,12 +103,13 @@ function Base.show(io::IO, cpd::CompoundSP)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
-    class = analyte.states[1] == 1 ? "🟢" : analyte.states[1] == -1 ? "🔴" : "🟡" 
-    chain = analyte.states[2] == 1 ? "🟢"  : analyte.states[2] == -1 ? "🔴" : "🟡" 
-    rt = analyte.states[3] == 1 ? "🟢"  : analyte.states[3] == -1 ? "🔴" : "🟡"
-    diq = analyte.states[4] == -1 ? "🟢"  : analyte.states[4] == 1 ? "🔴" : "🟡"
-    isf = analyte.states[5] == -1 ? "🟢"  : analyte.states[5] == 1 ? "🔴" : "🟡"
-    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " ($diq,$isf;$class,$chain,$rt):")
+    sc = states_color.(analyte.states)
+    class = sc[states_id(:class)]
+    chain = sc[states_id(:chain)]
+    rt = sc[states_id(:rt)]
+    diq = sc[states_id(:error)]
+    isf = sc[states_id(:isf)]
+    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " ($class,$chain;$rt;$diq,$isf):")
     print(io, "\n∘ Score: ", analyte.scores)
     print(io, "\n∘ Compounds:")
     for cpd in analyte
@@ -115,12 +121,13 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
 end
 
 function Base.show(io::IO, analyte::AnalyteSP)
-    class = analyte.states[1] == 1 ? "🟢" : analyte.states[1] == -1 ? "🔴" : "🟡" 
-    chain = analyte.states[2] == 1 ? "🟢"  : analyte.states[2] == -1 ? "🔴" : "🟡" 
-    rt = analyte.states[3] == 1 ? "🟢"  : analyte.states[3] == -1 ? "🔴" : "🟡"
-    diq = analyte.states[4] == -1 ? "🟢"  : analyte.states[4] == 1 ? "🔴" : "🟡"
-    isf = analyte.states[5] == -1 ? "🟢"  : analyte.states[5] == 1 ? "🔴" : "🟡"
-    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " ($diq,$isf;$class,$chain,$rt)")
+    sc = states_color.(analyte.states)
+    class = sc[states_id(:class)]
+    chain = sc[states_id(:chain)]
+    rt = sc[states_id(:rt)]
+    diq = sc[states_id(:error)]
+    isf = sc[states_id(:isf)]
+    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " ($class,$chain;$rt;$diq,$isf)")
 end
 
 function Base.show(io::IO, data::PreIS)

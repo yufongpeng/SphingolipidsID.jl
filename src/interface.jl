@@ -64,13 +64,8 @@ function delete!(aquery::AbstractQuery, target::Symbol)
 end
 
 function delete!(project::Project, target::Symbol; analytes = project.analytes)
-    printstyled("Delete> "; color = :green, bold = true)
-    del = @match target begin
-        :class => (println("Class only"); analyte -> analyte.states[1] < 0)
-        :chain => (println("Chain only"); analyte -> analyte.states[2] < 0)
-        :both  => (println("Class and Chain"); analyte -> any(s < 0 for s in analyte.states))
-    end
-    deleteat!(analytes, findall(del, analytes))
+    printstyled("Delete> ", uppercasefirst(string(target)), "\n"; color = :green, bold = true)
+    deleteat!(analytes, findall(analyte -> analyte.states[states_id(target)] < 0, analytes))
     project
 end
 
@@ -117,7 +112,7 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
         end
         cpd1 = analyte[id]
     else
-        chain = @match (cpd1.chain.lcb, cpd2.chain.lcb) begin
+        chain = @match (_lcb(cpd1), _lcb(cpd2)) begin
             (::Tuple{<: LCB{N1, C}, <: LCB{N2, C}} where {C, N1, N2}) && if N1 > N2 end => cpd2.chain
             _                                                                           => cpd1.chain
         end
@@ -146,7 +141,7 @@ function union!(cpd1::CompoundSP, cpd2::CompoundSP)
     if isnothing(cpd1.chain)
         cpd1.chain = cpd2.chain
     else
-        cpd1.chain = @match (cpd1.chain.lcb, cpd2.chain.lcb) begin
+        cpd1.chain = @match (_lcb(cpd1), _lcb(cpd2)) begin
             (::Tuple{<: LCB{N1, C}, <: LCB{N2, C}} where {C, N1, N2}) && if N1 > N2 end => cpd2.chain
             _                                                                           => cpd1.chain
         end
@@ -169,6 +164,7 @@ function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 
     end
     sort!(analyte1, lt = isless_class)
     analyte1.states = min.(analyte1.states, states2)
+    analyte1.scores .= 0
     analyte1
 end
 
@@ -177,7 +173,7 @@ getproperty(reuseable::ReUseable, sym::Symbol) = sym == :query ? getfield(reusea
 # variant of interface
 function iscomponent(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
     no = nhydroxyl(ion)
-    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || cpd1.chain.lcb == ion.molecule)
+    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || _lcb(cpd1) == ion.molecule)
 end
 iscomponent(cpd1::CompoundSP, ion::Ion{S, <: ACYL}) where S = iscompatible(cpd1, ion)
 iscomponent(cpd1::CompoundSP, ::Ion{S, NeuAc}) where S = isa(cpd1.class, CLS.fg.nana)
@@ -222,13 +218,13 @@ iscompatible(cpd1::CompoundSP, ion::Ion{S, <: ClassSP}) where S =
 function iscompatible(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
     no = nhydroxyl(ion)
     cpd1.sum[3] >= no && (isnothing(cpd1.chain) || 
-        nhydroxyl(cpd1.chain.lcb) >= no && ischaincompatible(cpd1.chain.lcb, ion.molecule))
+        nhydroxyl(_lcb(cpd1)) >= no && ischaincompatible(_lcb(cpd1), ion.molecule))
 end
 
 function iscompatible(cpd1::CompoundSP, ion::Ion{S, <: ACYL}) where S 
     no = nhydroxyl(ion)
     cpd1.sum[3] >= no && (isnothing(cpd1.chain) || 
-        nhydroxyl(cpd1.chain.acyl) == no)
+        nhydroxyl(_acyl(cpd1)) == no)
 end
 
 isclasscompatible(cls1::ClassSP, cls2::ClassSP) = cls1 == cls2 || begin
