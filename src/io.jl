@@ -50,7 +50,7 @@ end
 
 fragment_table(cpd) = map(cpd.fragments) do row
     s = query_raw(cpd.project, row.source, row.id)
-    mz2 = in(:mz2, propertynames(s)) ? cpd.project.data[row.source].mz2[s.mz2] : cpd.project.data[row.source].mz2[s.scan]
+    mz2 = cpd.project.data[row.source].mz2[s.mz2_id]
     mode = isa(cpd.project.data[row.source], PreIS) ? "PreIS" : "MRM"
     (ion1 = row.ion1, mz1 = s.mz1, ion2 = row.ion2, mz2 = mz2, area = s.area, error = s.error, CE = s.collision_energy, rt = s.rt, source = mode)
 end
@@ -67,9 +67,14 @@ function Base.show(io::IO, cpd::CompoundID{C}) where C
     end
 end
 
+states_color = @λ begin
+    1  => "🟢"
+    0  => "🟡"
+    -1 => "🔴"
+end
+
 function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
-    class = cpd.states[1] == 1 ? "🟢" : cpd.states[1] == -1 ? "🔴" : "🟡" 
-    chain = cpd.states[2] == 1 ? "🟢"  : cpd.states[2] == -1 ? "🔴" : "🟡"
+    class, chain = states_color.(analyte.states)
     print(io, "Compound with ", size(cpd.fragments, 1), " fragments ($class,$chain):")
     print(io, "\n∘ ID: ")
     show(io, MIME"text/plain"(), cpd.class)
@@ -98,9 +103,13 @@ function Base.show(io::IO, cpd::CompoundSP)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
-    class = analyte.states[1] == 1 ? "🟢" : analyte.states[1] == -1 ? "🔴" : "🟡" 
-    chain = analyte.states[2] == 1 ? "🟢"  : analyte.states[2] == -1 ? "🔴" : "🟡" 
-    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " ($class,$chain):")
+    sc = states_color.(analyte.states)
+    class = sc[states_id(:class)]
+    chain = sc[states_id(:chain)]
+    rt = sc[states_id(:rt)]
+    diq = sc[states_id(:error)]
+    isf = sc[states_id(:isf)]
+    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " ($class,$chain;$rt;$diq,$isf):")
     print(io, "\n∘ Score: ", analyte.scores)
     print(io, "\n∘ Compounds:")
     for cpd in analyte
@@ -112,9 +121,13 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
 end
 
 function Base.show(io::IO, analyte::AnalyteSP)
-    class = analyte.states[1] == 1 ? "🟢" : analyte.states[1] == -1 ? "🔴" : "🟡" 
-    chain = analyte.states[2] == 1 ? "🟢"  : analyte.states[2] == -1 ? "🔴" : "🟡" 
-    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " ($class,$chain)")
+    sc = states_color.(analyte.states)
+    class = sc[states_id(:class)]
+    chain = sc[states_id(:chain)]
+    rt = sc[states_id(:rt)]
+    diq = sc[states_id(:error)]
+    isf = sc[states_id(:isf)]
+    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " ($class,$chain;$rt;$diq,$isf)")
 end
 
 function Base.show(io::IO, data::PreIS)
@@ -149,6 +162,7 @@ function Base.show(io::IO, pj::Project)
     end
 end
 
+Base.show(io::IO, reuseable::ReUseable) = Base.show(io, reuseable.query)
 function Base.show(io::IO, aquery::Query)
     print(io, "Query with ", length(aquery), " analytes: \n")
     print(io, "∘ Queries: ")

@@ -1,36 +1,36 @@
 isempty(::ClassSP) = false
 
 length(project::Project) = length(project.analytes)
-length(aquery::Query) = length(aquery.result)
+length(aquery::AbstractQuery) = length(aquery.result)
 length(analyte::AnalyteSP) = length(analyte.compounds)
 
 iterate(project::Project) = iterate(project.analytes)
 iterate(project::Project, i) = iterate(project.analytes, i)
-iterate(aquery::Query) = iterate(aquery.result)
-iterate(aquery::Query, i) = iterate(aquery.result, i)
+iterate(aquery::AbstractQuery) = iterate(aquery.result)
+iterate(aquery::AbstractQuery, i) = iterate(aquery.result, i)
 iterate(analyte::AnalyteSP) = iterate(analyte.compounds)
 iterate(analyte::AnalyteSP, i) = iterate(analyte.compounds, i)
 
 getindex(project::Project, i) = getindex(project.analytes, i)
-getindex(aquery::Query, i) = getindex(aquery.result, i)
+getindex(aquery::AbstractQuery, i) = getindex(aquery.result, i)
 getindex(analyte::AnalyteSP, i) = getindex(analyte.compounds, i)
 
 view(project::Project, i) = view(project.analytes, i)
-view(aquery::Query, i) = view(aquery.result, i)
+view(aquery::AbstractQuery, i) = view(aquery.result, i)
 view(analyte::AnalyteSP, i) = view(analyte.compounds, i)
 
 firstindex(project::Project) = firstindex(project.analytes)
-firstindex(aquery::Query) = firstindex(aquery.result)
+firstindex(aquery::AbstractQuery) = firstindex(aquery.result)
 firstindex(analyte::AnalyteSP) = firstindex(analyte.compounds)
 
 lastindex(project::Project) = lastindex(project.analytes)
-lastindex(aquery::Query) = lastindex(aquery.result)
+lastindex(aquery::AbstractQuery) = lastindex(aquery.result)
 lastindex(analyte::AnalyteSP) = lastindex(analyte.compounds)
 
 sort(project::Project; kwargs...) = sort!(deepcopy(project); kwargs...)
 sort!(project::Project; kwargs...) = sort!(project.analytes; kwargs...)
-sort(aquery::Query; kwargs...) = sort!(copy_wo_project(aquery); kwargs...)
-sort!(aquery::Query; kwargs...) = sort!(aquery.result; kwargs...)
+sort(aquery::AbstractQuery; kwargs...) = sort!(copy_wo_project(aquery); kwargs...)
+sort!(aquery::AbstractQuery; kwargs...) = sort!(aquery.result; kwargs...)
 sort(analyte::AnalyteSP; kwargs...) = sort!(copy_wo_project(analyte); kwargs...)
 sort!(analyte::AnalyteSP; kwargs...) = sort!(analyte.compounds; kwargs...)
 
@@ -58,31 +58,25 @@ deleteat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analytes), parentindices(analytes)[1][del])
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analytes), parentindices(analytes)[1][del])
 
-
-function delete!(aquery::Query, target::Symbol) 
+function delete!(aquery::AbstractQuery, target::Symbol) 
     delete!(aquery.project, target; analytes = query.result)
     aquery.view ? (printstyled("Please re-query to get the correct result\n"; bold = true, color = :red); aquery.project) : aquery
 end
 
 function delete!(project::Project, target::Symbol; analytes = project.analytes)
-    printstyled("Delete> "; color = :green, bold = true)
-    del = @match target begin
-        :class => (println("Class only"); analyte -> analyte.states[1] < 0)
-        :chain => (println("Chain only"); analyte -> analyte.states[2] < 0)
-        :both  => (println("Class and Chain"); analyte -> any(s < 0 for s in analyte.states))
-    end
-    deleteat!(analytes, findall(del, analytes))
+    printstyled("Delete> ", uppercasefirst(string(target)), "\n"; color = :green, bold = true)
+    deleteat!(analytes, findall(analyte -> analyte.states[states_id(target)] < 0, analytes))
     project
 end
 
 keys(project::Project) = LinearIndices(project.analytes)
-keys(aquery::Query) = LinearIndices(aquery.result)
+keys(aquery::AbstractQuery) = LinearIndices(aquery.result)
 keys(analyte::AnalyteSP) = LinearIndices(analyte.compounds)
 
 reverse(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(deepcopy(project), start, stop)
 reverse!(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(project.analytes, start, stop)
-reverse(aquery::Query, start::Int = 1, stop::Int = length(aquery)) = reverse!(copy_wo_project(aquery), start, stop)
-reverse!(aquery::Query, start::Int = 1, stop::Int = length(aquery)) = reverse!(aquery.result, start, stop)
+reverse(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = reverse!(copy_wo_project(aquery), start, stop)
+reverse!(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = reverse!(aquery.result, start, stop)
 reverse(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reverse!(copy_wo_project(analyte), start, stop)
 reverse!(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reverse!(analyte.compounds, start, stop)
 
@@ -106,7 +100,7 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
     if isnothing(cpd2.chain) 
         append!(cpd1.fragments, cpd2.fragments)
         unique!(cpd1.fragments)
-        i = findmax((cpd1.area[1], cpd2.area[1]))
+        _, i = findmax((cpd1.area[1], cpd2.area[1]))
         cpd1.area = i == 1 ? cpd1.area : cpd2.area
         return cpd1
     end
@@ -118,7 +112,7 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
         end
         cpd1 = analyte[id]
     else
-        chain = @match (cpd1.chain.lcb, cpd2.chain.lcb) begin
+        chain = @match (_lcb(cpd1), _lcb(cpd2)) begin
             (::Tuple{<: LCB{N1, C}, <: LCB{N2, C}} where {C, N1, N2}) && if N1 > N2 end => cpd2.chain
             _                                                                           => cpd1.chain
         end
@@ -128,7 +122,7 @@ function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
     end
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
-    i = findmax((cpd1.area[1], cpd2.area[1]))
+    _, i = findmax((cpd1.area[1], cpd2.area[1]))
     cpd1.area = i == 1 ? cpd1.area : cpd2.area
     sort!(analyte, lt = isless_class)
     cpd1
@@ -139,7 +133,7 @@ union(cpd1::CompoundSP, cpd2::CompoundSP) = union!(copy_wo_project(cpd1), cpd2)
 function union!(cpd1::CompoundSP, cpd2::CompoundSP)
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
-    i = findmax((cpd1.area[1], cpd2.area[1]))
+    _, i = findmax((cpd1.area[1], cpd2.area[1]))
     cpd1.area = i == 1 ? cpd1.area : cpd2.area
     if isnothing(cpd2.chain) 
         return cpd1
@@ -147,7 +141,7 @@ function union!(cpd1::CompoundSP, cpd2::CompoundSP)
     if isnothing(cpd1.chain)
         cpd1.chain = cpd2.chain
     else
-        cpd1.chain = @match (cpd1.chain.lcb, cpd2.chain.lcb) begin
+        cpd1.chain = @match (_lcb(cpd1), _lcb(cpd2)) begin
             (::Tuple{<: LCB{N1, C}, <: LCB{N2, C}} where {C, N1, N2}) && if N1 > N2 end => cpd2.chain
             _                                                                           => cpd1.chain
         end
@@ -159,7 +153,7 @@ union(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(copy_wo_project(analyte
 union(analyte1::AnalyteSP, cpds::Vector{CompoundSP}) = union!(copy_wo_project(analyte1), cpds)
 union!(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(analyte1, analyte2.compounds, analyte2.states)
 
-function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0])
+function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 0, 0, 0])
     for cpd2 in cpds
         id = findfirst(cpd1 -> iscompatible(cpd1, cpd2), analyte1)
         if isnothing(id)
@@ -170,12 +164,68 @@ function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0])
     end
     sort!(analyte1, lt = isless_class)
     analyte1.states = min.(analyte1.states, states2)
+    analyte1.scores .= 0
     analyte1
 end
 
+getproperty(reuseable::ReUseable, sym::Symbol) = sym == :query ? getfield(reuseable, :query) : getfield(getfield(reuseable, :query), sym)
+
 # variant of interface
+function iscomponent(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
+    no = nhydroxyl(ion)
+    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || _lcb(cpd1) == ion.molecule)
+end
+iscomponent(cpd1::CompoundSP, ion::Ion{S, <: ACYL}) where S = iscompatible(cpd1, ion)
+iscomponent(cpd1::CompoundSP, ::Ion{S, NeuAc}) where S = isa(cpd1.class, CLS.fg.nana)
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{NeuAc, NeuAc}}}) where S = 
+    isa(cpd1.class, CLS.series.b) || isa(cpd1.class, CLS.series.c) || isa(cpd1.class, GT1a) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1c)
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{NeuAc, NeuAc, NeuAc}}}) where S = isa(cpd1.class, CLS.series.c)
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex}}}) where S = 
+    (isa(cpd1.class, CLS.series.as) && !isa(cpd1.class, Hex2Cer)) ||
+    (isa(cpd1.class, CLS.series.a) && !isa(cpd1.class, GM3)) ||
+    (isa(cpd1.class, CLS.series.b) && !isa(cpd1.class, GD3)) ||
+    (isa(cpd1.class, CLS.series.c) && !isa(cpd1.class, GT3)) ||
+    isa(cpd1.class, HexNAcHex2Cer) ||
+    isa(cpd1.class, HexNAcHex3Cer)
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc}}}) where S = 
+    isa(cpd1.class, CLS.fg.nana) && iscomponent(cpd1, Ion(S(), Glycan(HexNAc(), Hex())))
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc, NeuAc}}}) where S = 
+    (isa(cpd1.class, CLS.series.b) && !isa(cpd1.class, GD3)) ||
+    (isa(cpd1.class, CLS.series.c) && !isa(cpd1.class, GT3)) ||
+    isa(cpd1.class, GT1a) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1c) || isa(cpd1.class, GD1α)
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, NeuAc}}}) where S = 
+    isa(cpd1.class, GP1cα) || isa(cpd1.class, GQ1bα) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1α)
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{Hex, NeuAc}}}) where S = 
+    isa(cpd1.class, CLS.fg.nana)
+
+iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{Hex, NeuAc, NeuAc}}}) where S = 
+    isa(cpd1.class, CLS.series.b) ||
+    isa(cpd1.class, CLS.series.c) ||
+    isa(cpd1.class, GT1a) || 
+    isa(cpd1.class, GD1c)
+
 iscompatible(cpd1::CompoundSP, cpd2::CompoundSP) = 
     isclasscompatible(cpd1.class, cpd2.class) && ischaincompatible(cpd1, cpd2)
+
+iscompatible(cpd1::CompoundSP, ion::Ion) = iscomponent(cpd1, ion)
+iscompatible(cpd1::CompoundSP, ion::Ion{S, <: ClassSP}) where S = 
+    isclasscompatible(cpd1.class, ion.molecule)
+
+function iscompatible(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
+    no = nhydroxyl(ion)
+    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || 
+        nhydroxyl(_lcb(cpd1)) >= no && ischaincompatible(_lcb(cpd1), ion.molecule))
+end
+
+function iscompatible(cpd1::CompoundSP, ion::Ion{S, <: ACYL}) where S 
+    no = nhydroxyl(ion)
+    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || 
+        nhydroxyl(_acyl(cpd1)) == no)
+end
 
 isclasscompatible(cls1::ClassSP, cls2::ClassSP) = cls1 == cls2 || begin
     class1 = hasisomer(cls1) ? cls1.isomer : (cls1, )
@@ -190,7 +240,7 @@ ischaincompatible(chain1::Nothing, chain2::Chain) = true
 ischaincompatible(chain1::Chain, chain2::Nothing) = true
 ischaincompatible(chain1::Nothing, chain2::Nothing) = true
 
-ischaincompatible(chain1::Chain, chain2::Chain) = ischaincompatible(chain1.lcb, chain2.lcb)
+ischaincompatible(chain1::Chain, chain2::Chain) = ischaincompatible(chain1.lcb, chain2.lcb) && ischaincompatible(chain1.acyl, chain2.acyl)
 ischaincompatible(lcb1::LCB, lcb2::LCB) = 
     @match (lcb1, lcb2) begin
         ::Tuple{<: LCB2{N1, C}, <: LCB2{N2, C}} where {C, N1, N2}   => true
@@ -199,11 +249,22 @@ ischaincompatible(lcb1::LCB, lcb2::LCB) =
         _                                                           => false
     end
 
+ischaincompatible(acyl1::ACYL, acyl2::ACYL) = 
+    @match (acyl1, acyl2) begin
+        ::Tuple{<: Acyl{N}, <: ACYL{N}} where N => true
+        ::Tuple{<: ACYL{N}, <: Acyl{N}} where N => true
+        _                                       => acyl1 == acyl2
+    end
+
 ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(chain2) && sumcomp(chain1.lcb) == sumcomp(chain2.lcb) 
 
 copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.sum, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
-copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), deepcopy(analyte.scores))
+copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), deepcopy(analyte.scores), analyte.manual_check)
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
+reuse_copy(aquery::Query) = Query(aquery.project, reuse_copy(aquery.result), deepcopy(aquery.query), true)
+reuse_copy(v::Vector) = copy(v)
+reuse_copy(v::T) where {T <: SubArray} = T(parent(v), v.indices, v.offset1, v.stride1)
+
 
 equivalent_in(ion, collection) = any(equivalent(ion, x) for x in collection)
 function equivalent(ion1::Ion{<: Pos, <: LCB}, ion2::Ion{<: Pos, <: LCB})
@@ -226,7 +287,7 @@ function isless_class(cpd1::CompoundSP, cpd2::CompoundSP)
     any(connected(cls2, cls1) for (cls1, cls2) in Iterators.product(class1, class2))
 end
 isless_ion(ion1) = true
-function isless_ion(ion1, ion2)
+function isless_ion(ion1::Ion{S, <: ClassSP}, ion2::Ion{T, <: ClassSP}) where {S, T}
     id = class_db_index(ion1.molecule)
     level = (:default_ion, :parent_ion, :adduct_ion)
     id1 = findfirst(p -> in(ion1.adduct, getproperty(id, p)), level)
@@ -238,6 +299,11 @@ function isless_ion(ion1, ion2)
     id1 > id2 && return true
     false
 end
+
+isless_ion(a, b) = isless(a, b) 
+
+isless_nan_min(a, b) = isnan(a) || !isnan(b) && isless(a, b)
+isless_nan_max(a, b) = isnan(b) || !isnan(a) && isless(a, b)
 
 sort(tbl::Table, i::Symbol; kwargs...) = tbl[sortperm(getproperty(tbl, i); kwargs...)]
 function sort!(tbl::Table, i::Symbol; kwargs...)

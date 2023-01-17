@@ -1,6 +1,6 @@
 # ==================================================================================
 # Rule-based ID
-apply_rules!(aquery::Query; match_mode::Symbol = :both, kwargs...) = (apply_rules!(aquery.project; match_mode, analytes = aquery.result, kwargs...); aquery)
+apply_rules!(aquery::AbstractQuery; match_mode::Symbol = :both, kwargs...) = (apply_rules!(aquery.project; match_mode, analytes = aquery.result, kwargs...); aquery)
 function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = project.analytes, 
                         class_mode::Symbol = :default, 
                         chain_mode::Symbol = :isf, 
@@ -24,7 +24,7 @@ function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = p
         if match_mode[1]
             r = if class_mode == cpd.results[1].mode 
                 cpd.results[1].rule 
-            elseif ==(cpd.class, Cer()) && ((cpd.sum[3] < 1) || (!isnothing(cpd.chain) && (isa(cpd.chain.lcb, SPB2))))
+            elseif ==(cpd.class, Cer()) && ((cpd.sum[3] < 2) || (!isnothing(cpd.chain) && !is4e(_lcb(cpd)) && nhydroxyl(_acyl(cpd)) == 0))
                 rule(cpd.class, false)
             else
                 rule(cpd.class, class_rule)
@@ -32,11 +32,11 @@ function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = p
             id_result_class = match_rules(project, analyte, generate_ms(cpd, class_mode, project.anion)..., class_mode, r)               
             # Put in result
             cpd.results[1] = RuleSet(class_mode, id_result_class.rule)
-            cpd.states[1] = analyte.states[1] = if !id_result_class.matched; 0
+            cpd.states[1] = analyte.states[states_id(:class)] = if !id_result_class.matched; 0
                                                 elseif id_result_class.rule === EmptyRule(); -1
                                                 else cpd.class = id_result_class.rule; 1 end
 
-            if analyte.states[1] < 0
+            if analyte.states[states_id(:class)] < 0
                 @match class_fail begin
                     :pop_cpd    => ((length(analyte) == 1 ? (i += 1) : pop!(analyte)); continue)
                     :ignore     => nothing
@@ -58,13 +58,13 @@ function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = p
             end
             # Put in result
             cpd.results[2] = RuleSet(chain_mode, id_result_chain.rule)
-            cpd.states[2] = analyte.states[2] = if !id_result_chain.matched
+            cpd.states[2] = analyte.states[states_id(:chain)] = if !id_result_chain.matched
                                                     @when PartialResult(_, _, r) = id_result_chain @inline cpd.chain = id_result_chain.result; 0
                                                 elseif id_result_chain.rule === EmptyRule(); -1
                                                 else cpd.chain = id_result_chain.rule; 1 end
         # check isf
             prec, ms1 = generate_ms(cpd, :isf_sep, project.anion)
-            chain = cpd.chain
+            chain1 = cpd.chain
             for (id, cpd) in enumerate(@view analyte[1:end - 1])
                 isnothing(cpd.chain) && continue                
                 r = @match cpd.results[2].mode begin
@@ -76,11 +76,11 @@ function apply_rules!(project::Project; match_mode::Symbol = :both, analytes = p
                 cpd.results[2] = RuleSet(:isf_sep, id_result_chain.rule)
                 cpd.states[2] = if !result.matched
                                     @when PartialResult(_, _, r) = result @inline cpd.chain = result.result
-                                    ischaincompatible(cpd.chain, chain) ? 0 : -1
+                                    ischaincompatible(cpd.chain, chain1) ? 0 : -1
                                 elseif result.rule === EmptyRule(); -1
-                                else cpd.chain = result.rule; ischainequal(cpd.chain, chain) ? 1 : -1 end
+                                else cpd.chain = result.rule; ischainequal(cpd.chain, chain1) ? 1 : -1 end
             end
-            if analyte.states[2] < 0
+            if analyte.states[states_id(:chain)] < 0
                 @match chain_fail begin
                     :ignore => nothing
                 end
@@ -262,7 +262,7 @@ function isf_checker(project::Project, cpd::CompoundSP, criteria)
     any(project.data) do data
         polarity == data.polarity || return false
         raw_id = isnothing(cpd.chain) ? eachindex(data.mz2) : 
-            findall(mz2 -> abs(rem(mz(Ion(Protonation(), cpd.chain.lcb)) - mz2, mw("H2O"), RoundNearest)) < data.mz_tol, data.mz2)
+            findall(mz2 -> abs(rem(mz(Ion(Protonation(), _lcb(cpd))) - mz2, mw("H2O"), RoundNearest)) < data.mz_tol, data.mz2)
         isempty(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, data.range[id]) for m1 in ms1) for id in raw_id)
@@ -288,7 +288,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== raw_id])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2_id .== raw_id])
         end
 
     end
@@ -311,7 +311,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== raw_id])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2_id .== raw_id])
         end
     end
 end
@@ -326,7 +326,7 @@ function ion_checker(project::Project, cpd::CompoundSP, prec::Vector, ms1::Vecto
         isnothing(raw_id) && return false
         @match data begin
             ::PreIS => any(any(between(m1, range) for m1 in ms1) for range in @view data.range[raw_id])
-            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2 .== rwa_id])
+            ::MRM   => any(any(between(m1, mz1, data.mz_tol) for m1 in ms1) for mz1 in @views data.raw.mz1[data.raw.mz2_id .== rwa_id])
         end
     end
 end

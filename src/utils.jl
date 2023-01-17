@@ -1,16 +1,56 @@
 # public
 nfrags(cpd::CompoundSP) = size(cpd.fragments, 1)
-function nMRM(tbl::DataFrame, precision::Float64 = 0.1; end_time = maximum(tbl[!, "Ret Time (min)"] .+ tbl[!, "Delta Ret Time"]))
+function nMRM(tbl::Table, precision::Float64 = 0.1; end_time = maximum(tbl.rt .+ tbl.Δrt))
     trans = Dict(0:precision:end_time .=> 0)
-    for r in eachrow(tbl)
+    for id in eachindex(tbl)
         for k in keys(trans)
-            if k <= r["Ret Time (min)"] + r["Delta Ret Time"] / 2 && k >= r["Ret Time (min)"] - r["Delta Ret Time"] / 2
+            if k <= tbl.rt[id] + tbl.Δrt[id] / 2 && k >= tbl.rt[id] - tbl.Δrt[id] / 2
                 trans[k] += 1
             end
         end
     end
     sort!(collect(trans), by = (x -> x.second))
 end
+
+new_project(aquery::AbstractQuery) = new_project(aquery.project; analytes = aquery.view ? copy_wo_project.(aquery.result) : aquery.result)
+function new_project(project::Project; analytes = copy_wo_project.(project.analytes))
+    project_new = Project(analytes, project.data, project.anion)
+    for analyte in project_new
+        for cpd in analyte
+            cpd.project = project_new
+        end
+    end
+    project_new
+end
+
+# user interface for query
+lcb(c::Int, d::Int, n::Int) = Lcb(c, d, n)
+acyl(c::Int, d::Int, n::Int) = Nacyl(c, d, n)
+acylα(c::Int, d::Int, n::Int) = Nacylα(c, d, n)
+acylβ(c::Int, d::Int, n::Int) = Nacylβ(c, d, n)
+cpd(class::Type{<: ClassSP}, sum::NTuple{3, Int}, lcb::Lcb, acyl::NACYL) = CompoundID{class}(sum, lcb, acyl)
+cpd(class::Type{<: ClassSP}, c::Int, n::Int, o::Int, lcb::Lcb, acyl::NACYL) = CompoundID{class}((c, n, o), lcb, acyl)
+cpd(class::Type{<: ClassSP}, sum::NTuple{3, Int}) = CompoundID{class}(sum, nothing, nothing)
+cpd(class::Type{<: ClassSP}, c::Int, n::Int, o::Int) = CompoundID{class}((c, n, o), nothing, nothing)
+cpd(sum::NTuple{3, Int}, lcb::Lcb, acyl::NACYL) = CompoundID{Nothing}(sum, lcb, acyl)
+cpd(c::Int, n::Int, o::Int, lcb::Lcb, acyl::NACYL) = CompoundID{Nothing}((c, n, o), lcb, acyl)
+cpd(sum::NTuple{3, Int}) = CompoundID{Nothing}(sum, nothing, nothing)
+cpd(c::Int, n::Int, o::Int) = CompoundID{Nothing}((c, n, o), nothing, nothing)
+cpd(lcb::Lcb, acyl::NACYL) = cpd(Nothing, lcb, acyl)
+cpd(class, lcb::Lcb, acyl::NACYL) = CompoundID{class}((lcb.cb + acyl.cb, lcb.db + acyl.db, lcb.ox + acyl.ox), lcb, acyl)
+
+convert_type(::Type{LCB}, lcb::Lcb) = @match (lcb.db + lcb.ox, lcb.ox) begin
+    (2, N) => LCB2{N, lcb.cb}
+    (3, N) => LCB3{N, lcb.cb}
+    (4, N) => LCB4{N, lcb.cb}
+end
+convert_type(::Type{LCB}, lcb) = Nothing
+
+convert_type(::Type{ACYL}, acyl::Nacylα) = Acylα{acyl.ox}
+convert_type(::Type{ACYL}, acyl::Nacylβ) = Acylβ{acyl.ox}
+convert_type(::Type{ACYL}, acyl::Nacyl) = Acyl{acyl.ox}
+convert_type(::Type{ACYL}, acyl) = Nothing
+convert_internal(cpd::CompoundID{C}) where C = (C, cpd.sum, convert_type(LCB, cpd.lcb), convert_type(ACYL, cpd.acyl))
 
 # private
 # isomer
@@ -57,6 +97,12 @@ nhydroxyl(::LCB{N, C}) where {N, C} = N
 nhydroxyl(::ACYL{N}) where N = N
 ndb(chain) = nunsa(chain) - nhydroxyl(chain)
 sumcomp(chain) = (ncb(chain), ndb(chain), nhydroxyl(chain))
+nhydroxyl(ion::Ion) = nhydroxyl(ion.molecule)
+nhydroxyl(::Ion{Protonation, T}) where {N, C, T <: LCB{N, C}} = N
+nhydroxyl(::Ion{ProtonationNLH2O, T}) where {N, C, T <: LCB{N, C}} = N - 1
+nhydroxyl(::Ion{ProtonationNL2H2O, T}) where {N, C, T <: LCB{N, C}} = N - 2
+nhydroxyl(::Ion{ProtonationNL3H2O, T}) where {N, C, T <: LCB{N, C}} = N - 3
+
 
 is4e(lcb::LCB{3}) = false
 is4e(lcb::LCB2{2}) = false
@@ -93,35 +139,6 @@ connected(cls1::Cer, cls2::Cer) = true
 isf(cls::ClassSP) = hasisomer(cls) ? isf(cls.isomer) : push!(isf(SPDB[:CONNECTION][cls]), cls)
 isf(cls::Tuple) = union!((push!(isf(SPDB[:CONNECTION][cls1]), cls1) for cls1 in cls)...)
 isf(cls::Cer) = ClassSP[cls]
-
-# user interface for query
-lcb(c::Int, d::Int, n::Int) = Lcb(c, d, n)
-acyl(c::Int, d::Int, n::Int) = Nacyl(c, d, n)
-acylα(c::Int, d::Int, n::Int) = Nacylα(c, d, n)
-acylβ(c::Int, d::Int, n::Int) = Nacylβ(c, d, n)
-cpd(class::Type{<: ClassSP}, sum::NTuple{3, Int}, lcb::Lcb, acyl::NACYL) = CompoundID{class}(sum, lcb, acyl)
-cpd(class::Type{<: ClassSP}, c::Int, n::Int, o::Int, lcb::Lcb, acyl::NACYL) = CompoundID{class}((c, n, o), lcb, acyl)
-cpd(class::Type{<: ClassSP}, sum::NTuple{3, Int}) = CompoundID{class}(sum, nothing, nothing)
-cpd(class::Type{<: ClassSP}, c::Int, n::Int, o::Int) = CompoundID{class}((c, n, o), nothing, nothing)
-cpd(sum::NTuple{3, Int}, lcb::Lcb, acyl::NACYL) = CompoundID{Nothing}(sum, lcb, acyl)
-cpd(c::Int, n::Int, o::Int, lcb::Lcb, acyl::NACYL) = CompoundID{Nothing}((c, n, o), lcb, acyl)
-cpd(sum::NTuple{3, Int}) = CompoundID{Nothing}(sum, nothing, nothing)
-cpd(c::Int, n::Int, o::Int) = CompoundID{Nothing}((c, n, o), nothing, nothing)
-cpd(lcb::Lcb, acyl::NACYL) = cpd(Nothing, lcb, acyl)
-cpd(class, lcb::Lcb, acyl::NACYL) = CompoundID{class}((lcb.cb + acyl.cb, lcb.db + acyl.db, lcb.ox + acyl.ox), lcb, acyl)
-
-convert_type(::Type{LCB}, lcb::Lcb) = @match (lcb.db + lcb.ox, lcb.ox) begin
-    (2, N) => LCB2{N, lcb.cb}
-    (3, N) => LCB3{N, lcb.cb}
-    (4, N) => LCB4{N, lcb.cb}
-end
-convert_type(::Type{LCB}, lcb) = Nothing
-
-convert_type(::Type{ACYL}, acyl::Nacylα) = Acylα{acyl.ox}
-convert_type(::Type{ACYL}, acyl::Nacylβ) = Acylβ{acyl.ox}
-convert_type(::Type{ACYL}, acyl::Nacyl) = Acyl{acyl.ox}
-convert_type(::Type{ACYL}, acyl) = Nothing
-convert_internal(cpd::CompoundID{C}) where C = (C, cpd.sum, convert_type(LCB, cpd.lcb), convert_type(ACYL, cpd.acyl))
 
 macro rule(expr)
     expr = pipe2rule(expr)
@@ -188,3 +205,45 @@ equivalent_in_ion1(cpd::CompoundSP, criteria::Tuple) = any(equivalent_in(frag, c
 equivalent_in_ion1(analyte::AnalyteSP, criteria) = any(equivalent_in_ion1(cpd, criteria) for cpd in analyte)
 
 calc_rt(analyte::AnalyteSP) = mean(mean(query_raw(cpd.project, cpd.fragments.source[id], cpd.fragments.id[id]).rt for id in eachindex(cpd.fragments)) for cpd in analyte)
+
+class(analyte::AnalyteSP) = class(last(analyte))
+class(cpd::CompoundSP) = cpd.class
+sumcomp(analyte::AnalyteSP) = sumcomp(last(analyte))
+sumcomp(cpd::CompoundSP) = cpd.sum
+_chain(analyte::AnalyteSP) = _chain(last(analyte))
+_chain(cpd::CompoundSP) = cpd.chain
+_lcb(analyte::AnalyteSP) = _lcb(last(analyte))
+_lcb(cpd::CompoundSP) = _lcb(cpd.chain)
+_lcb(chain::Chain) = chain.lcb
+_lcb(::Nothing) = nothing
+_acyl(analyte::AnalyteSP) = _acyl(last(analyte))
+_acyl(cpd::CompoundSP) = _acyl(cpd.chain)
+_acyl(chain::Chain) = chain.acyl
+_acyl(::Nothing) = nothing
+rt(analyte::AnalyteSP) = analyte.rt
+
+lcb(analyte::AnalyteSP) = _lcb(last(analyte))
+lcb(cpd::CompoundSP) = _lcb(cpd.chain)
+lcb(chain::Chain) = chain.lcb
+acyl(analyte::AnalyteSP) = acyl(last(analyte))
+acyl(::Nothing) = nothing
+function acyl(cpd::CompoundSP) 
+    spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
+    string("Acyl ", cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
+end
+chain(analyte::AnalyteSP) = chain(last(analyte))
+chain(::Nothing) = nothing
+function chain(cpd::CompoundSP) 
+    spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
+    string(spb_c, ":", spb_db, ";", "O", spb_o > 1 ? spb_o : "", "/", cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
+end
+sumcomps(analyte::AnalyteSP) = sumcomps(last(analyte))
+sumcomps(cpd::CompoundSP) = string(cpd.sum[1], ":", cpd.sum[2], ";", "O", cpd.sum[3] > 1 ? cpd.sum[3] : "")
+
+states_id = @λ begin
+    :class  => 1
+    :chain  => 2
+    :rt     => 3
+    :error  => 4
+    :isf    => 5
+end

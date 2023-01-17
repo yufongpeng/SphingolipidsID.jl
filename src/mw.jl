@@ -45,15 +45,15 @@ mz(cpd::CompoundSP, add::Adduct) = parse_adduct(add)(mw(cpd))
 mz(cpd::CompoundSP, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, nothing)))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
 mz(ion::Ion, cb, db, o) = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
+
+mw(analyte::AnalyteSP) = mw(last(analyte))
 mw(::T, cb, db, o = N) where {N, T <: ACYL{N}} = mw("C") * cb + mw("H") * (2 * cb - 2 * db - 1) + mw("O") * (o + 1)
 mw(molecule, cb, db, o) = mw(molecule)
 #hydrosyn(a, b) = a + b - nmw("H2O")
 mw(::Hex) = mw("C6H12O6") 
 mw(::HexNAc) = mw("C8H15NO6") 
 mw(::NeuAc) = mw("C11H19NO9") 
-
 mw(glycan::Glycan) = mapreduce(mw, +, glycan.chain) - (length(glycan.chain) - 1) * mw("H2O")
-
 mw(lcb::LCB{N, C}) where {N, C} = C * mw("C") + mw("O") * N + (2 * (C - nunsa(lcb) + N) + 3) * mw("H") + mw("N")
 
 function mw(cpd::CompoundSP)
