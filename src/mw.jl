@@ -38,36 +38,35 @@ function nmw(formula::AbstractString)
     end
 end
 
-mz(cpd::CompoundSP, ion::ISF) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, cpd.chain)))
-mz(cpd::CompoundSP, ions::AcylIon{T}) where T = mz.(ions.ions, (cpd.sum .- sumcomp(T()))...)
-mz(cpd::CompoundSP, ion::Ion) = mz(ion)
-mz(cpd::CompoundSP, add::Adduct) = parse_adduct(add)(mw(cpd))
-mz(cpd::CompoundSP, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(CompoundSP(ion.molecule, cpd.sum, nothing)))
+mz(cpd::CompoundID, ion::ISF) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.sidechain)))
+#mz(cpd::CompoundID, ions::AcylIon{T}) where T = mz.(ions.ions, (cpd.sum .- sumcomp(T()))...)
+mz(cpd::CompoundID, ion::Ion) = mz(ion)
+mz(cpd::CompoundID, add::Adduct) = parse_adduct(add)(mw(cpd))
+mz(cpd::CompoundID, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.sidechain)))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
-mz(ion::Ion, cb, db, o) = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
+#mz(ion::Ion, cb, db, o) = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
 
 mw(analyte::AnalyteSP) = mw(last(analyte))
-mw(::T, cb, db, o = N) where {N, T <: ACYL{N}} = mw("C") * cb + mw("H") * (2 * cb - 2 * db - 1) + mw("O") * (o + 1)
-mw(molecule, cb, db, o) = mw(molecule)
+#mw(molecule, cb, db, o) = mw(molecule)
 #hydrosyn(a, b) = a + b - nmw("H2O")
 mw(::Hex) = mw("C6H12O6") 
 mw(::HexNAc) = mw("C8H15NO6") 
 mw(::NeuAc) = mw("C11H19NO9") 
 mw(glycan::Glycan) = mapreduce(mw, +, glycan.chain) - (length(glycan.chain) - 1) * mw("H2O")
-mw(lcb::LCB{N, C}) where {N, C} = C * mw("C") + mw("O") * N + (2 * (C - nunsa(lcb) + N) + 3) * mw("H") + mw("N")
+mw(lcb::LCB) = ncb(lcb) * mw("C") + nox(lcb) * mw("O") + (2 * (ncb(lcb) - ndb(lcb)) + 3) * mw("H") + mw("N")
+mw(acyl::ACYL) = ncb(acyl) * mw("C") + (2 * ncb(acyl) - 2 * ndb(acyl) - 1) * mw("H") + nox(acyl) * mw("O")
 
-function mw(cpd::CompoundSP)
+function mw(cpd::CompoundID)
     cls = class_db_index(cpd.class)
     unit = cls[[:u1, :u2]]
     init_us = cls[[:nu1, :nu2]]
-    Δu = [cpd.sum[1] - init_us[1], cpd.sum[2] - init_us[2]]
+    Δu = [ncb(cpd) - init_us[1], ndb(cpd) - init_us[2]]
     ms = mw(merge_formula(cls.formula, unit, Δu; sign = (:+, :-)))
-    ms + mw("O") * cpd.sum[3]
+    ms + nox(cpd) * mw("O")
 end
 
 merge_species(cn::Int, db::Int, class::AbstractString, pre::AbstractString, post::AbstractString) = 
     *(class, " ", isempty(pre) ? pre : (pre * "-"), "$cn:$db", isempty(post) ? post : (";" * post))
-
 
 function merge_formula(elements::Vector, Δcn::Int, Δdb::Int) 
     Δdb -= Δcn

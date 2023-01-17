@@ -1,8 +1,8 @@
-
 rule(c::ClassSP, x...) = rule(c)
 rule(::Missing) = EmptyRule()
 rule(::Nothing) = EmptyRule()
-rule(::Cer, isf::Bool) = isf ? rule(Cer()) : Cer()
+rule(::Cer, sc::SumChain) = nox(sc) < 2 ? Cer() : rule(Cer())
+rule(::Cer, sc::DiChain) = ((is4e(sc.lcb) && nox(sc.lcb) > 1) || nox(sc.acyl) > 0) ? rule(Cer()) : Cer()
 @rule rule(::Cer) = ISF(ProtonationNLH2O(), Cer()) |> (Cer(), ())
 @rule rule(::HexCer) = (ISF(ProtonationNLH2O(), HexCer()), ISF(ProtonationNLH2O(), Cer())) |> (HexCer(), ())
 @rule rule(::SHexCer) = (ISF(ProtonationNLH2O(), HexCer()), ISF(Protonation(), HexCer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) |> (SHexCer(), ())
@@ -33,9 +33,6 @@ rule(::Cer, isf::Bool) = isf ? rule(Cer()) : Cer()
         ()
     )
 )
-
-
-
 @rule rule(::GM4) = (ISF(ProtonationNLH2O(), HexCer()), ISF(Protonation(), HexCer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) |> (
     GM4(),    
     Ion(ProtonationNLH2O(), Cer()) |> (GM4(), ())
@@ -47,7 +44,7 @@ rule(::Cer, isf::Bool) = isf ? rule(Cer()) : Cer()
 @rule rule(::GM2) = Ion(ProtonationNLH2O(), HexNAc()) |> (GM2(), ())
 
 @rule rule(::GM1, mode::Symbol) = 
-    mode == :ab ? rule_ab(GM1_()) : rule(GM1_())
+    mode ≡ :ab ? rule_ab(GM1_()) : rule(GM1_())
 
 @rule rule_ab(::GM1) = HexNAcHex |> (GM1a(), ())
 
@@ -60,19 +57,16 @@ rule(::Cer, isf::Bool) = isf ? rule(Cer()) : Cer()
         NaN         => ()
     )
 )
-
 @rule rule(::GD3) = NANA |> (
     NANA2 |> (GD3(), ()),
     ()
 )
-
 @rule rule(::GD2) = NANA |> (
     NANA2 |> (GD2(), ()),
     ()
 )
-
 @rule rule(::GD1, mode::Symbol) = 
-    mode == :ab ? rule_ab(GD1_()) : rule(GD1_())
+    mode ≡ :ab ? rule_ab(GD1_()) : rule(GD1_())
 
 rule_ab(::GD1) = NANA |> (
     RuleUnion(
@@ -86,26 +80,6 @@ rule_ab(::GD1) = NANA |> (
     ),
     ()
 )    
-#=
-rule(::GD1) = NANA |> (
-    HexNAcHexNANA2 |> (
-        RuleUnion(
-            IonComparison(HexNAcHexNANA2, HexNAcHexNANA) |> (
-                (0, 5)      => (GD1c(), GD1a()),
-                (5, Inf64)  => (GD1c(),),
-                NaN         => ()
-            ),
-            IonComparison(IonPlus(HexNAcHexNANA2, HexNAcHexNANA), HexNAcHex) |> (
-                (0, 5)      => (GD1b()),
-                (5, Inf64)  => (),
-                NaN         => ()
-            )
-        ),
-        rule_ab(GD1())
-    ),
-    ()
-)
-=#
 @rule rule(::GD1) = NANA |> (
     NANA2 |> (
         IonComparison(HexNAcHexNANA2, HexNAcHex) |> (
@@ -127,20 +101,16 @@ rule(::GD1) = NANA |> (
     ),
     ()
 )
-
-
 @rule rule(::GT3) = NANA |> (
     NANA23 |> (GT3(), ()),
     ()
 )
-
 @rule rule(::GT2) = NANA |> (
     NANA23 |> (GT2(), ()),
     ()
 )
-
 @rule rule(::GT1, mode::Symbol) = 
-    mode == :ab ? rule_ab(GT1_()) : rule(GT1_())
+    mode ≡ :ab ? rule_ab(GT1_()) : rule(GT1_())
 
 @rule rule_α(::GT1a) = RuleMode(
     Ion(ProtonationNLH2O(), Glycan(HexNAc(), NeuAc())) |> (
@@ -152,7 +122,6 @@ rule(::GD1) = NANA |> (
         GT1aα()
     )
 )
-
 @rule rule_ab(::GT1) = NANA |> (
     NANA2 |> (
         IonComparison(HexNAcHexNANA2, HexNAcHexNANA) |> (
@@ -171,59 +140,11 @@ rule(::GD1) = NANA |> (
     ),
     ()
 )
-
 @rule rule_ab_neg(::GT1) = IonComparison(NANA1, NANA2) |> (
     (0, 0.4)    => GT1a(),
     (0.4, 7)    => GT1_(GT1a(), GT1b()),
     (7, Inf64)  => GT1b()
 )
-
-#=
-rule_ab(::GT1) = NANA |> (
-    RuleUnion(
-        (ISF(Protonation(), GM3()), ISF(ProtonationNLH2O(), GM3())) |> (
-            rule_α(GT1()),
-            ()
-        ),
-        RuleMode(
-            IonComparison(HexNAcHexNANA2, HexNAcHexNANA) |> (
-                0           => (GT1b(),),
-                (0, 5)      => RuleUnion(rule_α(GT1()), GT1b()),
-                (5, Inf64)  => (rule_α(GT1()),),
-                NaN         => ()
-            ),
-            IonComparison(NANA1, NANA2) |> (
-                (0, 0.4)    => (rule_α(GT1()),),
-                (0.4, 7)    => RuleUnion(rule_α(GT1()), GT1b()),
-                (7, Inf64)  => (GT1b(),)
-            )
-        )
-    )
-    ,
-    ()
-)
-
-rule_α(::GT1) = Ion(Protonation(), Glycan(HexNAc(), NeuAc())) |> (
-    GT1aα(),
-    ()
-)
-
-rule(::GT1) = NANA |> (
-    IonComparison(IonPlus(HexNAcHexNANA2, HexNAcHexNANA), HexNAcHex) |> (
-        0           => GT1c(),
-        (0, 5)      => (
-            IonComparison(HexNAcHexNANA2, HexNAcHexNANA) |> (
-                0           => (GT1b(), GT1c()),
-                (0, 5)      => RuleUnion(rule_α(GT1()), GT1b(), GT1c()),
-                (5, Inf64)  => RuleUnion(rule_α(GT1()), GT1c())
-            )
-        ),
-        (5, Inf64)  => rule_ab(GT1()),
-        NaN         => ()
-    ),
-    ()
-)
-=#
 @rule rule(::GT1) = NANA |> (
     NANA2 |> (
         HexNAcHexNANA2 |> (
@@ -258,9 +179,8 @@ rule(::GT1) = NANA |> (
         )
     )
 )
-
 @rule rule(::GQ1, mode::Symbol) = 
-    mode == :ab ? rule_ab(GQ1_()) : rule(GQ1_())
+    mode ≡ :ab ? rule_ab(GQ1_()) : rule(GQ1_())
 
 @rule rule_ab(::GQ1) = NANA |> (
     HexNAcHexNANA2 |> (
@@ -277,7 +197,6 @@ rule(::GT1) = NANA |> (
     ),
     ()
 )
-
 @rule rule(::GQ1) = NANA |> (
     IonComparison(HexNAcHexNANA2, HexNAcHexNANA) |> (
         0           => GQ1c(),
@@ -287,9 +206,7 @@ rule(::GT1) = NANA |> (
     ),
     ()
 )
-
 rule_ab(::GP1) = ()
-
 @rule rule(::GP1) = NANA |> (
     HexNAcHexNANA2 |> (
         RuleMode(
@@ -307,78 +224,71 @@ rule_ab(::GP1) = ()
     ()
 )
 
-@rule rule_acyl(spb::T, ::Acyl{N}) where {T <: LCB, N} = AcylIon{T}(Ion(LossCH2O(), Acyl{N}()), Ion(AddO(), Acyl{N}())) |> (
-    Chain(spb, Acylα{N}()),
-    Ion(AddC2H2O(), spb) |> (
-        Chain(spb, Acylβ{N}()),
-        Chain(spb, Acyl{N}())
+@rule rule_acyl(sc::DiChain) = (Ion(LossCH2O(), sc.acyl), Ion(AddO(), sc.acyl)) |> (
+    DiChain(sc.lcb, Acylα(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl))),
+    Ion(AddC2H2O(), sc.lcb) |> (
+        DiChain(sc.lcb, Acylβ(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl))),
+        DiChain(sc.lcb, Acyl(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl)))
     )
 )
+to_phyto(spb::LCB3) = SPB3(ncb(spb), ndb(spb))
+to_phyto(spb::LCB4) = SPB4(ncb(spb), ndb(spb))
+de_phyto(spb::LCB3) = NotPhyto3(ncb(spb), ndb(spb))
+de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
 
-to_phyto(::LCB3{N, C}) where {N, C} = SPB3{N, C}()
-to_phyto(::LCB4{N, C}) where {N, C} = SPB4{N, C}()
-de_phyto(::LCB3{N, C}) where {N, C} = NotPhyto3{N, C}()
-de_phyto(::LCB4{N, C}) where {N, C} = NotPhyto4{N, C}()
-
-
-@rule rule_phytoacyl(spb::T, ::Acyl{0}) where {T <: LCB} = AcylIon{T}(Ion(AddC2H5NO(), Acyl{0}()), Ion(AddC3H5NO(), Acyl{0}()), Ion(LossCH8NO(), spb), Ion(LossC2H8NO(), spb)) |> (
-    Chain(to_phyto(spb), Acyl{0}()),
-    Chain(de_phyto(spb), Acyl{0}())
+@rule rule_phytoacyl0(sc::DiChain) = (Ion(AddC2H5NO(), sc.acyl), Ion(AddC3H5NO(), sc.acyl), Ion(LossCH8NO(), sc.lcb), Ion(LossC2H8NO(), sc.lcb)) |> (
+    DiChain(to_phyto(sc.lcb), sc.acyl),
+    DiChain(de_phyto(sc.lcb), sc.acyl)
 )
-
-@rule rule_phytoacyl(spb::T, acyl::Acyl) where {T <: LCB} =  AcylIon{T}((Ion(AddC3H5NO(), acyl),)) |> (
-    rule_acyl(to_phyto(spb), acyl),
-    rule_acyl(de_phyto(spb), acyl)
+@rule rule_phytoacyl(sc::DiChain) = Ion(AddC3H5NO(), sc.acyl) |> (
+    rule_acyl(DiChain(to_phyto(sc.lcb), sc.acyl)),
+    rule_acyl(DiChain(de_phyto(sc.lcb), sc.acyl))
 )
-
-@rule rule(::Chain{<: LCB2{N, C}, <: ACYL}) where {N, C} = IonComparison(Ion(ProtonationNL2H2O(), SPB2{2, C}()), Ion(ProtonationNLH2O(), SPB2{2, C}())) |> (
+@rule rule(sc::DiChain{<: LCB2}) = IonComparison(Ion(ProtonationNL2H2O(), SPB2(ncb(sc.lcb), 0)), Ion(ProtonationNLH2O(), SPB2(ncb(sc.lcb), 0))) |> (
     (0.0, 1.0) => (
-        Hydroxyl(SPB2{2, C}()) |> (
-            0 => Chain(SPB2{2, C}(), Acyl{0}()),
-            1 => rule_acyl(SPB2{2, C}(), Acyl{1}()),
-            2 => rule_acyl(SPB2{2, C}(), Acyl{2}())
-        )
-
-    ),
-    (1.0, Inf64) => (
-        Hydroxyl(SPB2{1, C}()) |> (
-            0 => Chain(SPB2{1, C}(), Acyl{0}()),
-            1 => rule_acyl(SPB2{1, C}(), Acyl{1}()),
-            2 => rule_acyl(SPB2{1, C}(), Acyl{2}())
-        )
-    )
-)
-
-@rule rule(::Chain{<: LCB3{N, C}, <: ACYL}) where {N, C} = IonComparison(Ion(ProtonationNL3H2O(), SPB3{3, C}()), Ion(ProtonationNL2H2O(), SPB3{3, C}())) |> (
-    (0.0, 1.0) => (
-        Hydroxyl(SPB3{3, C}()) |> (
-            0 => rule_phytoacyl(SPB3{3, C}(), Acyl{0}()),
-            1 => rule_phytoacyl(SPB3{3, C}(), Acyl{1}()),
-            2 => rule_phytoacyl(SPB3{3, C}(), Acyl{2}())
+        CalcOx(SPB2(ncb(sc.lcb), 0)) |> (
+            0 => DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 0)),
+            1 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 1))),
+            2 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 2)))
         )
     ),
     (1.0, Inf64) => (
-        Hydroxyl(SPB3{2, C}()) |> (
-            0 => Chain(SPB3{2, C}(), Acyl{0}()),
-            1 => rule_acyl(SPB3{2, C}(), Acyl{1}()),
-            2 => rule_acyl(SPB3{2, C}(), Acyl{2}())
+        CalcOx(SPB2(ncb(sc.lcb), 1)) |> (
+            0 => DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0)),
+            1 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
+            2 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 2)))
         )
     )
 )
-
-@rule rule(::Chain{<: LCB4{N, C}, <: ACYL}) where {N, C} = IonComparison(Ion(ProtonationNL3H2O(), SPB4{3, C}()), Ion(ProtonationNL2H2O(), SPB4{3, C}())) |> (
+@rule rule(sc::DiChain{<: LCB3}) = IonComparison(Ion(ProtonationNL3H2O(), SPB3(ncb(sc.lcb), 0)), Ion(ProtonationNL2H2O(), SPB3(ncb(sc.lcb), 0))) |> (
     (0.0, 1.0) => (
-        Hydroxyl(SPB4{3, C}()) |> (
-            0 => rule_phytoacyl(SPB4{3, C}(), Acyl{0}()),
-            1 => rule_phytoacyl(SPB4{3, C}(), Acyl{1}()),
-            2 => rule_phytoacyl(SPB4{3, C}(), Acyl{2}())
+        CalcOx(SPB3(ncb(sc.lcb), 0)) |> (
+            0 => rule_phytoacyl0(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 0))),
+            1 => rule_phytoacyl(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 1))),
+            2 => rule_phytoacyl(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 2)))
         )
     ),
     (1.0, Inf64) => (
-        Hydroxyl(SPB4{2, C}()) |> (
-            0 => Chain(SPB4{2, C}(), Acyl{0}()),
-            1 => rule_acyl(SPB4{2, C}(), Acyl{1}()),
-            2 => rule_acyl(SPB4{2, C}(), Acyl{2}())
+        CalcOx(SPB3(ncb(sc.lcb), 1)) |> (
+            0 => DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0)),
+            1 => rule_acyl(DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
+            2 => rule_acyl(DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 2)))
+        )
+    )
+)
+@rule rule(sc::DiChain{<: LCB4}) = IonComparison(Ion(ProtonationNL3H2O(), SPB4(ncb(sc.lcb), 1)), Ion(ProtonationNL2H2O(), SPB4(ncb(sc.lcb), 1))) |> (
+    (0.0, 1.0) => (
+        CalcOx(SPB4(ncb(sc.lcb), 1)) |> (
+            0 => rule_phytoacyl0(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0))),
+            1 => rule_phytoacyl(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
+            2 => rule_phytoacyl(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 2)))
+        )
+    ),
+    (1.0, Inf64) => (
+        CalcOx(SPB4(ncb(sc.lcb), 2)) |> (
+            0 => DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 0)),
+            1 => rule_acyl(DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 1))),
+            2 => rule_acyl(DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 2)))
         )
     )
 )

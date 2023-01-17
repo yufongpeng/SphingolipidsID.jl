@@ -42,7 +42,7 @@ end
 const CLASSDB = read_class_db(joinpath(@__DIR__, "..", "config", "CLASSDB.csv"))
 SPDB[:CLASSDB] = CLASSDB
 
-class_db_index(::LCB) = SPDB[:CLASSDB][findfirst(==(SPB), SPDB[:CLASSDB].Abbreviation)]
+class_db_index(spb::LCB) = SPDB[:CLASSDB][findfirst(==(spb), SPDB[:CLASSDB].Abbreviation)]
 class_db_index(cls::T) where {T <: ClassSP} = SPDB[:CLASSDB][findfirst(==(deisomerized(T)), SPDB[:CLASSDB].Abbreviation)]
 
 library(class::Vector, adduct::Vector{<: Adduct}, range::Vector{<: Tuple}) = library(class, map(repr_adduct, adduct), range)
@@ -76,16 +76,16 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
         unit = getproperties(SPDB[:CLASSDB], (:u1, :u2))[id_compound]
         init_us = getproperties(SPDB[:CLASSDB], (:nu1, :nu2))[id_compound]
 
-        if length(rng) == 3
+        if length(rng) ≡ 3
             posts = vectorize(last(rng))
             rng = rng[1:end - 1]
         else
             posts = ""
         end
 
-        if length(rng) == 0
+        if length(rng) ≡ 0
             rng = (0, 0)
-        elseif length(rng) == 1
+        elseif length(rng) ≡ 1
             rng = (first(rng), 0)
         end
 
@@ -135,9 +135,9 @@ SPDB[:LIBRARY_POS] = LIBRARY_POS
 #LIBRARY_NEG
 
 const FRAGMENT_POS = let
-    frags = [SPB2{1, 18}(), SPB2{2, 18}(), 
-            SPB3{2, 16}(), SPB3{2, 17}(), SPB3{2, 18}(), SPB3{3, 18}(), SPB3{2, 19}(), SPB3{2, 20}(), 
-            SPB4{2, 16}(), SPB4{2, 18}(), SPB4{3, 18}(), SPB4{2, 20}()]
+    frags = [lcb(18, 1, 1), lcb(18, 0, 2), 
+            lcb(16, 1, 2), lcb(17, 1, 2), lcb(18, 1, 2), lcb(18, 0, 3), lcb(19, 1, 2), lcb(20, 1, 2), 
+            lcb(16, 2, 2), lcb(18, 2, 2), lcb(18, 1, 3), lcb(20, 2, 2)]
     ion = map(default_adduct, frags)
     append!(ion, [Ion(ProtonationNL2H2O(), NeuAc()), 
                     Ion(ProtonationNLH2O(), NeuAc()), 

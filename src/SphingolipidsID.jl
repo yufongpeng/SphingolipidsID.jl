@@ -20,7 +20,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         LCB, LCB2, LCB3, LCB4, SPB2, SPB3, SPB4, NotPhyto, NotPhyto3, NotPhyto4,
         ACYL, Acyl, Acylα, Acylβ, 
         Lcb, Nacyl, Nacylα, Nacylβ, NACYL,
-        Chain, 
+        SideChain, SumChain, DiChain,
         # Type Glycan
         Sugar, Glycan, Hex, HexNAc, NeuAc,
         # Type Ion/Adduct 
@@ -47,18 +47,18 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         nfrags, @cpdscore, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!, 
         normalized_sig_diff, abs_sig_diff, 
         # Query
-        query, not, cpd, lcb, acyl, acylα, acylβ, reuse,
+        q!, not, spid, reuse,
         # Data output: MRM
         generate_mrm, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm, 
         # Utils
-        new_project, mw, mz, class, chain, sumcomps, rt, assign_parent!, assign_isf_parent!, 
+        new_project, mw, mz, class, sidechain, sumcomp, lcb, acyl, acylα, acylβ, rt, assign_parent!, assign_isf_parent!, 
         generate_clusters!, analytes2clusters!, select_clusters!, model_clusters!, compare_models, @model, generate_clusters_prediction!, 
         expand_clusters!, update_clusters!, replace_clusters!, show_clusters, apply_clusters!,
         # Plots
         plot_rt_mw
 
 import Base: show, print, isless, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!, 
-            union, union!, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy
+            union, union!, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy, convert
 
 const SPDB = Dict{Symbol, Any}()
 const ISOMER = Dict{Type, Tuple}()
@@ -151,7 +151,7 @@ for (class, super) in zip((:HexNAcHex2Cer_, :HexNAcHex3Cer_, :GM1_, :GD1_, :GT1_
         $class() = $class(SPDB[:ISOMER][$class])
         $super(cls::Vararg{<: $super}) = $class(cls)
         $super() = $class(SPDB[:ISOMER][$class])
-
+        Isomer(cls::Vararg{<: Type{T}}) where {T <: $super} = $class((c() for c in cls))
     end
 end
 
@@ -176,52 +176,64 @@ const CLS = (
     ) 
 )
 
-# N = # OH
-abstract type LCB{N, C} end
-abstract type LCB4{N, C} <: LCB{N, C} end
-abstract type LCB3{N, C} <: LCB{N, C} end
-abstract type LCB2{N, C} <: LCB{N, C} end
-struct SPB4{N, C} <: LCB4{N, C} end
-struct NotPhyto4{N, C} <: LCB4{N, C} end
-struct SPB3{N, C} <: LCB3{N, C} end
-struct NotPhyto3{N, C} <: LCB3{N, C} end
-struct SPB2{N, C} <: LCB2{N, C} end
-const NotPhyto{N, C} = Union{NotPhyto3{N, C}, NotPhyto4{N, C}}
+abstract type SideChain end
 
-abstract type ACYL{N} end
-struct Acyl{N} <: ACYL{N} end
-struct Acylα{N} <: ACYL{N} end
-struct Acylβ{N} <: ACYL{N} end
+abstract type LCB <: SideChain end
+abstract type LCB4 <: LCB end
+abstract type LCB3 <: LCB end
+abstract type LCB2 <: LCB end
+struct SPB4 <: LCB4
+    carbon::Int 
+    doublebond::Int 
+end
+struct NotPhyto4 <: LCB4 
+    carbon::Int 
+    doublebond::Int 
+end
+struct SPB3 <: LCB3 
+    carbon::Int 
+    doublebond::Int 
+end
+struct NotPhyto3 <: LCB3 
+    carbon::Int 
+    doublebond::Int 
+end
+struct SPB2 <: LCB2 
+    carbon::Int 
+    doublebond::Int 
+end
+const NotPhyto = Union{NotPhyto3, NotPhyto4}
 
-# Used for query
-struct Lcb 
-    cb::Int
-    db::Int
-    ox::Int
+abstract type ACYL <: SideChain end
+struct Acyl <: ACYL
+    carbon::Int
+    doublebond::Int
+    oxygen::Int
 end
-abstract type NACYL end
-struct Nacyl <: NACYL
-    cb::Int
-    db::Int
-    ox::Int
+struct Acylα <: ACYL 
+    carbon::Int
+    doublebond::Int 
+    oxygen::Int 
 end
-struct Nacylα <: NACYL
-    cb::Int
-    db::Int
-    ox::Int
-end
-struct Nacylβ <: NACYL
-    cb::Int
-    db::Int
-    ox::Int
+struct Acylβ <: ACYL 
+    carbon::Int
+    doublebond::Int 
+    oxygen::Int 
 end
 
-struct Chain{S <: LCB, T <: ACYL}
+struct SumChain <: SideChain 
+    carbon::Int
+    doublebond::Int 
+    oxygen::Int 
+end
+
+
+struct DiChain{S <: LCB, T <: ACYL} <: SideChain
     lcb::S
     acyl::T
 end
 
-@as_record Chain
+@as_record SideChain
 @as_record LCB
 @as_record ACYL
 
@@ -241,12 +253,14 @@ abstract type Adduct end
 abstract type Pos <: Adduct end
 abstract type Neg <: Adduct end
 
-struct Ion{S <: Adduct, T <: Union{Sugar, Glycan, ClassSP, LCB, ACYL}}
+abstract type AbstractIon{S, T} end
+
+struct Ion{S <: Adduct, T <: Union{Sugar, Glycan, ClassSP, LCB, ACYL}} <: AbstractIon{S, T}
     adduct::S
     molecule::T
 end
 
-struct ISF{S <: Adduct, T <: ClassSP}
+struct ISF{S <: Adduct, T <: ClassSP} <: AbstractIon{S, T}
     adduct::S
     molecule::T
 end
@@ -298,24 +312,38 @@ mutable struct Score
     apply_threshold
 end
 
-struct CompoundID{C <: Union{ClassSP, Nothing}}
-    sum::NTuple{3, Int}
-    lcb::Union{Lcb, Nothing}
-    acyl::Union{NACYL, Nothing}
+abstract type AbstractProject end
+abstract type AbstractCompoundSP end
+
+const SPID{C <: ClassSP, S <: SideChain} = @NamedTuple begin
+    class::C
+    sidechain::S
+end
+SPID(cls::ClassSP, sc::SideChain) = (class = cls, sidechain = sc)
+SPID(cpd::AbstractCompoundSP) = SPID(class(cpd), sidechain(cpd))
+
+mutable struct CompoundSPVanilla <: AbstractCompoundSP
+    class::ClassSP
+    sidechain::SideChain
+    fragments::Table
+    CompoundSPVanilla(class::ClassSP, sidechain::SideChain, fragments = Table(ion1 = Ion[], ion2 = ion2, source = Int[], id = Int[])) = new(class, sidechain, fragments)
 end
 
-mutable struct CompoundSP
+mutable struct CompoundSP <: AbstractCompoundSP
     class::ClassSP
-    sum::NTuple{3, Int}   # (#C, #db, #OH)
-    chain::Union{Chain, Nothing}
+    sidechain::SideChain
     fragments::Table # ion1, ion2, source, id
     area::Tuple{Float64, Float64}
     states::Vector{Int}
     results::Vector
-    project
-    CompoundSP(class, sum, chain, fragments, area, states, results, project) = new(class, sum, chain, fragments, area, states, results, project)
-    CompoundSP(class, sum, chain) = new(class, sum, chain)
+    project::AbstractProject
+    CompoundSP(class::ClassSP, sidechain::SideChain, fragments, area, states, results, project) = new(class, sidechain, fragments, area, states, results, project)
+    CompoundSP(class::ClassSP, sidechain::SideChain, fragments = Table(ion1 = Ion[], ion2 = ion2, source = Int[], id = Int[])) = new(class, sidechain, fragments, (0.0, 0.0), [0, 0], RuleSet[RuleSet(:missing, EmptyRule()), RuleSet(:missing, EmptyRule())])
 end
+
+const CompoundID = Union{<: SPID, <: AbstractCompoundSP}
+
+#CompoundSP(cpd::CompoundSP, sidechain::SideChain) = CompoundSP(cpd.class, sidechain, cpd.fragments, cpd.area, cpd.states, cpd.results, cpd.project)
 
 mutable struct AnalyteSP
     compounds::Vector{CompoundSP}
@@ -349,7 +377,7 @@ struct EmptyRule <: AbstractRule end
 
 struct RuleSet
     mode::Symbol
-    rule::Union{AbstractRule, ClassSP, Chain}
+    rule::Union{AbstractRule, ClassSP, SideChain}
 end
 
 struct RuleUnion <: AbstractRule
@@ -372,7 +400,7 @@ struct Result{T} <: AbstractResult{T}
 end
 @as_record Result
 
-struct PartialResult{T, C <: Union{Chain, ClassSP}} <: AbstractResult{T}
+struct PartialResult{T, C <: Union{SideChain, ClassSP}} <: AbstractResult{T}
     matched::Bool
     rule::T
     result::C
@@ -380,8 +408,8 @@ end
 
 @as_record PartialResult
 
-struct Hydroxyl 
-    spb::LCB
+struct CalcOx
+    lcb::LCB
 end
 
 struct AcylIon{T <: LCB}
@@ -419,7 +447,7 @@ struct MRM <: Data
     additional::Dict
 end
 
-struct Project
+struct Project <: AbstractProject
     analytes::Vector{AnalyteSP}
     data::Vector{Data}
     anion::Symbol

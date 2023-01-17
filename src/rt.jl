@@ -65,7 +65,8 @@ end
 macro model()
     return quote identity end
 end
-model_fn(expr) = expr == QuoteNode(:default) ? :identity : Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), find_tbl(expr) ? expr : Expr(expr.head, push!(expr.args, :tbl)...)))
+model_fn(expr) = expr ≡ QuoteNode(:default) ? :identity : 
+    Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), find_tbl(expr) ? expr : Expr(expr.head, push!(expr.args, :tbl)...)))
 macro model(expr)
     return quote $(model_fn(expr)) end
 end
@@ -76,7 +77,7 @@ macro model(expr...)
 end
 
 function model_clusters!(model, project::Project)
-    model = model == :default ? @model(lm(@formula(rt ~ mw + cluster))) : model
+    model = model ≡ :default ? @model(lm(@formula(rt ~ mw + cluster))) : model
     haskey(project.appendix, :clusters_model) && delete!(project.appendix, :clusters_model)
     haskey(project.appendix, :clusters_formula) && delete!(project.appendix, :clusters_formula)
     insert!(project.appendix, :clusters_formula, model)
@@ -166,13 +167,13 @@ function align!(project::Project, align_to::id, compatible = false, db_product =
         qf = cpd -> begin
             _, ms1 = generate_ms(cpd, mode, aquery.project.anion)
             any(!isempty(products[i]) && any(iscompatible(cpd, product) for product in products[i]) && 
-                any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ==(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
+                any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ≡(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
         end
     else
         qf = cpd -> begin
             _, ms1 = generate_ms(cpd, mode, aquery.project.anion)
             any(!isempty(products[i]) && any(iscomponent(cpd, product) for product in products[i]) && 
-                any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ==(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
+                any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ≡(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
         end
     end
 =#
