@@ -242,11 +242,11 @@ mw(spid(Hex2Cer, 34, 1, 2))
 # ╔═╡ b7028a91-5b32-4b84-be66-aac1dea60c22
 md"""
 # Analytes clustering
-First, generate clusters by `generate_clusters!`.
+First, initiate clustering by `initiate_clusters!`.
 """
 
-# ╔═╡ f19aff95-8d21-4053-b1e5-abdeb2f8ccd8
-generate_clusters!(pj)
+# ╔═╡ tf19aff95-8d21-4053-b1e5-abdeb2f8ccd8
+initiate_clusters!(pj)
 
 # ╔═╡ 642309f1-0400-4b98-b37d-9cd94a9e0f61
 plot_rt_mw(pj; clusters = :clusters)

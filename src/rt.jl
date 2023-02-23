@@ -1,12 +1,12 @@
 group_analyte(analytes) = @p analytes groupview(deisomerized(class(_))) map((first ∘ parentindices)(_))
-generate_clusters!(aquery::AbstractQuery; kwargs...) = (generate_clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
-generate_clusters!(project::Project; analytes = project.analytes) =
+initiate_clusters!(aquery::AbstractQuery; kwargs...) = (initiate_clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
+initiate_clusters!(project::Project; analytes = project.analytes) =
     replace_clusters!(project, group_analyte(analytes))
 
 analytes2clusters!(aquery::AbstractQuery; kwargs...) = (analytes2clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
 function analytes2clusters!(project::Project; new = false, scale = 0.0, radius = 0.0, analytes = project.analytes, kwargs...)
     valid_id = collect((first ∘ parentindices)(analytes))
-    groups = @p project.clusters map(filter(x -> in(x, valid_id), _)) filter(!isempty)
+    groups = @p project.clusters map(filter(x -> in(x, valid_id), _)) filter(length(_) > 2)
     ret = @p groups map(map(rt, @views project.analytes[_]))
     maxrt = maximum(maximum(r) for r in ret)
     mass = @p groups map(map(mw, @views project.analytes[_]))
