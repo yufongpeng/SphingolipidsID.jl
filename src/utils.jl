@@ -24,6 +24,16 @@ function new_project(project::Project; analytes = copy_wo_project.(project.analy
 end
 
 # user interface for query
+qand(qcmds...) = QueryAnd(collect(map(qcmd, qcmds)))
+qor(qcmds...) = QueryOr(collect(map(qcmd, qcmds)))
+qnot(qcmd::QueryCommands) = QueryNot(qcmd)
+qnot(qcmd::QueryNot) = qcmd.qcmd
+qnot(qcmd) = QueryNot(QueryCmd(qcmd))
+
+qcmd(qcmd::QueryCommands) = qcmd
+qcmd(qcmd) = QueryCmd(qcmd)
+qcmd(query, neg) = neg ? qnot(query) : qcmd(query)
+
 function lcb(c::Int, d::Int, n::Int)
     Cons = @match d + n begin
         2 => SPB2
@@ -35,7 +45,9 @@ end
 acyl(c::Int, d::Int, n::Int) = Acyl(c, d, n)
 acylα(c::Int, d::Int, n::Int) = Acylα(c, d, n)
 acylβ(c::Int, d::Int, n::Int) = Acylβ(c, d, n)
-spid(cls::Type{<: ClassSP}, sc::SideChain) = SPID(cls(), sc)
+chain(spb::LCB, nacyl::ACYL) = DiChain(spb, nacyl)
+chain(c::Int, n::Int, o::Int) = SumChain(c, n, o)
+spid(cls::Type{<: ClassSP}, sc::ChainSP) = SPID(cls(), sc)
 spid(cls::Type{<: ClassSP}, spb::LCB, nacyl::ACYL) = SPID(cls(), DiChain(spb, nacyl))
 spid(cls::Type{<: ClassSP}, sum::NTuple{3, Int}) = SPID(cls(), SumChain(sum...))
 spid(cls::Type{<: ClassSP}, c::Int, n::Int, o::Int) = SPID(cls(), SumChain(c, n, o))
@@ -79,10 +91,10 @@ hasisomer(::GP1_) = true
 hasisomer(::HexNAcHex2Cer_) = true
 hasisomer(::HexNAcHex3Cer_) = true
 hasisomer(::ClassSP) = false
-hasisomer(sc::DiChain) = nox(sc.acyl) > 0 
-hasisomer(::SumChain) = true 
-hasisomer(::LCB) = false 
-hasisomer(sc::ACYL) = nox(sc) > 0 
+hasisomer(sc::DiChain) = nox(sc.acyl) > 0
+hasisomer(::SumChain) = true
+hasisomer(::LCB) = false
+hasisomer(sc::ACYL) = nox(sc) > 0
 hasisomer(::Nothing) = true
 hasisomer(::Type{T}) where T = hasisomer(T())
 
@@ -94,34 +106,34 @@ isomer_tuple(cls::ClassSP) = hasisomer(cls) ? cls.isomer : (cls, )
 # instance api
 class(analyte::AnalyteSP) = class(last(analyte))
 class(cpd::CompoundID) = cpd.class
-sidechain(analyte::AnalyteSP) = sidechain(last(analyte))
-sidechain(cpd::CompoundID) = cpd.sidechain
+chain(analyte::AnalyteSP) = chain(last(analyte))
+chain(cpd::CompoundID) = cpd.chain
 
-sumcomp(analyte::AnalyteSP) = sumcomp(sidechain(analyte))
-sumcomp(cpd::CompoundID) = sumcomp(sidechain(cpd))
+sumcomp(analyte::AnalyteSP) = sumcomp(chain(analyte))
+sumcomp(cpd::CompoundID) = sumcomp(chain(cpd))
 sumcomp(sc::SumChain) = sc
-sumcomp(sc::SideChain) = SumChain(ncb(sc), ndb(sc), nox(sc))
-chainconstituent(analyte::AnalyteSP) = chainconstituent(sidechain(analyte))
-chainconstituent(cpd::CompoundID) = chainconstituent(sidechain(cpd))
-chainconstituent(sc::SideChain) = sc
+sumcomp(sc::ChainSP) = SumChain(ncb(sc), ndb(sc), nox(sc))
+chainconstituent(analyte::AnalyteSP) = chainconstituent(chain(analyte))
+chainconstituent(cpd::CompoundID) = chainconstituent(chain(cpd))
+chainconstituent(sc::ChainSP) = sc
 chainconstituent(sc::SumChain) = nothing
 chainconstituent(sc::ACYL) = nothing
 const isspceieslevel = isnothing ∘ chainconstituent
 
-lcb(analyte::AnalyteSP) = lcb(sidechain(analyte))
-lcb(cpd::CompoundID) = lcb(sidechain(cpd))
-lcb(sc::SideChain) = nothing
+lcb(analyte::AnalyteSP) = lcb(chain(analyte))
+lcb(cpd::CompoundID) = lcb(chain(cpd))
+lcb(sc::ChainSP) = nothing
 lcb(sc::DiChain) = sc.lcb
 lcb(sc::LCB) = sc
-acyl(analyte::AnalyteSP) = acyl(sidechain(analyte))
-acyl(cpd::CompoundID) = acyl(sidechain(cpd))
-acyl(sc::SideChain) = nothing
+acyl(analyte::AnalyteSP) = acyl(chain(analyte))
+acyl(cpd::CompoundID) = acyl(chain(cpd))
+acyl(sc::ChainSP) = nothing
 acyl(sc::DiChain) = sc.acyl
 acyl(sc::ACYL) = sc
 rt(analyte::AnalyteSP) = analyte.rt
 
-ndbox(analyte::AnalyteSP) = ndbox(sidechain(analyte))
-ndbox(cpd::CompoundID) = ndbox(sidechain(cpd))
+ndbox(analyte::AnalyteSP) = ndbox(chain(analyte))
+ndbox(cpd::CompoundID) = ndbox(chain(cpd))
 ndbox(sc::SumChain) = sc.doublebond + sc.oxygen
 ndbox(sc::DiChain) = ndbox(sc.lcb) + ndbox(sc.acyl)
 ndbox(::LCB2) = 2
@@ -129,18 +141,18 @@ ndbox(::LCB3) = 3
 ndbox(::LCB4) = 4
 ndbox(sc::ACYL) = ndb(sc) + nox(sc)
 
-ncb(analyte::AnalyteSP) = ncb(sidechain(analyte))
-ncb(cpd::CompoundID) = ncb(sidechain(cpd))
-ncb(sc::SideChain) = sc.carbon
+ncb(analyte::AnalyteSP) = ncb(chain(analyte))
+ncb(cpd::CompoundID) = ncb(chain(cpd))
+ncb(sc::ChainSP) = sc.carbon
 ncb(sc::DiChain) = ncb(sc.lcb) + ncb(sc.acyl)
-nox(analyte::AnalyteSP) = nox(sidechain(analyte))
-nox(cpd::CompoundID) = nox(sidechain(cpd))
-nox(sc::SideChain) = sc.oxygen
+nox(analyte::AnalyteSP) = nox(chain(analyte))
+nox(cpd::CompoundID) = nox(chain(cpd))
+nox(sc::ChainSP) = sc.oxygen
 nox(sc::DiChain) = nox(sc.lcb) + nox(sc.acyl)
 nox(sc::LCB) = ndbox(sc) - ndb(sc)
-ndb(analyte::AnalyteSP) = ndb(sidechain(analyte))
-ndb(cpd::CompoundID) = ndb(sidechain(cpd))
-ndb(sc::SideChain) = sc.doublebond
+ndb(analyte::AnalyteSP) = ndb(chain(analyte))
+ndb(cpd::CompoundID) = ndb(chain(cpd))
+ndb(sc::ChainSP) = sc.doublebond
 ndb(sc::DiChain) = ndb(sc.lcb) + ndb(sc.acyl)
 
 ncb(ion::Ion) = ncb(ion.molecule)
@@ -160,7 +172,7 @@ nox(ion::Ion{ProtonationNL3H2O}) = nox(ion.molecule) - 3
 is4e(sc::LCB) = nox(sc) < 3
 is4e(sc::LCB2) = nox(sc) < 2
 
-default_adduct(sc::LCB) = 
+default_adduct(sc::LCB) =
     is4e(sc) ? Ion(SPDB[:NLH2O][nox(sc) + 1], sc) : Ion(SPDB[:NLH2O][nox(sc)], sc)
 
 function hydroxyl_shift(adduct::Adduct, Δ::Int)
@@ -168,14 +180,14 @@ function hydroxyl_shift(adduct::Adduct, Δ::Int)
     0 < id <= length(SPDB[:NLH2O]) ? SPDB[:NLH2O][id] : nothing
 end
 
-hydroxyl_shift(sc::T, Δ::Int) where {T <: LCB} = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? T(ncb(sc), ndb(sc) - Δ) : nothing 
-hydroxyl_shift(sc::NotPhyto3, Δ::Int) = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? SPB3(ncb(sc), ndb(sc) - Δ) : nothing 
-hydroxyl_shift(sc::NotPhyto4, Δ::Int) = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? SPB4(ncb(sc), ndb(sc) - Δ) : nothing 
+hydroxyl_shift(sc::T, Δ::Int) where {T <: LCB} = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? T(ncb(sc), ndb(sc) - Δ) : nothing
+hydroxyl_shift(sc::NotPhyto3, Δ::Int) = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? SPB3(ncb(sc), ndb(sc) - Δ) : nothing
+hydroxyl_shift(sc::NotPhyto4, Δ::Int) = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? SPB4(ncb(sc), ndb(sc) - Δ) : nothing
 
 # connection
 find_connected(cpd::CompoundID, analyte::AnalyteSP) = findall(id -> connected(cpd, id), analyte)
 
-connected(cpd::CompoundID, id::CompoundID) = iscompatible(sidechain(cpd), sidechain(id)) && begin
+connected(cpd::CompoundID, id::CompoundID) = iscompatible(chain(cpd), chain(id)) && begin
     class1 = hasisomer(cpd.class) ? cpd.class.isomer : (cpd.class, )
     class2 = hasisomer(id.class) ? id.class.isomer : (id.class, )
     any(connected(cls1, cls2) || connected(cls2, cls1) for (cls1, cls2) in Iterators.product(class1, class2))
@@ -196,12 +208,12 @@ macro rule(expr)
     end
 end
 
-pipe2rule(expr) = 
+pipe2rule(expr) =
     @match expr begin
         Expr(:call, :(|>), arg1, arg2)  => Expr(:call, :(Rule), pipe2rule(arg1), pipe2rule(arg2))
         Expr(head, args...)             => Expr(head, map(pipe2rule, args)...)
         e                               => e
-    end 
+    end
 
 # miscellaneous
 vectorize(x::AbstractVector) = x
@@ -210,16 +222,15 @@ vectorize(x) = [x]
 
 tuplize(x::Tuple) = x
 tuplize(x) = (x,)
-    
 
 function mode(ions)
-    dict = Dict{Union{ClassSP, SideChain}}()
+    dict = Dict{Union{ClassSP, ChainSP}}()
     for is in ions
-        for i in is 
+        for i in is
             dict[i] = get(dict, i, 0) + 1
         end
     end
-    maxk, maxi = Union{ClassSP, SideChain}[], 0
+    maxk, maxi = Union{ClassSP, ChainSP}[], 0
     for (k, v) in dict
         if maxi < v
             maxk = [k]
@@ -231,7 +242,7 @@ function mode(ions)
     maxk
 end
 
-between(num::Number, range) = first(range) <= num <= last(range) 
+between(num::Number, range) = first(range) <= num <= last(range)
 between(num::Number; up, low) = low <= num <= up # REVERSE~~~~
 between(num::Number, value, tol) = value - tol <= num <= value + tol
 intersection(range...) = (maximum(first(r) for r in range), minimum(last(r) for r in range))
@@ -260,13 +271,13 @@ lcb(cpd::CompoundSP) = _lcb(cpd.chain)
 lcb(chain::Chain) = chain.lcb
 acyl(analyte::AnalyteSP) = acyl(last(analyte))
 acyl(::Nothing) = nothing
-function acyl(cpd::CompoundSP) 
+function acyl(cpd::CompoundSP)
     spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
     string("Acyl ", cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
 end
 chain(analyte::AnalyteSP) = chain(last(analyte))
 chain(::Nothing) = nothing
-function chain(cpd::CompoundSP) 
+function chain(cpd::CompoundSP)
     spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
     string(spb_c, ":", spb_db, ";", "O", spb_o > 1 ? spb_o : "", "/", cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
 end

@@ -1,21 +1,21 @@
 generate_mrm(project::Project, adduct, product, polarity::Bool; kwargs...) = generate_mrm(project.analytes, adduct, product, polarity; kwargs..., anion = project.anion)
 generate_mrm(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...) = generate_mrm(aquery.result, adduct, product, polarity; kwargs..., anion = aquery.project.anion)
-generate_mrm(adduct, product, polarity::Bool, pq::Union{Project, Query}; kwargs...) = generate_mrm(pq, adduct, product, polarity; kwargs...)
+generate_mrm(adduct, product, polarity::Bool, pq::Union{Project, AbstractQuery}; kwargs...) = generate_mrm(pq, adduct, product, polarity; kwargs...)
 
-function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool; 
-                    mz_tol = 0.35, rt_tol = 0.5, 
-                    db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG], 
+function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool;
+                    mz_tol = 0.35, rt_tol = 0.5,
+                    db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
                     anion = :acetate,
                     default = mz(Ion(ProtonationNL2H2O(), SPB3(18, 1))))
     adduct = generate_adduct(vectorize(adduct))
-    cpdlist = isempty(adduct) ? generate_cpdlist(analytes, polarity, anion) : 
+    cpdlist = isempty(adduct) ? generate_cpdlist(analytes, polarity, anion) :
         generate_cpdlist(analytes, filter_adduct(adduct, polarity, anion), anion)
     filter_cpdlist!(cpdlist, product)
     productlist = generate_productlist(cpdlist, product, polarity)
     celist = generate_celist(cpdlist, product)
     tbl = NamedTuple{(:compound, :mz1, :mz2, :rt, :Δrt, :collision_energy), Tuple{Any, Float64, Float64, Float64, Float64, Int64}}[]
     for (rcpd, ms2, ce) in zip(cpdlist, productlist, celist)
-        if ms2 == 0 
+        if ms2 == 0
             isnothing(default) && continue
             ms2 = default
         end
@@ -42,12 +42,12 @@ function generate_mrm(analytes::AbstractVector{AnalyteSP}, adduct, product, pola
     end
     Table(tbl, polarity = repeat([polarity ? "Positive" : "Negative"], size(tbl, 1)))
     #=
-    tbl = DataFrame("Compound Name"     => map(repr, cpdlist[:, 1]), 
+    tbl = DataFrame("Compound Name"     => map(repr, cpdlist[:, 1]),
                     "Precursor Ion"     => map(mz, cpdlist[:, 1], cpdlist[:, 2]),
                     "Product Ion"       => productlist,
                     "Ret Time (min)"    => cpdlist[:, 3],
                     "Delta Ret Time"    => repeat([rt_tol], n),
-                    "Collision Energy"  => celist, 
+                    "Collision Energy"  => celist,
                     "Polarity"          => repeat([polarity ? "Positive" : "Negative"], n)
     )=#
 end
@@ -59,7 +59,7 @@ generate_adduct(adduct::Vector{Int}) = SPDB[:ADDUCTCODE].object[adduct]
 generate_adduct(adduct::Vector{<: AbstractString}) = object_adduct.(adduct)
 generate_adduct(adduct::Vector{<: Type{T}}) where {T <: Ion} = map(t -> t(), adduct)
 function filter_adduct(adduct::Vector{<: Adduct}, polarity::Bool, anion::Symbol)
-    if polarity 
+    if polarity
         filter(t -> isa(t, Pos), adduct)
     elseif anion ≡ :acetate
         filter(t -> isa(t, Neg) && !=(t, AddHCOO()), adduct)
@@ -71,7 +71,7 @@ end
 cpd_add_rt(analyte, add) = (cpd = last(analyte), add = add, rt = analyte.rt)
 cpd_add_rt(analyte, polarity, anion) = Iterators.map(add -> cpd_add_rt(analyte, add), filter_adduct(class_db_index(class(analyte)).default_ion, polarity, anion))
 
-generate_cpdlist(analytes::AbstractVector{AnalyteSP}, adduct::Vector, anion) = 
+generate_cpdlist(analytes::AbstractVector{AnalyteSP}, adduct::Vector, anion) =
     productview(cpd_add_rt, adduct, analytes) |> splitdimsview |> flatten
     # Transducers
     # Iterators.product(adduct, analytes) |> MapSplat(cpd_add_rt) |> collect
@@ -82,7 +82,7 @@ generate_cpdlist(analytes::AbstractVector{AnalyteSP}, adduct::Vector, anion) =
     # productview(cpd_add_rt, adduct, analytes) |> splitdimsview |> flatten
     # A little more allocation for 1st, less allocation for 2nd
 
-generate_cpdlist(analytes::AbstractVector{AnalyteSP}, polarity::Bool, anion) = 
+generate_cpdlist(analytes::AbstractVector{AnalyteSP}, polarity::Bool, anion) =
     @p analytes |> mapmany(cpd_add_rt(_, polarity, anion))
     # Transducers
     # analytes |> MapCat(analyte -> cpd_add_rt(analyte, polarity, anion)) |> collect
@@ -90,31 +90,30 @@ generate_cpdlist(analytes::AbstractVector{AnalyteSP}, polarity::Bool, anion) =
     # @p analytes |> Iterators.map(cpd_add_rt(_, polarity, anion)) |> reduce(vcat)
     # Much less allocation for 1st
     # DataPipes and SplitApplyCombine
-    
     # Even less allocation for 1st
 
 filter_cpdlist!(cpdlist, product) = cpdlist
 filter_cpdlist!(cpdlist, ::Ion{<: Pos, NeuAc}) = filter!(cpd -> isa(class(cpd.cpd), CLS.fg.nana), cpdlist)
 filter_cpdlist!(cpdlist, ::LCB) = filter!(cpd -> !isspceieslevel(cpd.cpd), cpdlist)
 
-generate_productlist(cpdlist::Vector, ::Type{LCB}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) = 
+generate_productlist(cpdlist::Vector, ::Type{LCB}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) =
     map(cpdlist) do row
         isspceieslevel(row.cpd) && return 0
         id = findfirst(x -> ≡(lcb(row.cpd), x.molecule), db[:, 1])
         isnothing(id) ? mz(default_adduct(lcb(row.cpd))) : db[id, 2]
     end
-generate_productlist(cpdlist::Vector, ion::Ion{<: Pos, NeuAc}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) = 
+generate_productlist(cpdlist::Vector, ion::Ion{<: Pos, NeuAc}, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG]) =
     repeat([db[findfirst(==(ion), db[:, 1]), 2]], size(cpdlist, 1))
 
-generate_celist(cpdlist::Vector, ::Type{LCB}) = 
+generate_celist(cpdlist::Vector, ::Type{LCB}) =
     map(cpdlist) do row
         id = findfirst(x -> ≡(class(row.cpd), SPDB[:CE].ms1[x]) && ≡(row.add, SPDB[:CE].adduct1[x]) && ==(SPDB[:CE].ms2[x], "LCB"), eachindex(SPDB[:CE]))
         isnothing(id) ? 40 : SPDB[:CE].eV[id]
     end
 
-generate_celist(cpdlist::Vector, ion::Ion{<: Pos, NeuAc}) = 
+generate_celist(cpdlist::Vector, ion::Ion{<: Pos, NeuAc}) =
     map(cpdlist) do row
-        id = findfirst(x -> ≡(class(row.cpd), SPDB[:CE].ms1[x]) && ≡(row.add, SPDB[:CE].adduct1[x]) && 
+        id = findfirst(x -> ≡(class(row.cpd), SPDB[:CE].ms1[x]) && ≡(row.add, SPDB[:CE].adduct1[x]) &&
                             ==(SPDB[:CE].ms2[x], "NeuAc") && ≡(ion.adduct, SPDB[:CE].adduct2[x]), eachindex(SPDB[:CE]))
         isnothing(id) ? 40 : SPDB[:CE].eV[id]
     end

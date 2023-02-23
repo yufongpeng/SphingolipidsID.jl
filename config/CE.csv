@@ -1,5 +1,7 @@
 ms1,adduct1,ms2,adduct2,eV,
 "Cer	",1,LCB,0,35,
+CerP,1,LCB,0,,
+SM,1,LCB,0,55,
 "HexCer	",1,LCB,0,45,
 "SHexCer	",1,LCB,0,50,
 "Hex2Cer	",1,LCB,0,55,
@@ -75,6 +77,7 @@ GM4,1,Cer,2,,
 "GT1	",5,HexNAc_NeuAc_NeuAc,2,15,
 "GQ1	",5,HexNAc_NeuAc_NeuAc,2,20,
 "GP1	",5,HexNAc_NeuAc_NeuAc,2,25,*
+SM,1,PhosphoCholine,1,55,*
 "Cer	",17,ACYL,19,60,
 "HexCer	",17,ACYL,19,75,
 "Hex2Cer	",17,ACYL,19,80,
@@ -156,3 +159,6 @@ GM4,1,Cer,2,,
 "GQ1	",15,NeuAc_NeuAc,14,30,*
 "GQ1	",16,NeuAc_NeuAc,14,10,*
 "GP1	",15,NeuAc_NeuAc,14,,
+SM,17,PhosphoCholine,26,55,*
+SM,18,PhosphoCholine,26,55,
+SM,26,PhosphoCholine,26,55,*

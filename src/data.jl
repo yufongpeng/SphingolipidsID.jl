@@ -1,13 +1,10 @@
-
 sort_data(tbl::Table) = sort_data!(tbl)
 function sort_data!(tbl::Table)
     sort!(tbl, :datafile)
-    for i in unique(tbl.datafile)
-        println(" ", i)
-    end
-    println()
     tbl
 end
+
+file_order(tbl::Table) = in(:datafile, propertynames(tbl)) ? unique(tbl.datafile) : throw(ArgumentError("This table doesn't contain datafile."))
 function fill_mz2!(tbl::Table, mz2::Float64)
     fill!(tbl.mz2, mz2)
     tbl
@@ -15,12 +12,12 @@ end
 
 function fill_mz2!(tbl::Table{
     NamedTuple{
-        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile), 
-        Tuple{Int64, Float64, Float64, Float64, Float64, Float64, Int64, Float64, Float64, SubString{String}}}, 1, 
+        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile),
+        Tuple{Int64, Float64, Float64, Float64, Float64, Float64, Int64, Float64, Float64, SubString{String}}}, 1,
     NamedTuple{
-        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile), 
+        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile),
         Tuple{Vector{Int64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Int64}, Vector{Float64}, Vector{Float64}, Vector{SubString{String}}}}
-    }, 
+    },
     mz2::Union{<: Vector, <: Tuple})
     mapping = Dict(unique(tbl.datafile) .=> mz2)
     tbl.mz2 .= getindex.(Ref(mapping), tbl.datafile)
@@ -34,12 +31,12 @@ end
 
 function fill_ce!(tbl::Table{
     NamedTuple{
-        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile), 
-        Tuple{Int64, Float64, Float64, Float64, Float64, Float64, Int64, Float64, Float64, SubString{String}}}, 1, 
+        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile),
+        Tuple{Int64, Float64, Float64, Float64, Float64, Float64, Int64, Float64, Float64, SubString{String}}}, 1,
     NamedTuple{
-        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile), 
+        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile),
         Tuple{Vector{Int64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Int64}, Vector{Float64}, Vector{Float64}, Vector{SubString{String}}}}
-    }, 
+    },
     eV::Union{<: Vector, <: Tuple})
     mapping = Dict(unique(tbl.datafile) .=> eV)
     tbl.collision_energy .= getindex.(Ref(mapping), tbl.datafile)
@@ -83,19 +80,18 @@ function filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err =
 end
 
 function compoundspvanilla(cpd, product)
-    sum_cb, sum_db, sum_o = match(r".+ (\d+):(\d+);(\d*)O", cpd.Species).captures
-    sc = SumChain(parse(Int, sum_cb), parse(Int, sum_db), isempty(sum_o) ? 1 : parse(Int, sum_o))
     cls = (cpd.Abbreviation)()
+    sc = sumcomp(cpd.Species)
     adduct_class = object_adduct(cpd.Adduct)
     pr = process_product(product, cls, sc)
     isnothing(pr) && return pr
     ion2, sc = pr
-    CompoundSPVanilla(cls, sc, 
+    CompoundSPVanilla(cls, sc,
         Table(ion1 = Ion[Ion(adduct_class, cls)], ion2 = ion2, source = [1], id = [1])
     )
 end
 
-process_product(product::Ion, cls::ClassSP, sc::SumChain) = 
+process_product(product::Ion, cls::ClassSP, sc::SumChain) =
     (in(product, NANA) && !hasnana(cls)) ? nothing : (Ion[product], sc)
 function process_product(product::Ion{<: Adduct, <: LCB}, cls::ClassSP, sc::SumChain)
     lcb_o = nox(product.molecule)
@@ -104,17 +100,17 @@ function process_product(product::Ion{<: Adduct, <: LCB}, cls::ClassSP, sc::SumC
     sum_o = nox(sc)
     #=
     1. sum_db + sum_o < lcb_db + lcb_o (total unsaturation deficiency)
-    2. sum_o < lcb_o 
+    2. sum_o < lcb_o
         0 < Δ = lcb_o - sum_o ≤ sum_db - lcb_db
         lcb_o' = lcb_o - Δ = sum_o => sum_o - lcb_o' = 0
-        lcb_db' = lcb_db + Δ ≤ sum_db 
+        lcb_db' = lcb_db + Δ ≤ sum_db
     3. sum_db < lcb_db
         0 < Δ = lcb_db - sum_db ≤ sum_o - lcb_o
-        lcb_db' = lcb_db - Δ = sum_db 
+        lcb_db' = lcb_db - Δ = sum_db
         lcb_o' = lcb_o + Δ ≤ sum_o => sum_o - lcb_o' = sum_o - lcb_o - Δ ≥ 0
     =#
     (sum_db + sum_o) < (lcb_o + lcb_db) && return nothing
-    Δ = sum_o - lcb_o 
+    Δ = sum_o - lcb_o
     Δ = Δ < 0 ? Δ : max(0, lcb_db - sum_db)
     product_new = @match Δ begin
         0 => product
@@ -122,7 +118,7 @@ function process_product(product::Ion{<: Adduct, <: LCB}, cls::ClassSP, sc::SumC
             lcb_new = hydroxyl_shift(product.molecule, Δ)
             add_new = hydroxyl_shift(product.adduct, Δ)
             (isnothing(lcb_new) || isnothing(add_new)) && return nothing
-            Ion(add_new, lcb_new) 
+            Ion(add_new, lcb_new)
         end
     end
     lcb_new = product_new.molecule

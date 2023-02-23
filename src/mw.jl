@@ -38,20 +38,21 @@ function nmw(formula::AbstractString)
     end
 end
 
-mz(cpd::CompoundID, ion::ISF) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.sidechain)))
+mz(cpd::CompoundID, ion::ISF) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.chain)))
 #mz(cpd::CompoundID, ions::AcylIon{T}) where T = mz.(ions.ions, (cpd.sum .- sumcomp(T()))...)
 mz(cpd::CompoundID, ion::Ion) = mz(ion)
 mz(cpd::CompoundID, add::Adduct) = parse_adduct(add)(mw(cpd))
-mz(cpd::CompoundID, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.sidechain)))
+mz(cpd::CompoundID, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.chain)))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
 #mz(ion::Ion, cb, db, o) = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
 
 mw(analyte::AnalyteSP) = mw(last(analyte))
 #mw(molecule, cb, db, o) = mw(molecule)
 #hydrosyn(a, b) = a + b - nmw("H2O")
-mw(::Hex) = mw("C6H12O6") 
-mw(::HexNAc) = mw("C8H15NO6") 
-mw(::NeuAc) = mw("C11H19NO9") 
+mw(::PhosphoCholine) = mw("C5H13NO4P")
+mw(::Hex) = mw("C6H12O6")
+mw(::HexNAc) = mw("C8H15NO6")
+mw(::NeuAc) = mw("C11H19NO9")
 mw(glycan::Glycan) = mapreduce(mw, +, glycan.chain) - (length(glycan.chain) - 1) * mw("H2O")
 mw(lcb::LCB) = ncb(lcb) * mw("C") + nox(lcb) * mw("O") + (2 * (ncb(lcb) - ndb(lcb)) + 3) * mw("H") + mw("N")
 mw(acyl::ACYL) = ncb(acyl) * mw("C") + (2 * ncb(acyl) - 2 * ndb(acyl) - 1) * mw("H") + nox(acyl) * mw("O")
@@ -65,10 +66,10 @@ function mw(cpd::CompoundID)
     ms + nox(cpd) * mw("O")
 end
 
-merge_species(cn::Int, db::Int, class::AbstractString, pre::AbstractString, post::AbstractString) = 
+merge_species(cn::Int, db::Int, class::AbstractString, pre::AbstractString, post::AbstractString) =
     *(class, " ", isempty(pre) ? pre : (pre * "-"), "$cn:$db", isempty(post) ? post : (";" * post))
 
-function merge_formula(elements::Vector, Δcn::Int, Δdb::Int) 
+function merge_formula(elements::Vector, Δcn::Int, Δdb::Int)
     Δdb -= Δcn
     mapreduce(*, elements) do element
         el, num = element
@@ -129,7 +130,7 @@ function parse_adduct(adduct::AbstractString)
         # M-H / M+FA-H
         mapreduce(nmw, -, split(pos_add, "-"))
     end
-    x -> (x * nm + madd) / charge 
+    x -> (x * nm + madd) / charge
 end
 
 parse_adduct(::Protonation) = (x -> (x + nmw("H")))

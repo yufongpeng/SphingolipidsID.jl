@@ -3,7 +3,7 @@ function MRM(featuretable::Table, polarity::Bool = true; mz_tol = 0.35, addition
     mz2_loc = Vector{Int}[]
     for (id, mz2) in enumerate(featuretable.mz2)
         i = findfirst(x -> isapprox(mean(x), mz2; atol = 1e-4), mz2v)
-        if isnothing(i) 
+        if isnothing(i)
             push!(mz2v, [mz2])
             push!(mz2_loc, [id])
         else

@@ -1,11 +1,11 @@
 preis(anion = :acetate) = Project(AnalyteSP[], Data[], anion, Dictionary{ClassSP, Vector{Int}}(), 1, Dictionary{Symbol, Any}())
 preis(
-        featuretable, 
+        featuretable,
         mz_range,
         polarity::Bool;
         db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
         db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
-        mz_tol = 0.35, 
+        mz_tol = 0.35,
         rt_tol = 0.1,
         anion = :acetate,
         data = -1,
@@ -14,12 +14,12 @@ preis(
 
 preis(
         project::Project,
-        featuretable, 
+        featuretable,
         mz_range,
         polarity::Bool;
         db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
         db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
-        mz_tol = 0.35, 
+        mz_tol = 0.35,
         rt_tol = 0.1,
         data = -1,
         additional = Dict()
@@ -31,7 +31,7 @@ function preprocess_preis!(data, data_id, featuretable, mz_range, mz_tol, polari
     mz2_loc = Vector{Int}[]
     for (id, mz2) in enumerate(featuretable.mz2)
         i = findfirst(x -> isapprox(mean(x), mz2; atol = 1e-4), mz2v)
-        if isnothing(i) 
+        if isnothing(i)
             push!(mz2v, [mz2])
             push!(mz2_loc, [id])
         else
@@ -45,10 +45,10 @@ function preprocess_preis!(data, data_id, featuretable, mz_range, mz_tol, polari
     ))
     length(mzr) ≡ 1 && (mzr = repeat(mzr, length(mz2s)))
 
-    source, id_lb = length(data) ≡ 0 || data_id ≡ 0 ? 
-        (push!(data, PreIS(new_ft(featuretable, mz2_loc), mzr, mz2s, mz_tol, polarity, additional)); (length(data), 0)) : 
-            data_id < 0 ? 
-                merge_preis!(data, featuretable, mz2_loc, mzr, length(data) + 1 + data_id, mz_tol) : 
+    source, id_lb = length(data) ≡ 0 || data_id ≡ 0 ?
+        (push!(data, PreIS(new_ft(featuretable, mz2_loc), mzr, mz2s, mz_tol, polarity, additional)); (length(data), 0)) :
+            data_id < 0 ?
+                merge_preis!(data, featuretable, mz2_loc, mzr, length(data) + 1 + data_id, mz_tol) :
                     merge_preis!(data, featuretable, mz2_loc, mzr, data_id, mz_tol)
     dt = data[source]
     sort!(dt.raw, [:mz2_id, :mz1, :rt])
@@ -56,10 +56,10 @@ function preprocess_preis!(data, data_id, featuretable, mz_range, mz_tol, polari
 end
 
 function new_ft(featuretable, mz2_loc)
-    Table(copy(featuretable); 
-        mz2_id = (@p eachindex(featuretable) |> map(findfirst(x -> in(_, x), mz2_loc))), 
-        mz2 = nothing, 
-        alignment = zeros(Float64, size(featuretable, 1)), 
+    Table(copy(featuretable);
+        mz2_id = (@p eachindex(featuretable) |> map(findfirst(x -> in(_, x), mz2_loc))),
+        mz2 = nothing,
+        alignment = zeros(Float64, size(featuretable, 1)),
         isf = zeros(Int, size(featuretable, 1))
     )
 end
@@ -71,7 +71,7 @@ function merge_preis!(data, featuretable, mz2_loc, mz_range, source, mz_tol)
         subft = @view featuretable[loc]
         mz2_id = findfirst(mz2 -> abs(subft.mz2[1] - mz2) < mz_tol, dt.mz2)
         mzb = popfirst!(mz_range)
-        isnothing(mz2_id) ? push_ft!(dt, subft, mzb) : 
+        isnothing(mz2_id) ? push_ft!(dt, subft, mzb) :
             any(between(bd, dt.range[mz2_id]) for bd in mzb) ? merge_ft!(dt, subft, mzb, mz2_id) : push_ft!(dt, subft, mzb)
     end
     source, id_lb
@@ -80,10 +80,10 @@ end
 function push_ft!(dt, subft, mzb)
     push!(dt.mz2, subft.mz2[1])
     push!(dt.range, mzb)
-    subft = Table(copy(subft), 
-        id = maximum(dt.raw.id) .+ eachindex(subft), 
-        mz2_id = repeat([lastindex(dt.mz2)], size(subft, 1)), 
-        mz2 = nothing, 
+    subft = Table(copy(subft),
+        id = maximum(dt.raw.id) .+ eachindex(subft),
+        mz2_id = repeat([lastindex(dt.mz2)], size(subft, 1)),
+        mz2 = nothing,
         alignment = zeros(Float64, size(subft, 1)),
         isf = zeros(Int, size(subft, 1))
     )
@@ -96,9 +96,9 @@ function merge_ft!(dt, subft, mzb, mz2_id)
     last_id = maximum(dt.raw.id)
     origin = @p dt.raw filter(≡(_.mz2_id, mz2_id))
     setdiff!(dt.raw, origin)
-    subft = Table(copy(subft); 
-        mz2_id = repeat([mz2_id], size(subft, 1)), 
-        mz2 = nothing, 
+    subft = Table(copy(subft);
+        mz2_id = repeat([mz2_id], size(subft, 1)),
+        mz2 = nothing,
         alignment = zeros(Float64, size(subft, 1)),
         isf = zeros(Int, size(subft, 1))
     )
@@ -111,7 +111,7 @@ function merge_ft!(dt, subft, mzb, mz2_id)
             last_id += 1
             origin.id[end] = last_id
         else
-            # record # to recalculate 
+            # record # to recalculate
             ft = (; subft[ft_id]..., id = origin.id[id])
             origin[id] = (; (x => mean(v) for (x, v) in zip(propertynames(origin), zip(origin[id], ft)))...)
         end
@@ -120,8 +120,8 @@ function merge_ft!(dt, subft, mzb, mz2_id)
 end
 
 function generate_cpd(db, db_id, products)
-    cpds = compoundspvanilla.(Ref((Species = db.Species[db_id], 
-                            Abbreviation = db.Abbreviation[db_id], 
+    cpds = compoundspvanilla.(Ref((Species = db.Species[db_id],
+                            Abbreviation = db.Abbreviation[db_id],
                             Adduct = db.Adduct[db_id])), products)
     filter!(!isnothing, cpds)
     n = length(cpds)
@@ -171,12 +171,12 @@ end
 
 function preis!(
                     project::Project,
-                    featuretable, 
+                    featuretable,
                     mz_range,
                     polarity::Bool;
                     db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
                     db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
-                    mz_tol = 0.35, 
+                    mz_tol = 0.35,
                     rt_tol = 0.1,
                     data_id = -1,
                     additional = Dict()
@@ -195,7 +195,7 @@ function preis!(
         println(products)
         for ft_id in eachindex(subft)
             cpdsvanilla = mapreduce(vcat, eachindex(db)) do db_id
-                abs(db.mz[db_id] - subft.mz1[ft_id]) > mz_tol ? CompoundSPVanilla[] : 
+                abs(db.mz[db_id] - subft.mz1[ft_id]) > mz_tol ? CompoundSPVanilla[] :
                     generate_cpd(db, db_id, products)
             end
             isempty(cpdsvanilla) && continue
@@ -247,12 +247,12 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
         for (i, cpd) in Iterators.reverse(enumerate(analyte))
             cpd.area[1] < area_error[1] && continue
             cpd.area[2] > err_tol && continue
-            any(iscompatible(last(a), cpd) for a in project if abs(a.rt - analyte.rt) <= rt_tol) && continue            
+            any(iscompatible(last(a), cpd) for a in project if abs(a.rt - analyte.rt) <= rt_tol) && continue
             push!(project, AnalyteSP(copy_wo_project.(analyte[1:i]), analyte.rt))
             last(project).rt = calc_rt(last(project))
             break
         end
-        analyte.states[states_id(:error)] = area_error[2] > err_tol ? -1 : 1        
+        analyte.states[states_id(:error)] = area_error[2] > err_tol ? -1 : 1
         analyte.states[states_id(:isf)] = any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), last(analyte).fragments.ion1) ? 1 : -1
     end
     unique!(del)
@@ -276,22 +276,21 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     project
 end
 
-assign_isf_parent!(project::Project) = 
+assign_isf_parent!(project::Project) =
     for analyte in project
         for cpd in @view analyte[1:end - 1]
             set_raw!.(Ref(project), cpd.fragments.source, cpd.fragments.id, :isf, 1)
-            
         end
         cpd = last(analyte)
-        id = findall(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragments.ion1)
+        id = findall(ion -> !in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragments.ion1)
         set_raw_if!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, -1, <(1))
         id = setdiff(eachindex(cpd.fragments), id)
         set_raw!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, 1)
     end
 
-assign_parent!(project::Project) = 
+assign_parent!(project::Project) =
     for analyte in project
         cpd = last(analyte)
-        id = findall(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragments.ion1)
+        id = findall(ion -> !in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragments.ion1)
         set_raw!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, -1)
     end

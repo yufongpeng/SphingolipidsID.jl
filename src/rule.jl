@@ -7,12 +7,12 @@ rule(::Cer, sc::DiChain) = ((is4e(sc.lcb) && nox(sc.lcb) > 1) || nox(sc.acyl) > 
 @rule rule(::HexCer) = (ISF(ProtonationNLH2O(), HexCer()), ISF(ProtonationNLH2O(), Cer())) |> (HexCer(), ())
 @rule rule(::SHexCer) = (ISF(ProtonationNLH2O(), HexCer()), ISF(Protonation(), HexCer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) |> (SHexCer(), ())
 @rule rule(::Hex2Cer) = (ISF(ProtonationNLH2O(), Cer()), ISF(ProtonationNLH2O(), Hex2Cer())) |> (
-    Hex2Cer(), 
+    Hex2Cer(),
     Ion(ProtonationNLH2O(), Cer()) |> (Hex2Cer(), ())
 )
 @rule rule(::SHexHexCer) = (ISF(ProtonationNLH2O(), Hex2Cer()), ISF(Protonation(), Hex2Cer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) |> (SHexHexCer(), ())
 @rule rule(::Hex3Cer) = (ISF(Protonation(), Hex2Cer()), ISF(ProtonationNLH2O(), Hex2Cer()), ISF(ProtonationNLH2O(), Cer())) |> (
-    Hex3Cer(),    
+    Hex3Cer(),
     Ion(ProtonationNLH2O(), Cer()) |> (Hex3Cer(), ())
 )
 @rule rule(::HexNAcHex2Cer) = ISF(Protonation(), Hex2Cer()) |> (
@@ -24,7 +24,7 @@ rule(::Cer, sc::DiChain) = ((is4e(sc.lcb) && nox(sc.lcb) > 1) || nox(sc.acyl) > 
 )
 @rule rule(::HexNAcHex3Cer_) = RuleUnion(
     ISF(Protonation(), Hex3Cer()) |> (HexNAc_Hex3Cer(), ()),
-    ISF(Protonation(), HexNAcHex2Cer()) |> (Hex_HexNAc_Hex2Cer(), ()); 
+    ISF(Protonation(), HexNAcHex2Cer()) |> (Hex_HexNAc_Hex2Cer(), ());
     exception = Ion(ProtonationNLH2O(), HexNAc()) |> (
         RuleUnion(
             Ion(Protonation(), Hex3Cer()) |> (HexNAc_Hex3Cer(), ()),
@@ -34,7 +34,7 @@ rule(::Cer, sc::DiChain) = ((is4e(sc.lcb) && nox(sc.lcb) > 1) || nox(sc.acyl) > 
     )
 )
 @rule rule(::GM4) = (ISF(ProtonationNLH2O(), HexCer()), ISF(Protonation(), HexCer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) |> (
-    GM4(),    
+    GM4(),
     Ion(ProtonationNLH2O(), Cer()) |> (GM4(), ())
 )
 @rule rule(::GM3) = (ISF(ProtonationNLH2O(), HexCer()), ISF(Protonation(), HexCer()), ISF(ProtonationNLH2O(), Cer()), ISF(Protonation(), Cer())) |> (
@@ -43,7 +43,7 @@ rule(::Cer, sc::DiChain) = ((is4e(sc.lcb) && nox(sc.lcb) > 1) || nox(sc.acyl) > 
 )
 @rule rule(::GM2) = Ion(ProtonationNLH2O(), HexNAc()) |> (GM2(), ())
 
-@rule rule(::GM1, mode::Symbol) = 
+@rule rule(::GM1, mode::Symbol) =
     mode ≡ :ab ? rule_ab(GM1_()) : rule(GM1_())
 
 @rule rule_ab(::GM1) = HexNAcHex |> (GM1a(), ())
@@ -65,7 +65,7 @@ rule(::Cer, sc::DiChain) = ((is4e(sc.lcb) && nox(sc.lcb) > 1) || nox(sc.acyl) > 
     NANA2 |> (GD2(), ()),
     ()
 )
-@rule rule(::GD1, mode::Symbol) = 
+@rule rule(::GD1, mode::Symbol) =
     mode ≡ :ab ? rule_ab(GD1_()) : rule(GD1_())
 
 rule_ab(::GD1) = NANA |> (
@@ -79,7 +79,7 @@ rule_ab(::GD1) = NANA |> (
         NANA2           |> (GD1b(), ())
     ),
     ()
-)    
+)
 @rule rule(::GD1) = NANA |> (
     NANA2 |> (
         IonComparison(HexNAcHexNANA2, HexNAcHex) |> (
@@ -109,7 +109,7 @@ rule_ab(::GD1) = NANA |> (
     NANA23 |> (GT2(), ()),
     ()
 )
-@rule rule(::GT1, mode::Symbol) = 
+@rule rule(::GT1, mode::Symbol) =
     mode ≡ :ab ? rule_ab(GT1_()) : rule(GT1_())
 
 @rule rule_α(::GT1a) = RuleMode(
@@ -129,7 +129,7 @@ rule_ab(::GD1) = NANA |> (
             (0, 1) => RuleUnion(GT1b(), rule_α(GT1a())),
             (1, 10) => RuleUnion(rule_α(GT1a()), GT1b()),
             (10, Inf) => rule_α(GT1a())
-        ), 
+        ),
         HexNAcHexNANA2 |> (
             GT1aα(),
             HexNAcHexNANA |> (
@@ -158,12 +158,12 @@ rule_ab(::GD1) = NANA |> (
                     (0, 10) => GT1c(),
                     (10, Inf) => ()
                 )
-            ), 
+            ),
             HexNAcHexNANA |> (
                 IonComparison(HexNAcHexNANA, HexNAcHex) |> (
                     (0, 10) => GT1_(GT1c(), GT1b()),
                     (10, Inf) => GT1b(),
-                ), 
+                ),
                 HexNAcHex |> (
                     GT1c(),
                     rule_ab_neg(GT1_()) # Assume a/b only
@@ -179,7 +179,7 @@ rule_ab(::GD1) = NANA |> (
         )
     )
 )
-@rule rule(::GQ1, mode::Symbol) = 
+@rule rule(::GQ1, mode::Symbol) =
     mode ≡ :ab ? rule_ab(GQ1_()) : rule(GQ1_())
 
 @rule rule_ab(::GQ1) = NANA |> (
@@ -218,7 +218,7 @@ rule_ab(::GP1) = ()
                 GP1c(),
                 GP1cα()
             )
-        ), 
+        ),
         ()
     ),
     ()

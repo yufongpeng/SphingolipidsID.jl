@@ -1,8 +1,359 @@
+### A Pluto.jl notebook ###
+# v0.19.22
+
+using Markdown
+using InteractiveUtils
+
+# ╔═╡ f3a43015-ff88-42cb-8584-a85b4dc5c413
+begin
+	using Pkg
+	# Pkg.activate(Base.current_project())
+	Pkg.instantiate()
+	md"""
+	# SphingolipidsID.jl
+	"""
+end
+
+# ╔═╡ 73621b20-a541-11ed-0c79-1798d445b8db
+using SphingolipidsID, DataPipes, SplitApplyCombine, TypedTables; import PlotlyJS
+
+# ╔═╡ a520801e-398c-4060-b37b-65f4f56cf7b1
+begin
+	PlutoRunner.pluto_showable(::MIME"application/vnd.pluto.table+object", ::Table) = true
+	md"""
+	# Data preprocessing
+	## File input
+	* `featuretable_mzmine` can read files processed by MZMINE.
+	"""
+end
+
+# ╔═╡ bc30128b-e4f6-4726-9a93-26f2f200c6a0
+begin
+	dir = joinpath(dirname(@__FILE__), "data")
+	file1 = joinpath.(joinpath(dir, "mzmine3.3"), readdir(joinpath(dir, "mzmine3.3")))
+	file2 = joinpath.(joinpath(dir, "mzmine3.2"), readdir(joinpath(dir, "mzmine3.2")))
+	fts = @p [file1, file2] map(map(featuretable_mzmine, _)) zip(__...) map(append!(_...)) map(sort_data!)
+end
+
+# ╔═╡ d07369c9-7203-4cae-bf53-11101f769a47
+md"""
+* `file_order` lets user know the order of data files, so user can assign CE and mz2 to each files accordingly.
+"""
+
+# ╔═╡ c2edb35a-f55c-443d-83d7-98e89896ac69
+file_order.(fts)
+
+# ╔═╡ c12c7870-3589-4a63-8831-fe81cb4ca4b7
+md"""
+## Add CE
+* `fill_ce!` can add a new column of CE value to the feature table.
+When multiple values (a `vector` or `tuple`) are provided, it will assign the value to each file according to the order in the table.
+
+Because `TypedTables.Table` is immutable, it returns a copy of the wrapper, but the contents are mutated in place.
+"""
+
+# ╔═╡ 28bb51af-d13d-4797-8d75-8a4aecde9ce6
+begin
+	ces = repeat([[60, 60, 30, 30, 60, 60]], 9)
+	insert!(ces, 9, [45, 45, 45, 45])
+end
+
+# ╔═╡ 79e3a46e-0136-43d7-b159-aa68ef9f7515
+fts_ce = fill_ce!.(fts, ces)
+
+# ╔═╡ 0f410359-60d4-40f1-ae7d-0f68fc1b472e
+md"""
+## Add mz2
+* `fill_mz2!` can add a new column of mz2 value to the feature table.
+
+This function works similarly to `fill_ce!`.
+"""
+
+# ╔═╡ d599bfa8-b149-4c25-a32b-e2d1a560f30c
+ms = [236.238, 250.253, 284.295, 264.269, 262.253, 278.285, 292.3, 266.285, 274.093, 282.28]
+
+# ╔═╡ 118de018-fc1b-437c-91a7-26a4c879b135
+fts_mz2 = fill_mz2!.(fts_ce, ms)
+
+# ╔═╡ b669896a-6b8f-492a-b6cb-fae0cae1537b
+md"""
+## Filter duplication
+"""
+
+# ╔═╡ 00e6ebbd-286d-4d87-b528-3885b58d0173
+fts_unique = filter_duplicate!.(fts_mz2; n = 3, err_tol = 0.7)
+
+# ╔═╡ a587d588-0df6-4f1f-b59a-a2274cff638c
+md"""
+# Customize Database
+Users can customize database throw `library` by assigning the class, adduct, number of carbons, number of double bonds, and number of additional elements(oxygen, for example).
+
+To make the database work, users must mutate `SPDB[:LIBRARY_POS]` or `SPDB[:LIBRARY_NEG]`.
+"""
+
+# ╔═╡ b246cb85-a5e9-46bf-b160-83a2bc2b2312
+begin
+	db = reduce(append!, (
+	            library(Cer, ["[M+H]+", "[M+H-H2O]+"], [(32:46, 1:2, "O"), (32:46, 0:4, "O2"), (32:46, 0:3, "O3")]),
+	            library([HexCer, Hex2Cer, Hex3Cer, GM3], ["[M+H]+", "[M+H-H2O]+"], [(32:46, 0:4, "O2"), (32:46, 0:3, "O3")]),
+	            library([SHexCer, SHexHexCer, HexNAcHex2Cer, HexNAcHex3Cer], ["[M+H]+", "[M+H-H2O]+"], [(32:46, 0:4, "O2")]),
+	            library(GM1, ["[M+H]+", "[M+2H]2+"], (34:2:42, 1:3, "O2"))
+	           )
+	        )
+	SPDB[:LIBRARY_POS] = db
+end
+
+# ╔═╡ ad71f402-2edf-4dc1-ab16-b7d8f692db28
+md"""
+# Precursor Ion Scan processing
+Users can create an empty project by `preis()` and then add feature tables along with scan range, and ion mode incrementally. 
+"""
+
+# ╔═╡ 01f3250c-05bb-43dd-8dbc-af56fae832f9
+begin
+	rang = repeat([(400, 1500)], 9)
+	insert!(rang, 9, (900, 1650))
+	pj = preis()
+	for (r, ft) in zip(rang, fts_unique)
+	    preis!(pj, ft, r, true; rt_tol = 0.1)
+	end
+	pj # 1950
+end
+
+# ╔═╡ 4a8dcd0b-c8bd-406e-bf5f-9f2c05de1ba3
+md"""
+When all feature tables are added, use `finish_profile!` to filter duplicated or low quality analytes and do some internal processing.
+"""
+
+# ╔═╡ df45e038-36cb-4ba9-9c23-8b19b7fd019c
+finish_profile!(pj; err_tol = 0.5) # 1652
+
+# ╔═╡ 24fab8d0-da22-4c15-adea-4a3c31f762b5
+md"""
+# Identification
+`apply_rules!` can apply the identification rules to all analytes.
+"""
+
+# ╔═╡ 6c6809e6-c052-4914-84f5-196dc05346fb
+apply_rules!(pj) # 1652
+
+# ╔═╡ 824ed921-2b09-4db7-8a94-df4608087c1c
+md"""
+# Criteria filtering
+Users can define the score function and the threshold to filter out low-quality identification.
+"""
+
+# ╔═╡ 94a4d282-53d0-44e1-8430-1a602407224e
+@p pj |>
+    apply_score!(@cpdscore chain 1 -1) |> apply_threshold!(:chain, <=(1)) |>
+    apply_score!(@cpdscore chain 1 (0 + 1) / all) |> apply_threshold!(:chain, >=(0.5))
+    # apply_score!(@cpdscore chain 1 1 / all)
+    # apply_score!(@cpdscore chain => (analyte, cpd) -> size(cpd.fragments, 1) (0 + 1)) |> apply_threshold!(>=(2))
+
+# ╔═╡ 859c5b17-99b4-4f95-bb0d-771051ab6fc7
+md"""
+# Query
+Use `q!` to query the projects.
+
+* `qnot`, `qand` and `qor` can form comprehend commands.
+* `spid` create a complete analyte.
+"""
+
+# ╔═╡ 9c97be37-e2f7-4f27-82c9-191d3ab06ef7
+q!(pj, spid(GM3, (36, 1, 2)))
+
+# ╔═╡ 957bddae-dad0-4016-809a-e879c4905036
+q!(pj, qnot(:rt => (3, 4)))
+
+# ╔═╡ 2f9cb89f-18fb-4ce4-8aa6-9e92212abac6
+md"""
+To use a query result multiple times, apply `reuse`.
+"""
+
+# ╔═╡ a4aba667-0c79-478d-badd-11dbde5f6ca9
+aq = @p pj q!(qnot(:class!)) q!(qnot(:chain!)) q!(qnot(:isf!)) reuse # 634/640?
+
+# ╔═╡ 537802ad-0f24-433c-8140-fcc2d56bee6c
+@p aq q!(GM3) q!(:rt => (3, 4))
+
+# ╔═╡ 5985b7ce-74cb-489c-8291-6ce61f247b0b
+@p aq q!(Cer) q!(:rt => (7, 8))
+
+# ╔═╡ 7d4216c3-2131-499c-9d86-15ae739f53d0
+md"""
+Users can get interactive visulaization thorugh `plot_rt_mw`.
+"""
+
+# ╔═╡ 6db05e3c-b103-4325-a381-794bf4b1d0b3
+plotlyjs()
+
+# ╔═╡ 9749b4aa-714a-4052-a5cb-c750c73dc78b
+@p aq q!(GM3) plot_rt_mw
+
+# ╔═╡ 53d9dd13-f4ce-4b8d-8458-a9ea3c3297e1
+md"""
+Use keyword argument `groupby` to group the analytes.
+"""
+
+# ╔═╡ 55f8828f-b632-461f-ba34-2c44f4cdf6a4
+@p aq q!(Hex2Cer) plot_rt_mw(; groupby = sumcomp)
+
+# ╔═╡ ad83a8c6-2608-4491-8dc3-ea325bbb751e
+@p aq q!(Hex3Cer) plot_rt_mw(; groupby = acyl)
+
+# ╔═╡ a8f89bc2-44c4-499b-91cc-fe6070c0885d
+@p aq q!(SHexCer) plot_rt_mw(; groupby = chain)
+
+# ╔═╡ ea7c65f2-9b81-4075-a7f3-a81ad0c2ef35
+@p aq q!(HexNAcHex3Cer) plot_rt_mw(; groupby = lcb)
+
+# ╔═╡ c85e7df8-8d86-423c-83b2-838cd57c78c6
+md"""
+## Examples of query commands
+"""
+
+# ╔═╡ 78db31e4-ffc4-48ee-8261-ae418052626a
+@p pj q!(HexNAcHex3Cer) q!(chain(lcb(18, 1, 2), acyl(16, 0, 0)))
+
+# ╔═╡ c0dd42ab-70d6-4a13-b23f-f10b378bd2ce
+@p pj q!(acyl(24, 0, 1)) q!(:mz => (810, 813))
+
+# ╔═╡ 75f10cff-9bf4-482d-a826-75026ccf6e7a
+@p aq |>
+    q!(qor(HexCer, chain(36, 1, 2), chain(34, 1, 2))) |>
+    q!(qnot(:class!)) |> plot_rt_mw(;groupby = class)
+
+# ╔═╡ 86070042-2c0b-4b43-9aa0-8c11ec99be15
+@p pj q!(lcb(18, 1, 2)) q!(CLS.nana[1]) plot_rt_mw
+
+# ╔═╡ 3dc5e2a7-8a86-447c-967c-7898b199016f
+@p pj q!(lcb(18, 1, 2)) q!(CLS.series.as) plot_rt_mw
+
+# ╔═╡ 273d9066-c5ce-4c7c-b68d-2ccb2800c77c
+@p pj q!(Hex2Cer) plot_rt_mw
+
+# ╔═╡ 62330708-4987-499f-a930-b002f380ae2e
+mw(spid(Hex2Cer, 34, 1, 2))
+
+# ╔═╡ 5e517258-c779-4f0c-89f5-9585e38681d0
+# Partial id
+@p pj q!(CLS.fg.nana) q!(:chain!) apply_rules!
+
+# ╔═╡ b7028a91-5b32-4b84-be66-aac1dea60c22
+md"""
+# Analytes clustering
+First, generate clusters by `generate_clusters!`.
+"""
+
+# ╔═╡ f19aff95-8d21-4053-b1e5-abdeb2f8ccd8
+generate_clusters!(pj)
+
+# ╔═╡ 642309f1-0400-4b98-b37d-9cd94a9e0f61
+plot_rt_mw(pj; clusters = :clusters)
+
+# ╔═╡ bb30582e-e643-4d12-baba-f5f068675fbf
+plot_rt_mw(aq)
+
+# ╔═╡ 4ba6753d-d663-49f5-81af-7f96af8cc1ae
+@p aq |>
+    q!(qnot(GM1)) |>
+    q!(qnot(SHexHexCer)) |>
+    analytes2clusters!(; min_cluster_size = 10, new = true) |>
+    plot_rt_mw(; clusters = :possible)
+    # in julia repl: |> map(display)
+
+# ╔═╡ 90f6729d-3a15-452e-a3e8-5677bb3815cc
+@p aq q!(HexNAcHex2Cer)
+
+# ╔═╡ ebbda7a8-7d20-48e1-b3c0-075e3a012432
+@p aq q!(SHexCer) analytes2clusters!(; min_cluster_size = 2, radius = 2) plot_rt_mw(; clusters = :possible)
+
+# ╔═╡ 1f1551b8-8873-41f3-bb31-667e6134d5d4
+@p aq q!(HexCer) analytes2clusters!(; min_cluster_size = 10, radius = 1) plot_rt_mw(; clusters = :possible)
+
+# ╔═╡ 0667b8b3-e557-45dd-9c50-72b03a0e1ef4
+show_clusters(pj)
+
+# ╔═╡ c52c6c79-3948-43de-acf5-8abcd544da91
+@p pj select_clusters!(; by = first, new = true, GM3 = 1:2, Hex2Cer = 1:2, Hex3Cer = 1:2, SHexCer = [1, 3], HexNAcHex2Cer = nothing) plot_rt_mw(; clusters = :candidate)
+
+# ╔═╡ 3fab063f-162a-4723-bea5-bbbbf5e7d0e0
+@p pj model_clusters! plot_rt_mw(; model = true, clusters = :candidate, linewidth = 2)
+
+# ╔═╡ 0339a941-46c4-48e9-82c9-76ecae4c8c32
+compare_models(pj, @model(lm(@formula(rt ~ mw))), (), @model(lm(@formula(rt ~ mw * mw + cluster))))
+
+# ╔═╡ 4e65ccfa-8668-40f2-af8d-b52bbd0bacd4
+compare_models(pj, @model(lm(@formula(rt ~ mw)), (), lm(@formula(rt ~ mw * cluster))))
+
+# ╔═╡ e646bb26-2d79-4fed-8615-4484faad4c3b
+@p pj generate_clusters_prediction!(; HexNAcHex2Cer = Hex3Cer,  SHexHexCer = Hex3Cer) expand_clusters! replace_clusters! plot_rt_mw(; clusters = :clusters)
+
+# ╔═╡ 03de6695-967a-4e78-82a2-05c62afab860
+apply_clusters!(pj)
+
+# ╔═╡ cf975482-50b5-4818-a1fd-716cc38bea83
+valid = @p pj q!(qnot(:class!)) q!(qnot(:chain!)) q!(:rt) q!(qnot(:isf!)) q!(:topsc => 0.5) # 523
+
+# ╔═╡ 601af92a-c643-476d-bd05-f04361716640
+plot_rt_mw(valid)
+
+# ╔═╡ 186d4589-7bf2-4e22-8522-6c1883931f3c
+md"""
+# Generate MRM list
+"""
+
+# ╔═╡ 827168bf-b1d9-4a39-8252-a9133cbb7f33
+mrm_list = generate_mrm(valid, :default, LCB, true) # 362
+
+# ╔═╡ c3ec2833-e10d-4fc8-96d8-5d03a11d0b33
+append!(mrm_list, generate_mrm(valid, :default, Ion(ProtonationNL2H2O(), NeuAc()), true)) # 394
+
+# ╔═╡ 50b06d35-cf3b-4741-bfb8-4af943d34654
+nMRM(mrm_list)
+
+# ╔═╡ 8196c931-a925-4744-9ced-42e458d01dae
+md"""
+# Import MRM files
+"""
+
+# ╔═╡ ba591019-6725-4eb8-a66c-2eea598de3d9
+ft = featuretable_masshunter_mrm(joinpath(dir, "agilent\\qc0.csv"))
+
+# ╔═╡ 91f56826-d567-4ec2-aacb-8b50906c610b
+ft_mrm = filter_duplicate!(deepcopy(ft), n = 3, err_tol = 0.25)
+
+# ╔═╡ a97a2d30-fa08-42df-bae2-dea7ee20b9bf
+mrm1 = MRM(ft_mrm)
+
+# ╔═╡ 5fddc031-437d-4334-a29e-180101d5135e
+#@p pj q!(mrm1)
+
+# ╔═╡ 00000000-0000-0000-0000-000000000001
+PLUTO_PROJECT_TOML_CONTENTS = """
+[deps]
+DataPipes = "02685ad9-2d12-40c3-9f73-c6aeda6a7ff5"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+PlotlyJS = "f0f68f2c-4968-5e81-91da-67840de0976a"
+SphingolipidsID = "c1ebf20f-b457-45e9-b029-ffb3f0746310"
+SplitApplyCombine = "03a91e81-4c3e-53e1-a0a4-9c0c8f19dd66"
+TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
+
+[compat]
+DataPipes = "~0.3.5"
+PlotlyJS = "~0.18.10"
+SphingolipidsID = "~0.1.0"
+SplitApplyCombine = "~1.2.2"
+TypedTables = "~1.4.1"
+"""
+
+# ╔═╡ 00000000-0000-0000-0000-000000000002
+PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
 julia_version = "1.8.3"
 manifest_format = "2.0"
-project_hash = "1105738d86d9ff159ac9af7d2258d1953f617d24"
+project_hash = "86a7536303cdbc9836a43158f0611d85b4b684e9"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -1315,3 +1666,82 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Wayland_jll", "Wayland_prot
 git-tree-sha1 = "9ebfc140cc56e8c2156a15ceac2f0302e327ac0a"
 uuid = "d8fb68d0-12a3-5cfd-a85a-d49703b185fd"
 version = "1.4.1+0"
+"""
+
+# ╔═╡ Cell order:
+# ╟─f3a43015-ff88-42cb-8584-a85b4dc5c413
+# ╠═73621b20-a541-11ed-0c79-1798d445b8db
+# ╟─a520801e-398c-4060-b37b-65f4f56cf7b1
+# ╠═bc30128b-e4f6-4726-9a93-26f2f200c6a0
+# ╟─d07369c9-7203-4cae-bf53-11101f769a47
+# ╠═c2edb35a-f55c-443d-83d7-98e89896ac69
+# ╟─c12c7870-3589-4a63-8831-fe81cb4ca4b7
+# ╠═28bb51af-d13d-4797-8d75-8a4aecde9ce6
+# ╠═79e3a46e-0136-43d7-b159-aa68ef9f7515
+# ╟─0f410359-60d4-40f1-ae7d-0f68fc1b472e
+# ╠═d599bfa8-b149-4c25-a32b-e2d1a560f30c
+# ╠═118de018-fc1b-437c-91a7-26a4c879b135
+# ╟─b669896a-6b8f-492a-b6cb-fae0cae1537b
+# ╠═00e6ebbd-286d-4d87-b528-3885b58d0173
+# ╟─a587d588-0df6-4f1f-b59a-a2274cff638c
+# ╠═b246cb85-a5e9-46bf-b160-83a2bc2b2312
+# ╟─ad71f402-2edf-4dc1-ab16-b7d8f692db28
+# ╠═01f3250c-05bb-43dd-8dbc-af56fae832f9
+# ╟─4a8dcd0b-c8bd-406e-bf5f-9f2c05de1ba3
+# ╠═df45e038-36cb-4ba9-9c23-8b19b7fd019c
+# ╟─24fab8d0-da22-4c15-adea-4a3c31f762b5
+# ╠═6c6809e6-c052-4914-84f5-196dc05346fb
+# ╟─824ed921-2b09-4db7-8a94-df4608087c1c
+# ╠═94a4d282-53d0-44e1-8430-1a602407224e
+# ╟─859c5b17-99b4-4f95-bb0d-771051ab6fc7
+# ╠═9c97be37-e2f7-4f27-82c9-191d3ab06ef7
+# ╠═957bddae-dad0-4016-809a-e879c4905036
+# ╟─2f9cb89f-18fb-4ce4-8aa6-9e92212abac6
+# ╠═a4aba667-0c79-478d-badd-11dbde5f6ca9
+# ╠═537802ad-0f24-433c-8140-fcc2d56bee6c
+# ╠═5985b7ce-74cb-489c-8291-6ce61f247b0b
+# ╟─7d4216c3-2131-499c-9d86-15ae739f53d0
+# ╠═6db05e3c-b103-4325-a381-794bf4b1d0b3
+# ╠═9749b4aa-714a-4052-a5cb-c750c73dc78b
+# ╟─53d9dd13-f4ce-4b8d-8458-a9ea3c3297e1
+# ╠═55f8828f-b632-461f-ba34-2c44f4cdf6a4
+# ╠═ad83a8c6-2608-4491-8dc3-ea325bbb751e
+# ╠═a8f89bc2-44c4-499b-91cc-fe6070c0885d
+# ╠═ea7c65f2-9b81-4075-a7f3-a81ad0c2ef35
+# ╟─c85e7df8-8d86-423c-83b2-838cd57c78c6
+# ╠═78db31e4-ffc4-48ee-8261-ae418052626a
+# ╠═c0dd42ab-70d6-4a13-b23f-f10b378bd2ce
+# ╠═75f10cff-9bf4-482d-a826-75026ccf6e7a
+# ╠═86070042-2c0b-4b43-9aa0-8c11ec99be15
+# ╠═3dc5e2a7-8a86-447c-967c-7898b199016f
+# ╠═273d9066-c5ce-4c7c-b68d-2ccb2800c77c
+# ╠═62330708-4987-499f-a930-b002f380ae2e
+# ╠═5e517258-c779-4f0c-89f5-9585e38681d0
+# ╟─b7028a91-5b32-4b84-be66-aac1dea60c22
+# ╠═f19aff95-8d21-4053-b1e5-abdeb2f8ccd8
+# ╠═642309f1-0400-4b98-b37d-9cd94a9e0f61
+# ╠═bb30582e-e643-4d12-baba-f5f068675fbf
+# ╠═4ba6753d-d663-49f5-81af-7f96af8cc1ae
+# ╠═90f6729d-3a15-452e-a3e8-5677bb3815cc
+# ╠═ebbda7a8-7d20-48e1-b3c0-075e3a012432
+# ╠═1f1551b8-8873-41f3-bb31-667e6134d5d4
+# ╠═0667b8b3-e557-45dd-9c50-72b03a0e1ef4
+# ╠═c52c6c79-3948-43de-acf5-8abcd544da91
+# ╠═3fab063f-162a-4723-bea5-bbbbf5e7d0e0
+# ╠═0339a941-46c4-48e9-82c9-76ecae4c8c32
+# ╠═4e65ccfa-8668-40f2-af8d-b52bbd0bacd4
+# ╠═e646bb26-2d79-4fed-8615-4484faad4c3b
+# ╠═03de6695-967a-4e78-82a2-05c62afab860
+# ╠═cf975482-50b5-4818-a1fd-716cc38bea83
+# ╠═601af92a-c643-476d-bd05-f04361716640
+# ╟─186d4589-7bf2-4e22-8522-6c1883931f3c
+# ╠═827168bf-b1d9-4a39-8252-a9133cbb7f33
+# ╠═c3ec2833-e10d-4fc8-96d8-5d03a11d0b33
+# ╠═50b06d35-cf3b-4741-bfb8-4af943d34654
+# ╟─8196c931-a925-4744-9ced-42e458d01dae
+# ╠═ba591019-6725-4eb8-a66c-2eea598de3d9
+# ╠═91f56826-d567-4ec2-aacb-8b50906c610b
+# ╠═a97a2d30-fa08-42df-bae2-dea7ee20b9bf
+# ╠═5fddc031-437d-4334-a29e-180101d5135e
+# ╟─00000000-0000-0000-0000-000000000001
+# ╟─00000000-0000-0000-0000-000000000002
