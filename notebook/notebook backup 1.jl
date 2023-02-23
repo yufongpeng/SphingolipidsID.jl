@@ -1,8 +1,356 @@
+### A Pluto.jl notebook ###
+# v0.19.22
+
+using Markdown
+using InteractiveUtils
+
+# ╔═╡ f3a43015-ff88-42cb-8584-a85b4dc5c413
+begin
+	using Pkg
+	# Pkg.activate(Base.current_project())
+	Pkg.instantiate()
+	md"""
+	# SphingolipidsID.jl
+	"""
+end
+
+# ╔═╡ 73621b20-a541-11ed-0c79-1798d445b8db
+using SphingolipidsID, DataPipes, SplitApplyCombine, TypedTables; import PlotlyJS
+
+# ╔═╡ a520801e-398c-4060-b37b-65f4f56cf7b1
+begin
+	PlutoRunner.pluto_showable(::MIME"application/vnd.pluto.table+object", ::Table) = true
+	md"""
+	# Data preprocessing
+	## File input
+	* `featuretable_mzmine` can read files processed by MZMINE.
+	"""
+end
+
+# ╔═╡ bc30128b-e4f6-4726-9a93-26f2f200c6a0
+begin
+	dir = joinpath(dirname(@__FILE__), "data")
+	file1 = joinpath.(joinpath(dir, "mzmine3.3"), readdir(joinpath(dir, "mzmine3.3")))
+	file2 = joinpath.(joinpath(dir, "mzmine3.2"), readdir(joinpath(dir, "mzmine3.2")))
+	fts = @p [file1, file2] map(map(featuretable_mzmine, _)) zip(__...) map(append!(_...)) map(sort_data!)
+end
+
+# ╔═╡ d07369c9-7203-4cae-bf53-11101f769a47
+md"""
+* `file_order` lets user know the order of data files, so user can assign CE and mz2 to each files accordingly.
+"""
+
+# ╔═╡ c2edb35a-f55c-443d-83d7-98e89896ac69
+file_order.(fts)
+
+# ╔═╡ c12c7870-3589-4a63-8831-fe81cb4ca4b7
+md"""
+## Add CE
+* `fill_ce!` can add a new column of CE value to the feature table.
+When multiple values (a `vector` or `tuple`) are provided, it will assign the value to each file according to the order in the table.
+
+Because `TypedTables.Table` is immutable, it returns a copy of the wrapper, but the contents are mutated in place.
+"""
+
+# ╔═╡ 28bb51af-d13d-4797-8d75-8a4aecde9ce6
+begin
+	ces = repeat([[60, 60, 30, 30, 60, 60]], 9)
+	insert!(ces, 9, [45, 45, 45, 45])
+end
+
+# ╔═╡ 79e3a46e-0136-43d7-b159-aa68ef9f7515
+fts_ce = fill_ce!.(fts, ces)
+
+# ╔═╡ 0f410359-60d4-40f1-ae7d-0f68fc1b472e
+md"""
+## Add mz2
+* `fill_mz2!` can add a new column of mz2 value to the feature table.
+
+This function works similarly to `fill_ce!`.
+"""
+
+# ╔═╡ d599bfa8-b149-4c25-a32b-e2d1a560f30c
+ms = [236.238, 250.253, 284.295, 264.269, 262.253, 278.285, 292.3, 266.285, 274.093, 282.28]
+
+# ╔═╡ 118de018-fc1b-437c-91a7-26a4c879b135
+fts_mz2 = fill_mz2!.(fts_ce, ms)
+
+# ╔═╡ b669896a-6b8f-492a-b6cb-fae0cae1537b
+md"""
+## Filter duplication
+"""
+
+# ╔═╡ 00e6ebbd-286d-4d87-b528-3885b58d0173
+fts_unique = filter_duplicate!.(fts_mz2; n = 3, err_tol = 0.7)
+
+# ╔═╡ a587d588-0df6-4f1f-b59a-a2274cff638c
+md"""
+# Customize Database
+Users can customize database throw `library` by assigning the class, adduct, number of carbons, number of double bonds, and number of additional elements(oxygen, for example).
+
+To make the database work, users must mutate `SPDB[:LIBRARY_POS]` or `SPDB[:LIBRARY_NEG]`.
+"""
+
+# ╔═╡ b246cb85-a5e9-46bf-b160-83a2bc2b2312
+begin
+	db = reduce(append!, (
+	            library(Cer, ["[M+H]+", "[M+H-H2O]+"], [(32:46, 1:2, "O"), (32:46, 0:4, "O2"), (32:46, 0:3, "O3")]),
+	            library([HexCer, Hex2Cer, Hex3Cer, GM3], ["[M+H]+", "[M+H-H2O]+"], [(32:46, 0:4, "O2"), (32:46, 0:3, "O3")]),
+	            library([SHexCer, SHexHexCer, HexNAcHex2Cer, HexNAcHex3Cer], ["[M+H]+", "[M+H-H2O]+"], [(32:46, 0:4, "O2")]),
+	            library(GM1, ["[M+H]+", "[M+2H]2+"], (34:2:42, 1:3, "O2"))
+	           )
+	        )
+	SPDB[:LIBRARY_POS] = db
+end
+
+# ╔═╡ ad71f402-2edf-4dc1-ab16-b7d8f692db28
+md"""
+# Precursor Ion Scan processing
+Users can create an empty project by `preis()` and then add feature tables along with scan range, and ion mode incrementally. 
+"""
+
+# ╔═╡ 01f3250c-05bb-43dd-8dbc-af56fae832f9
+begin
+	rang = repeat([(400, 1500)], 9)
+	insert!(rang, 9, (900, 1650))
+	pj = preis()
+	for (r, ft) in zip(rang, fts_unique)
+	    preis!(pj, ft, r, true; rt_tol = 0.1)
+	end
+	pj # 1950
+end
+
+# ╔═╡ 4a8dcd0b-c8bd-406e-bf5f-9f2c05de1ba3
+md"""
+When all feature tables are added, use `finish_profile!` to filter duplicated or low quality analytes and do some internal processing.
+"""
+
+# ╔═╡ df45e038-36cb-4ba9-9c23-8b19b7fd019c
+finish_profile!(pj; err_tol = 0.5) # 1652
+
+# ╔═╡ 24fab8d0-da22-4c15-adea-4a3c31f762b5
+md"""
+# Identification
+`apply_rules!` can apply the identification rules to all analytes.
+"""
+
+# ╔═╡ 6c6809e6-c052-4914-84f5-196dc05346fb
+apply_rules!(pj) # 1652
+
+# ╔═╡ 824ed921-2b09-4db7-8a94-df4608087c1c
+md"""
+# Criteria filtering
+Users can define the score function and the threshold to filter out low-quality identification.
+"""
+
+# ╔═╡ 94a4d282-53d0-44e1-8430-1a602407224e
+@p pj |>
+    apply_score!(@cpdscore chain 1 -1) |> apply_threshold!(:chain, <=(1)) |>
+    apply_score!(@cpdscore chain 1 (0 + 1) / all) |> apply_threshold!(:chain, >=(0.5))
+    # apply_score!(@cpdscore chain 1 1 / all)
+    # apply_score!(@cpdscore chain => (analyte, cpd) -> size(cpd.fragments, 1) (0 + 1)) |> apply_threshold!(>=(2))
+
+# ╔═╡ 859c5b17-99b4-4f95-bb0d-771051ab6fc7
+md"""
+# Query
+Use `q!` to query the projects.
+
+* `qnot`, `qand` and `qor` can form comprehend commands.
+* `spid` create a complete analyte.
+"""
+
+# ╔═╡ 9c97be37-e2f7-4f27-82c9-191d3ab06ef7
+q!(pj, spid(GM3, (36, 1, 2)))
+
+# ╔═╡ 957bddae-dad0-4016-809a-e879c4905036
+q!(pj, qnot(:rt => (3, 4)))
+
+# ╔═╡ 2f9cb89f-18fb-4ce4-8aa6-9e92212abac6
+md"""
+To use a query result multiple times, apply `reuse`.
+"""
+
+# ╔═╡ a4aba667-0c79-478d-badd-11dbde5f6ca9
+aq = @p pj q!(qnot(:class!)) q!(qnot(:chain!)) q!(qnot(:isf!)) reuse # 634/640?
+
+# ╔═╡ 537802ad-0f24-433c-8140-fcc2d56bee6c
+@p aq q!(GM3) q!(:rt => (3, 4))
+
+# ╔═╡ 5985b7ce-74cb-489c-8291-6ce61f247b0b
+@p aq q!(Cer) q!(:rt => (7, 8))
+
+# ╔═╡ 7d4216c3-2131-499c-9d86-15ae739f53d0
+md"""
+Users can get interactive visulaization thorugh `plot_rt_mw`.
+"""
+
+# ╔═╡ 6db05e3c-b103-4325-a381-794bf4b1d0b3
+plotlyjs()
+
+# ╔═╡ 9749b4aa-714a-4052-a5cb-c750c73dc78b
+@p aq q!(GM3) plot_rt_mw
+
+# ╔═╡ 53d9dd13-f4ce-4b8d-8458-a9ea3c3297e1
+md"""
+Use keyword argument `groupby` to group the analytes.
+"""
+
+# ╔═╡ 55f8828f-b632-461f-ba34-2c44f4cdf6a4
+@p aq q!(Hex2Cer) plot_rt_mw(; groupby = sumcomp)
+
+# ╔═╡ ad83a8c6-2608-4491-8dc3-ea325bbb751e
+@p aq q!(Hex3Cer) plot_rt_mw(; groupby = acyl)
+
+# ╔═╡ a8f89bc2-44c4-499b-91cc-fe6070c0885d
+@p aq q!(SHexCer) plot_rt_mw(; groupby = chain)
+
+# ╔═╡ ea7c65f2-9b81-4075-a7f3-a81ad0c2ef35
+@p aq q!(HexNAcHex3Cer) plot_rt_mw(; groupby = lcb)
+
+# ╔═╡ c85e7df8-8d86-423c-83b2-838cd57c78c6
+md"""
+## Examples of query commands
+"""
+
+# ╔═╡ 78db31e4-ffc4-48ee-8261-ae418052626a
+@p pj q!(HexNAcHex3Cer) q!(chain(lcb(18, 1, 2), acyl(16, 0, 0)))
+
+# ╔═╡ c0dd42ab-70d6-4a13-b23f-f10b378bd2ce
+@p pj q!(acyl(24, 0, 1)) q!(:mz => (810, 813))
+
+# ╔═╡ 75f10cff-9bf4-482d-a826-75026ccf6e7a
+@p aq |>
+    q!(qor(HexCer, chain(36, 1, 2), chain(34, 1, 2))) |>
+    q!(qnot(:class!)) |> plot_rt_mw(;groupby = class)
+
+# ╔═╡ 86070042-2c0b-4b43-9aa0-8c11ec99be15
+@p pj q!(lcb(18, 1, 2)) q!(CLS.nana[1]) plot_rt_mw
+
+# ╔═╡ 3dc5e2a7-8a86-447c-967c-7898b199016f
+@p pj q!(lcb(18, 1, 2)) q!(CLS.series.as) plot_rt_mw
+
+# ╔═╡ 273d9066-c5ce-4c7c-b68d-2ccb2800c77c
+@p pj q!(Hex2Cer) plot_rt_mw
+
+# ╔═╡ 62330708-4987-499f-a930-b002f380ae2e
+mw(spid(Hex2Cer, 34, 1, 2))
+
+# ╔═╡ 5e517258-c779-4f0c-89f5-9585e38681d0
+# Partial id
+@p pj q!(CLS.fg.nana) q!(:chain!) apply_rules!
+
+# ╔═╡ b7028a91-5b32-4b84-be66-aac1dea60c22
+md"""
+# Analytes clustering
+First, initiate clustering by `initiate_clusters!`.
+"""
+
+# ╔═╡ 642309f1-0400-4b98-b37d-9cd94a9e0f61
+@p pj initiate_clusters! plot_rt_mw(; clusters = :clusters)
+
+# ╔═╡ bb30582e-e643-4d12-baba-f5f068675fbf
+plot_rt_mw(aq)
+
+# ╔═╡ 4ba6753d-d663-49f5-81af-7f96af8cc1ae
+@p aq |>
+    q!(qnot(GM1)) |>
+    q!(qnot(SHexHexCer)) |>
+    analytes2clusters!(; min_cluster_size = 10, new = true) |>
+    plot_rt_mw(; clusters = :possible)
+    # in julia repl: |> map(display)
+
+# ╔═╡ 90f6729d-3a15-452e-a3e8-5677bb3815cc
+@p aq q!(HexNAcHex2Cer)
+
+# ╔═╡ ebbda7a8-7d20-48e1-b3c0-075e3a012432
+@p aq q!(SHexCer) analytes2clusters!(; min_cluster_size = 2, radius = 2) plot_rt_mw(; clusters = :possible)
+
+# ╔═╡ 1f1551b8-8873-41f3-bb31-667e6134d5d4
+@p aq q!(HexCer) analytes2clusters!(; min_cluster_size = 10, radius = 1) plot_rt_mw(; clusters = :possible)
+
+# ╔═╡ 0667b8b3-e557-45dd-9c50-72b03a0e1ef4
+show_clusters(pj)
+
+# ╔═╡ c52c6c79-3948-43de-acf5-8abcd544da91
+@p pj select_clusters!(; by = first, new = true, GM3 = 1:2, Hex2Cer = 1:2, Hex3Cer = 1:2, SHexCer = [1, 3], HexNAcHex2Cer = nothing) plot_rt_mw(; clusters = :candidate)
+
+# ╔═╡ 3fab063f-162a-4723-bea5-bbbbf5e7d0e0
+@p pj model_clusters! plot_rt_mw(; model = true, clusters = :candidate, linewidth = 2)
+
+# ╔═╡ 0339a941-46c4-48e9-82c9-76ecae4c8c32
+compare_models(pj, @model(lm(@formula(rt ~ mw))), (), @model(lm(@formula(rt ~ mw * mw + cluster))))
+
+# ╔═╡ 4e65ccfa-8668-40f2-af8d-b52bbd0bacd4
+compare_models(pj, @model(lm(@formula(rt ~ mw)), (), lm(@formula(rt ~ mw * cluster))))
+
+# ╔═╡ e646bb26-2d79-4fed-8615-4484faad4c3b
+@p pj generate_clusters_prediction!(; HexNAcHex2Cer = Hex3Cer,  SHexHexCer = Hex3Cer) expand_clusters! replace_clusters! plot_rt_mw(; clusters = :clusters)
+
+# ╔═╡ 03de6695-967a-4e78-82a2-05c62afab860
+apply_clusters!(pj)
+
+# ╔═╡ cf975482-50b5-4818-a1fd-716cc38bea83
+valid = @p pj q!(qnot(:class!)) q!(qnot(:chain!)) q!(:rt) q!(qnot(:isf!)) q!(:topsc => 0.5) # 523
+
+# ╔═╡ 601af92a-c643-476d-bd05-f04361716640
+plot_rt_mw(valid)
+
+# ╔═╡ 186d4589-7bf2-4e22-8522-6c1883931f3c
+md"""
+# Generate MRM list
+"""
+
+# ╔═╡ 827168bf-b1d9-4a39-8252-a9133cbb7f33
+mrm_list = generate_mrm(valid, :default, LCB, true) # 362
+
+# ╔═╡ c3ec2833-e10d-4fc8-96d8-5d03a11d0b33
+append!(mrm_list, generate_mrm(valid, :default, Ion(ProtonationNL2H2O(), NeuAc()), true)) # 394
+
+# ╔═╡ 50b06d35-cf3b-4741-bfb8-4af943d34654
+nMRM(mrm_list)
+
+# ╔═╡ 8196c931-a925-4744-9ced-42e458d01dae
+md"""
+# Import MRM files
+"""
+
+# ╔═╡ ba591019-6725-4eb8-a66c-2eea598de3d9
+ft = featuretable_masshunter_mrm(joinpath(dir, "agilent\\qc0.csv"))
+
+# ╔═╡ 91f56826-d567-4ec2-aacb-8b50906c610b
+ft_mrm = filter_duplicate!(deepcopy(ft), n = 3, err_tol = 0.25)
+
+# ╔═╡ a97a2d30-fa08-42df-bae2-dea7ee20b9bf
+mrm1 = MRM(ft_mrm)
+
+# ╔═╡ 5fddc031-437d-4334-a29e-180101d5135e
+#@p pj q!(mrm1)
+
+# ╔═╡ 00000000-0000-0000-0000-000000000001
+PLUTO_PROJECT_TOML_CONTENTS = """
+[deps]
+DataPipes = "02685ad9-2d12-40c3-9f73-c6aeda6a7ff5"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+PlotlyJS = "f0f68f2c-4968-5e81-91da-67840de0976a"
+SphingolipidsID = "c1ebf20f-b457-45e9-b029-ffb3f0746310"
+SplitApplyCombine = "03a91e81-4c3e-53e1-a0a4-9c0c8f19dd66"
+TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
+
+[compat]
+DataPipes = "~0.3.5"
+PlotlyJS = "~0.18.10"
+SphingolipidsID = "~0.1.0"
+SplitApplyCombine = "~1.2.2"
+TypedTables = "~1.4.1"
+"""
+
+# ╔═╡ 00000000-0000-0000-0000-000000000002
+PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
 julia_version = "1.8.3"
 manifest_format = "2.0"
-project_hash = "1105738d86d9ff159ac9af7d2258d1953f617d24"
+project_hash = "86a7536303cdbc9836a43158f0611d85b4b684e9"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -81,9 +429,9 @@ version = "1.15.7"
 
 [[deps.ChangesOfVariables]]
 deps = ["ChainRulesCore", "LinearAlgebra", "Test"]
-git-tree-sha1 = "485193efd2176b88e6622a39a246f8c5b600e74e"
+git-tree-sha1 = "844b061c104c408b24537482469400af6075aae4"
 uuid = "9e997f8a-9a97-42d5-a9f1-ce6bfc15e2c0"
-version = "0.1.6"
+version = "0.1.5"
 
 [[deps.Clustering]]
 deps = ["Distances", "LinearAlgebra", "NearestNeighbors", "Printf", "Random", "SparseArrays", "Statistics", "StatsBase"]
@@ -134,9 +482,9 @@ version = "0.5.2+0"
 
 [[deps.ConstructionBase]]
 deps = ["LinearAlgebra"]
-git-tree-sha1 = "45269494fcfa0cc14032b7aa640fa71320e1976e"
+git-tree-sha1 = "fb21ddd70a051d882a1686a5a550990bbe371a95"
 uuid = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
-version = "1.5.0"
+version = "1.4.1"
 
 [[deps.Contour]]
 git-tree-sha1 = "d05d9e7b7aedff4e5b51a029dced05cfb6125781"
@@ -154,10 +502,10 @@ uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.14.0"
 
 [[deps.DataFrames]]
-deps = ["Compat", "DataAPI", "Future", "InlineStrings", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Random", "Reexport", "SentinelArrays", "SnoopPrecompile", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
-git-tree-sha1 = "aa51303df86f8626a962fccb878430cdb0a97eee"
+deps = ["Compat", "DataAPI", "Future", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Random", "Reexport", "SnoopPrecompile", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
+git-tree-sha1 = "d4f69885afa5e6149d0cab3818491565cf41446d"
 uuid = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-version = "1.5.0"
+version = "1.4.4"
 
 [[deps.DataPipes]]
 git-tree-sha1 = "44a632423521bd0d189ed49a7ecb521bf10e1758"
@@ -207,9 +555,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
-git-tree-sha1 = "239fe7c3312050992dcc5d5a8d54abcf099c3ff2"
+git-tree-sha1 = "74911ad88921455c6afcad1eefa12bd7b1724631"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.82"
+version = "0.25.80"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
@@ -315,15 +663,15 @@ version = "1.8.1"
 
 [[deps.GR]]
 deps = ["Artifacts", "Base64", "DelimitedFiles", "Downloads", "GR_jll", "HTTP", "JSON", "Libdl", "LinearAlgebra", "Pkg", "Preferences", "Printf", "Random", "Serialization", "Sockets", "TOML", "Tar", "Test", "UUIDs", "p7zip_jll"]
-git-tree-sha1 = "660b2ea2ec2b010bb02823c6d0ff6afd9bdc5c16"
+git-tree-sha1 = "9e23bd6bb3eb4300cb567bdf63e2c14e5d2ffdbc"
 uuid = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
-version = "0.71.7"
+version = "0.71.5"
 
 [[deps.GR_jll]]
-deps = ["Artifacts", "Bzip2_jll", "Cairo_jll", "FFMPEG_jll", "Fontconfig_jll", "GLFW_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pixman_jll", "Qt5Base_jll", "Zlib_jll", "libpng_jll"]
-git-tree-sha1 = "d5e1fd17ac7f3aa4c5287a61ee28d4f8b8e98873"
+deps = ["Artifacts", "Bzip2_jll", "Cairo_jll", "FFMPEG_jll", "Fontconfig_jll", "GLFW_jll", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Libtiff_jll", "Pixman_jll", "Pkg", "Qt5Base_jll", "Zlib_jll", "libpng_jll"]
+git-tree-sha1 = "aa23c9f9b7c0ba6baeabe966ea1c7d2c7487ef90"
 uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
-version = "0.71.7+0"
+version = "0.71.5+0"
 
 [[deps.Gettext_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "XML2_jll"]
@@ -404,9 +752,9 @@ uuid = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
 version = "1.2.0"
 
 [[deps.IrrationalConstants]]
-git-tree-sha1 = "637b58b3c037d3877f263418de820920b47ceeb5"
+git-tree-sha1 = "7fd44fd4ff43fc60815f8e764c0f352b83c49151"
 uuid = "92d709cd-6900-40b7-9082-c6be49f344b6"
-version = "0.2.0"
+version = "0.1.1"
 
 [[deps.IteratorInterfaceExtensions]]
 git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
@@ -438,10 +786,10 @@ uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.3"
 
 [[deps.JpegTurbo_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "6f2675ef130a300a112286de91973805fcc5ffbc"
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "b53380851c6e6664204efb2e62cd24fa5c47e4ba"
 uuid = "aacddb02-875f-59d6-b918-886e6ef4fbf8"
-version = "2.1.91+0"
+version = "2.1.2+0"
 
 [[deps.Kaleido_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -560,9 +908,9 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[deps.LogExpFunctions]]
 deps = ["ChainRulesCore", "ChangesOfVariables", "DocStringExtensions", "InverseFunctions", "IrrationalConstants", "LinearAlgebra"]
-git-tree-sha1 = "0a1b7c2863e44523180fdb3146534e265a91870b"
+git-tree-sha1 = "45b288af6956e67e621c5cbb2d75a261ab58300b"
 uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
-version = "0.3.23"
+version = "0.3.20"
 
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -574,9 +922,9 @@ uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
 version = "1.0.0"
 
 [[deps.MLStyle]]
-git-tree-sha1 = "bc38dff0548128765760c79eb7388a4b37fae2c8"
+git-tree-sha1 = "060ef7956fef2dc06b0e63b294f7dbfbcbdc7ea2"
 uuid = "d8e11817-5142-5d16-987a-aa16d5891078"
-version = "0.4.17"
+version = "0.4.16"
 
 [[deps.MacroTools]]
 deps = ["Markdown", "Random"]
@@ -631,9 +979,9 @@ version = "1.0.1"
 
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
-git-tree-sha1 = "0877504529a3e5c3343c6f8b4c0381e57e4387e4"
+git-tree-sha1 = "a7c3d1da1189a1c2fe843a3bfa04d18d20eb3211"
 uuid = "77ba4419-2d1f-58cd-9bb1-8ffee604a2e3"
-version = "1.0.2"
+version = "1.0.1"
 
 [[deps.NearestNeighbors]]
 deps = ["Distances", "StaticArrays"]
@@ -674,9 +1022,9 @@ version = "1.3.3"
 
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "9ff31d101d987eb9d66bd8b176ac7c277beccd09"
+git-tree-sha1 = "f6e9dba33f9f2c44e08a020b0caf6903be540004"
 uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
-version = "1.1.20+0"
+version = "1.1.19+0"
 
 [[deps.OpenSpecFun_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Pkg"]
@@ -714,9 +1062,9 @@ version = "0.12.3"
 
 [[deps.Parsers]]
 deps = ["Dates", "SnoopPrecompile"]
-git-tree-sha1 = "6f4fbcd1ad45905a5dee3f4256fabb49aa2110c6"
+git-tree-sha1 = "151d91d63d8d6c1a5789ecb7de51547e00480f1b"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "2.5.7"
+version = "2.5.4"
 
 [[deps.Pidfile]]
 deps = ["FileWatching", "Test"]
@@ -766,9 +1114,9 @@ version = "0.18.10"
 
 [[deps.Plots]]
 deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "JLFzf", "JSON", "LaTeXStrings", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "Pkg", "PlotThemes", "PlotUtils", "Preferences", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "RelocatableFolders", "Requires", "Scratch", "Showoff", "SnoopPrecompile", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "Unzip"]
-git-tree-sha1 = "8ac949bd0ebc46a44afb1fdca1094554a84b086e"
+git-tree-sha1 = "87036ff7d1277aa624ce4d211ddd8720116f80bf"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-version = "1.38.5"
+version = "1.38.4"
 
 [[deps.PooledArrays]]
 deps = ["DataAPI", "Future"]
@@ -800,9 +1148,9 @@ version = "5.15.3+2"
 
 [[deps.QuadGK]]
 deps = ["DataStructures", "LinearAlgebra"]
-git-tree-sha1 = "786efa36b7eff813723c4849c90456609cf06661"
+git-tree-sha1 = "de191bc385072cc6c7ed3ffdc1caeed3f22c74d4"
 uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
-version = "2.8.1"
+version = "2.7.0"
 
 [[deps.REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
@@ -865,9 +1213,9 @@ version = "1.1.1"
 
 [[deps.SentinelArrays]]
 deps = ["Dates", "Random"]
-git-tree-sha1 = "77d3c4726515dca71f6d80fbb5e251088defe305"
+git-tree-sha1 = "c02bd3c9c3fc8463d3591a62a378f90d2d8ab0f3"
 uuid = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
-version = "1.3.18"
+version = "1.3.17"
 
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
@@ -909,15 +1257,15 @@ uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[deps.SpecialFunctions]]
 deps = ["ChainRulesCore", "IrrationalConstants", "LogExpFunctions", "OpenLibm_jll", "OpenSpecFun_jll"]
-git-tree-sha1 = "ef28127915f4229c971eb43f3fc075dd3fe91880"
+git-tree-sha1 = "d75bda01f8c31ebb72df80a46c88b25d1c79c56d"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "2.2.0"
+version = "2.1.7"
 
 [[deps.SphingolipidsID]]
 deps = ["AnovaGLM", "CSV", "Clustering", "DataPipes", "Dictionaries", "GLM", "MLStyle", "PlotlyJS", "Plots", "PrettyTables", "SplitApplyCombine", "Statistics", "Tables", "TypedTables", "UnitfulMoles"]
 path = "C:\\Users\\sciph\\.julia\\dev\\SphingolipidsID"
 uuid = "c1ebf20f-b457-45e9-b029-ffb3f0746310"
-version = "0.2.0"
+version = "0.1.0"
 
 [[deps.SplitApplyCombine]]
 deps = ["Dictionaries", "Indexing"]
@@ -927,9 +1275,9 @@ version = "1.2.2"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "StaticArraysCore", "Statistics"]
-git-tree-sha1 = "2d7d9e1ddadc8407ffd460e24218e37ef52dd9a3"
+git-tree-sha1 = "6954a456979f23d05085727adb17c4551c19ecd1"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "1.5.16"
+version = "1.5.12"
 
 [[deps.StaticArraysCore]]
 git-tree-sha1 = "6b7ba252635a5eff6a0b0664a41ee140a1c9e72a"
@@ -954,9 +1302,9 @@ version = "0.33.21"
 
 [[deps.StatsFuns]]
 deps = ["ChainRulesCore", "HypergeometricFunctions", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
-git-tree-sha1 = "53cd758b96903d556e96f11b8cd2169c7e9f08af"
+git-tree-sha1 = "ab6083f09b3e617e34a956b43e9d51b824206932"
 uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
-version = "1.2.0"
+version = "1.1.1"
 
 [[deps.StatsModels]]
 deps = ["DataAPI", "DataStructures", "LinearAlgebra", "Printf", "REPL", "ShiftedArrays", "SparseArrays", "StatsBase", "StatsFuns", "Tables"]
@@ -1018,9 +1366,9 @@ uuid = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 version = "1.4.1"
 
 [[deps.URIs]]
-git-tree-sha1 = "074f993b0ca030848b897beff716d93aca60f06a"
+git-tree-sha1 = "ac00576f90d8a259f2c9d823e91d1de3fd44d348"
 uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
-version = "1.4.2"
+version = "1.4.1"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
@@ -1042,9 +1390,9 @@ version = "0.4.1"
 
 [[deps.Unitful]]
 deps = ["ConstructionBase", "Dates", "LinearAlgebra", "Random"]
-git-tree-sha1 = "d3f95a76c89777990d3d968ded5ecf12f9a0ad72"
+git-tree-sha1 = "d670a70dd3cdbe1c1186f2f17c9a68a7ec24838c"
 uuid = "1986cc42-f94f-5a68-af5c-568840ba703d"
-version = "1.12.3"
+version = "1.12.2"
 
 [[deps.UnitfulMoles]]
 deps = ["Unitful"]
@@ -1242,10 +1590,10 @@ uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
 version = "1.2.12+3"
 
 [[deps.Zstd_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "c6edfe154ad7b313c01aceca188c05c835c67360"
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "e45044cd873ded54b6a5bac0eb5c971392cf1927"
 uuid = "3161d3a3-bdf6-5164-811a-617609db77b4"
-version = "1.5.4+0"
+version = "1.5.2+0"
 
 [[deps.fzf_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1315,3 +1663,82 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg", "Wayland_jll", "Wayland_prot
 git-tree-sha1 = "9ebfc140cc56e8c2156a15ceac2f0302e327ac0a"
 uuid = "d8fb68d0-12a3-5cfd-a85a-d49703b185fd"
 version = "1.4.1+0"
+"""
+
+# ╔═╡ Cell order:
+# ╟─f3a43015-ff88-42cb-8584-a85b4dc5c413
+# ╠═73621b20-a541-11ed-0c79-1798d445b8db
+# ╟─a520801e-398c-4060-b37b-65f4f56cf7b1
+# ╠═bc30128b-e4f6-4726-9a93-26f2f200c6a0
+# ╟─d07369c9-7203-4cae-bf53-11101f769a47
+# ╠═c2edb35a-f55c-443d-83d7-98e89896ac69
+# ╟─c12c7870-3589-4a63-8831-fe81cb4ca4b7
+# ╠═28bb51af-d13d-4797-8d75-8a4aecde9ce6
+# ╠═79e3a46e-0136-43d7-b159-aa68ef9f7515
+# ╟─0f410359-60d4-40f1-ae7d-0f68fc1b472e
+# ╠═d599bfa8-b149-4c25-a32b-e2d1a560f30c
+# ╠═118de018-fc1b-437c-91a7-26a4c879b135
+# ╟─b669896a-6b8f-492a-b6cb-fae0cae1537b
+# ╠═00e6ebbd-286d-4d87-b528-3885b58d0173
+# ╟─a587d588-0df6-4f1f-b59a-a2274cff638c
+# ╠═b246cb85-a5e9-46bf-b160-83a2bc2b2312
+# ╟─ad71f402-2edf-4dc1-ab16-b7d8f692db28
+# ╠═01f3250c-05bb-43dd-8dbc-af56fae832f9
+# ╟─4a8dcd0b-c8bd-406e-bf5f-9f2c05de1ba3
+# ╠═df45e038-36cb-4ba9-9c23-8b19b7fd019c
+# ╟─24fab8d0-da22-4c15-adea-4a3c31f762b5
+# ╠═6c6809e6-c052-4914-84f5-196dc05346fb
+# ╟─824ed921-2b09-4db7-8a94-df4608087c1c
+# ╠═94a4d282-53d0-44e1-8430-1a602407224e
+# ╟─859c5b17-99b4-4f95-bb0d-771051ab6fc7
+# ╠═9c97be37-e2f7-4f27-82c9-191d3ab06ef7
+# ╠═957bddae-dad0-4016-809a-e879c4905036
+# ╟─2f9cb89f-18fb-4ce4-8aa6-9e92212abac6
+# ╠═a4aba667-0c79-478d-badd-11dbde5f6ca9
+# ╠═537802ad-0f24-433c-8140-fcc2d56bee6c
+# ╠═5985b7ce-74cb-489c-8291-6ce61f247b0b
+# ╟─7d4216c3-2131-499c-9d86-15ae739f53d0
+# ╠═6db05e3c-b103-4325-a381-794bf4b1d0b3
+# ╠═9749b4aa-714a-4052-a5cb-c750c73dc78b
+# ╟─53d9dd13-f4ce-4b8d-8458-a9ea3c3297e1
+# ╠═55f8828f-b632-461f-ba34-2c44f4cdf6a4
+# ╠═ad83a8c6-2608-4491-8dc3-ea325bbb751e
+# ╠═a8f89bc2-44c4-499b-91cc-fe6070c0885d
+# ╠═ea7c65f2-9b81-4075-a7f3-a81ad0c2ef35
+# ╟─c85e7df8-8d86-423c-83b2-838cd57c78c6
+# ╠═78db31e4-ffc4-48ee-8261-ae418052626a
+# ╠═c0dd42ab-70d6-4a13-b23f-f10b378bd2ce
+# ╠═75f10cff-9bf4-482d-a826-75026ccf6e7a
+# ╠═86070042-2c0b-4b43-9aa0-8c11ec99be15
+# ╠═3dc5e2a7-8a86-447c-967c-7898b199016f
+# ╠═273d9066-c5ce-4c7c-b68d-2ccb2800c77c
+# ╠═62330708-4987-499f-a930-b002f380ae2e
+# ╠═5e517258-c779-4f0c-89f5-9585e38681d0
+# ╟─b7028a91-5b32-4b84-be66-aac1dea60c22
+# ╠═f19aff95-8d21-4053-b1e5-abdeb2f8ccd8
+# ╠═642309f1-0400-4b98-b37d-9cd94a9e0f61
+# ╠═bb30582e-e643-4d12-baba-f5f068675fbf
+# ╠═4ba6753d-d663-49f5-81af-7f96af8cc1ae
+# ╠═90f6729d-3a15-452e-a3e8-5677bb3815cc
+# ╠═ebbda7a8-7d20-48e1-b3c0-075e3a012432
+# ╠═1f1551b8-8873-41f3-bb31-667e6134d5d4
+# ╠═0667b8b3-e557-45dd-9c50-72b03a0e1ef4
+# ╠═c52c6c79-3948-43de-acf5-8abcd544da91
+# ╠═3fab063f-162a-4723-bea5-bbbbf5e7d0e0
+# ╠═0339a941-46c4-48e9-82c9-76ecae4c8c32
+# ╠═4e65ccfa-8668-40f2-af8d-b52bbd0bacd4
+# ╠═e646bb26-2d79-4fed-8615-4484faad4c3b
+# ╠═03de6695-967a-4e78-82a2-05c62afab860
+# ╠═cf975482-50b5-4818-a1fd-716cc38bea83
+# ╠═601af92a-c643-476d-bd05-f04361716640
+# ╟─186d4589-7bf2-4e22-8522-6c1883931f3c
+# ╠═827168bf-b1d9-4a39-8252-a9133cbb7f33
+# ╠═c3ec2833-e10d-4fc8-96d8-5d03a11d0b33
+# ╠═50b06d35-cf3b-4741-bfb8-4af943d34654
+# ╟─8196c931-a925-4744-9ced-42e458d01dae
+# ╠═ba591019-6725-4eb8-a66c-2eea598de3d9
+# ╠═91f56826-d567-4ec2-aacb-8b50906c610b
+# ╠═a97a2d30-fa08-42df-bae2-dea7ee20b9bf
+# ╠═5fddc031-437d-4334-a29e-180101d5135e
+# ╟─00000000-0000-0000-0000-000000000001
+# ╟─00000000-0000-0000-0000-000000000002
