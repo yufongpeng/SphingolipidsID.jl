@@ -21,10 +21,12 @@ TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 UnitfulMoles = "999f2bd7-36bf-5ba7-9bc1-c9473aa75374"
 
 [compat]
-AnovaGLM = "0.1"
+AnovaGLM = "0.2"
 CSV = "0.10"
 Clustering = "0.14"
 DataPipes = "0.3"
+Dictionaries = "0.3"
+GLM = "1"
 MLStyle = "0.4"
 PlotlyJS = "0.18"
 Plots = "1"

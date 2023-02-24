@@ -232,9 +232,6 @@ md"""
 # ╔═╡ 273d9066-c5ce-4c7c-b68d-2ccb2800c77c
 @p pj q!(Hex2Cer) plot_rt_mw
 
-# ╔═╡ 62330708-4987-499f-a930-b002f380ae2e
-mw(spid(Hex2Cer, 34, 1, 2))
-
 # ╔═╡ 5e517258-c779-4f0c-89f5-9585e38681d0
 # Partial id
 @p pj q!(CLS.fg.nana) q!(:chain!) apply_rules!
@@ -247,6 +244,12 @@ First, initiate clustering by `initiate_clusters!`.
 
 # ╔═╡ 642309f1-0400-4b98-b37d-9cd94a9e0f61
 @p pj initiate_clusters! plot_rt_mw(; clusters = :clusters)
+
+# ╔═╡ 893774b3-8e21-45ab-9920-de2522ad3c3c
+md"""
+As all analytes are included, the cluster contain lots of artifects.
+To refine the clusters, we start from a subset of analytes which are more confidential.
+"""
 
 # ╔═╡ bb30582e-e643-4d12-baba-f5f068675fbf
 plot_rt_mw(aq)
@@ -360,15 +363,15 @@ version = "3.5.0"
 
 [[deps.AnovaBase]]
 deps = ["Distributions", "Printf", "Reexport", "Statistics", "StatsBase", "StatsModels"]
-git-tree-sha1 = "d1d038adacfae7d7282faba82971bc141293f14a"
+git-tree-sha1 = "8a60d8875f4328232e818c84a387e6d3768990d1"
 uuid = "946dddda-6a23-4b48-8e70-8e60d9b8d680"
-version = "0.6.4"
+version = "0.7.2"
 
 [[deps.AnovaGLM]]
-deps = ["AnovaBase", "DataFrames", "Distributions", "GLM", "LinearAlgebra", "Printf", "Reexport", "Statistics", "StatsBase", "StatsModels"]
-git-tree-sha1 = "d17d1b5a54563ae99ca062e357f31f3c9db5d261"
+deps = ["AnovaBase", "Distributions", "GLM", "LinearAlgebra", "Printf", "Reexport", "Statistics", "StatsBase", "StatsModels"]
+git-tree-sha1 = "fbb78e0fb890b6655f776340b3020fa11d297772"
 uuid = "0a47a8e3-ec57-451e-bddb-e0be9d22772b"
-version = "0.1.4"
+version = "0.2.0"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -501,12 +504,6 @@ git-tree-sha1 = "e8119c1a33d267e16108be441a287a6981ba1630"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.14.0"
 
-[[deps.DataFrames]]
-deps = ["Compat", "DataAPI", "Future", "InlineStrings", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Random", "Reexport", "SentinelArrays", "SnoopPrecompile", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
-git-tree-sha1 = "aa51303df86f8626a962fccb878430cdb0a97eee"
-uuid = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-version = "1.5.0"
-
 [[deps.DataPipes]]
 git-tree-sha1 = "44a632423521bd0d189ed49a7ecb521bf10e1758"
 uuid = "02685ad9-2d12-40c3-9f73-c6aeda6a7ff5"
@@ -555,9 +552,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
-git-tree-sha1 = "239fe7c3312050992dcc5d5a8d54abcf099c3ff2"
+git-tree-sha1 = "9a782b47da6ee4cb3d041764e0c6830469105984"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.82"
+version = "0.25.83"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
@@ -745,11 +742,6 @@ deps = ["Test"]
 git-tree-sha1 = "49510dfcb407e572524ba94aeae2fced1f3feb0f"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
 version = "0.1.8"
-
-[[deps.InvertedIndices]]
-git-tree-sha1 = "82aec7a3dd64f4d9584659dc0b62ef7db2ef3e19"
-uuid = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
-version = "1.2.0"
 
 [[deps.IrrationalConstants]]
 git-tree-sha1 = "637b58b3c037d3877f263418de820920b47ceeb5"
@@ -1712,10 +1704,10 @@ version = "1.4.1+0"
 # ╠═86070042-2c0b-4b43-9aa0-8c11ec99be15
 # ╠═3dc5e2a7-8a86-447c-967c-7898b199016f
 # ╠═273d9066-c5ce-4c7c-b68d-2ccb2800c77c
-# ╠═62330708-4987-499f-a930-b002f380ae2e
 # ╠═5e517258-c779-4f0c-89f5-9585e38681d0
 # ╟─b7028a91-5b32-4b84-be66-aac1dea60c22
 # ╠═642309f1-0400-4b98-b37d-9cd94a9e0f61
+# ╟─893774b3-8e21-45ab-9920-de2522ad3c3c
 # ╠═bb30582e-e643-4d12-baba-f5f068675fbf
 # ╠═4ba6753d-d663-49f5-81af-7f96af8cc1ae
 # ╠═90f6729d-3a15-452e-a3e8-5677bb3815cc
