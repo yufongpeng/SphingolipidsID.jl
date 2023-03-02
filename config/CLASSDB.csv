@@ -2,6 +2,7 @@ Categories,Main class,Lipid subclass,Abbreviation,chain summed,chain separated,r
 Sphingolipids [SP],Sphingoid bases [SP01],Sphingoid bases,SPB,SPB 18:1;2O,SPB 18:1;2O,"r""^SPB \d+:\d+;\d*O$""",C18H39N,18,CH2,0,H2,"[1, 2]","[1, 2]","[1, 2]","[1, 2]"
 Sphingolipids [SP],Ceramides [SP02],Ceramide,Cer,Cer 42:1;2O,Cer 18:1;2O/24:0,"r""^Cer \d+:\d+;\d*O$""",C36H73NO,36,CH2,0,H2,"[1, 17, 18]","[1, 17, 18]","[1, 2, 17, 18]","[1, 2, 17, 18]"
 Sphingolipids [SP],Ceramides [SP02],Ceramide 1-phosphates,CerP,CerP 38:0;2O,CerP 18:0;2O/20:0,"r""^CerP \d+:\d+;\d*O$""",C36H74NO4P,36,CH2,0,H2,"[1, 13]","[1, 13]","[1, 2, 13]","[1, 2, 13]"
+Sphingolipids [SP],Phosphosphingolipids [SP03],Sphingomyelin,SM,SM 38:1;2O,SM 18:1;2O/20:0,"r""^SM \d+:\d+;\d*O$""",C41H86N2O4P,36,CH2,0,H2,"[1, 10, 17, 18]","[1, 10, 17, 18]","[1, 10, 17, 18, 26]","[1, 10, 17, 18, 26]"
 Sphingolipids [SP],Neutral glycosphingolipids [SP05],Hexosylceramide,HexCer,HexCer 34:1;2O,HexCer 18:1;2O/16:0,"r""^HexCer \d+:\d+;\d*O$""",C42H83NO6,36,CH2,0,H2,"[1, 17, 18]","[1, 17, 18]","[1, 2, 17, 18]","[1, 2, 17, 18]"
 Sphingolipids [SP],Neutral glycosphingolipids [SP05],Dihexosylceramide,Hex2Cer,Hex2Cer 34:1;2O,Hex2Cer 18:1;2O/16:0,"r""^Hex2Cer \d+:\d+;\d*O$""",C48H93NO11,36,CH2,0,H2,"[1, 17, 18]","[1, 17, 18]","[1, 2, 17, 18]","[1, 2, 17, 18]"
 Sphingolipids [SP],Neutral glycosphingolipids [SP05],Trihexosylceramide,Hex3Cer,Hex3Cer 34:1;2O,Hex3Cer 18:1;2O/16:0,"r""^Hex3Cer \d+:\d+;\d*O$""",C54H103NO16,36,CH2,0,H2,"[1, 17, 18]","[1, 17, 18]","[1, 2, 17, 18]","[1, 2, 17, 18]"

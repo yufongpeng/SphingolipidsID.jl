@@ -2,10 +2,10 @@ SPDB[:SCORE] = Dict{NamedTuple, Function}()
 
 macro cpdscore(targetconvert, weight, objective)
     target, converter = @match targetconvert begin
-        :class                                  => (:class, :first)   
-        :chain                                  => (:chain, :last)   
+        :class                                  => (:class, :first)
+        :chain                                  => (:chain, :last)
         Expr(:call, :(=>), target, converter)   => (target, converter)
-    end # any 1-arg fn: Vector -> Int 
+    end # any 1-arg fn: Vector -> Int
     parameters = (target = target, converter = converter, weight = weight, objective = objective)
     haskey(SPDB[:SCORE], parameters) && return quote SPDB[:SCORE][$parameters] end
     weight = @match weight begin
@@ -48,6 +48,7 @@ function apply_score!(score_fn!::T, project::Project; analytes = project.analyte
     @p analytes foreach(apply_score!(score_fn!, _))
     project
 end
+
 apply_threshold!(object, fn::T; kwargs...) where T <: Function = apply_threshold!(fn, object; kwargs...)
 apply_threshold!(target, thresh_fn::T, aquery::AbstractQuery) where T <: Function = (apply_threshold!(target, thresh_fn, aquery.project; analytes = aquery.result); aquery)
 function apply_threshold!(target, thresh_fn::T, project::Project; analytes = project.analytes) where T <: Function
@@ -57,7 +58,7 @@ function apply_threshold!(target, thresh_fn::T, project::Project; analytes = pro
     project
 end
 
-apply_score!(score_fn!::T, analyte::AnalyteSP) where T <: Function = score_fn!(analyte) 
+apply_score!(score_fn!::T, analyte::AnalyteSP) where T <: Function = score_fn!(analyte)
 function apply_threshold!(target, thresh_fn::T, analyte::AnalyteSP) where T <: Function
     map(states_id.(vectorize(target))) do i
         r = thresh_fn(analyte.scores[i])

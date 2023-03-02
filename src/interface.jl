@@ -58,7 +58,7 @@ deleteat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analytes), parentindices(analytes)[1][del])
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analytes), parentindices(analytes)[1][del])
 
-function delete!(aquery::AbstractQuery, target::Symbol) 
+function delete!(aquery::AbstractQuery, target::Symbol)
     delete!(aquery.project, target; analytes = query.result)
     aquery.view ? (printstyled("Please re-query to get the correct result\n"; bold = true, color = :red); aquery.project) : aquery
 end
@@ -83,11 +83,11 @@ reverse!(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reve
 function union!(qs::Vararg{Query, N}) where N
     q = qs[1]
     length(qs) <= 1 && return q
-    q.query = [q.query]
+    q.query = QueryOr([q.query])
     if q.view
         ids = parentindices(q.result)[1]
         for qo in qs[2:end]
-            push!(q.query, qo.query)
+            push!(q.query.qcmd, qo.query)
             union!(ids, parentindices(qo.result)[1])
         end
         q.result = @views parent(q.result)[ids]
@@ -95,58 +95,69 @@ function union!(qs::Vararg{Query, N}) where N
     q
 end
 
-function union!(project::Project, analyte::AnalyteSP, id::Int, cpd2::CompoundSP)
+function push_cpd!(analyte::AnalyteSP, cpd::CompoundSP)
+    @p analyte push!(__, copy_wo_project(cpd)) sort!(; lt = isless_class)
+    analyte.rt = calc_rt(analyte)
+    analyte
+end
+
+union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP) = union!(analyte, id, cpd2, chain(cpd2))
+function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::SumChain)
     cpd1 = analyte[id]
-    if isnothing(cpd2.chain) 
-        append!(cpd1.fragments, cpd2.fragments)
-        unique!(cpd1.fragments)
-        _, i = findmax((cpd1.area[1], cpd2.area[1]))
-        cpd1.area = i == 1 ? cpd1.area : cpd2.area
-        return cpd1
-    end
-    if isnothing(cpd1.chain)
-        push!(project, copy_wo_project(analyte))
-        analyte = last(project)
-        for a in analyte
-            a.chain = cpd2.chain
-        end
-        cpd1 = analyte[id]
-    else
-        chain = @match (_lcb(cpd1), _lcb(cpd2)) begin
-            (::Tuple{<: LCB{N1, C}, <: LCB{N2, C}} where {C, N1, N2}) && if N1 > N2 end => cpd2.chain
-            _                                                                           => cpd1.chain
-        end
-        for a in analyte
-            a.chain = chain
-        end
-    end
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
     _, i = findmax((cpd1.area[1], cpd2.area[1]))
-    cpd1.area = i == 1 ? cpd1.area : cpd2.area
-    sort!(analyte, lt = isless_class)
-    cpd1
+    cpd1.area = i ≡ 1 ? cpd1.area : cpd2.area
+    analyte
+end
+
+function _union!(analyte::AnalyteSP, id::Int, ::SumChain, sc::ChainSP)
+    push!(last(analyte).project, copy_wo_project(analyte))
+    for a in analyte
+        a.chain = sc
+    end
+    analyte[id]
+end
+
+function _union!(analyte::AnalyteSP, id::Int, sc1::ChainSP, sc2::ChainSP)
+    nox(lcb(sc1)) <= nox(lcb(sc2)) && (return analyte[id])
+    for a in analyte
+        a.chain = sc2
+    end
+    analyte[id]
+end
+
+function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::ChainSP)
+    cpd1 = _union!(analyte, id, chain(analyte[id]), chain(cpd2))
+    append!(cpd1.fragments, cpd2.fragments)
+    unique!(cpd1.fragments)
+    _, i = findmax((cpd1.area[1], cpd2.area[1]))
+    cpd1.area = i ≡ 1 ? cpd1.area : cpd2.area
+    @p analyte sort!(; lt = isless_class)
+    analyte.rt = calc_rt(analyte)
+    analyte
 end
 
 union(cpd1::CompoundSP, cpd2::CompoundSP) = union!(copy_wo_project(cpd1), cpd2)
+union(cpd1::CompoundSPVanilla, cpd2::CompoundSPVanilla) = union!(deepcopy(cpd1), cpd2)
+function union!(cpd1::CompoundSPVanilla, cpd2::CompoundSPVanilla)
+    append!(cpd1.fragments, cpd2.fragments)
+    unique!(cpd1.fragments)
+    _union!(cpd1, cpd2, cpd1.chain, cpd2.chain)
+end
+
+_union!(cpd1::CompoundID, cpd2::CompoundID, ::SumChain, ::SumChain) = cpd1
+_union!(cpd1::CompoundID, cpd2::CompoundID, ::ChainSP, ::SumChain) = cpd1
+_union!(cpd1::CompoundID, cpd2::CompoundID, ::SumChain, sc::ChainSP) = (cpd1.chain = sc; cpd1)
+_union!(cpd1::CompoundID, cpd2::CompoundID, ::ChainSP, sc::ChainSP) =
+    nox(lcb(cpd1)) > nox(lcb(cpd2)) ? (cpd1.chain = sc; cpd1) : cpd1
 
 function union!(cpd1::CompoundSP, cpd2::CompoundSP)
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
     _, i = findmax((cpd1.area[1], cpd2.area[1]))
-    cpd1.area = i == 1 ? cpd1.area : cpd2.area
-    if isnothing(cpd2.chain) 
-        return cpd1
-    end
-    if isnothing(cpd1.chain)
-        cpd1.chain = cpd2.chain
-    else
-        cpd1.chain = @match (_lcb(cpd1), _lcb(cpd2)) begin
-            (::Tuple{<: LCB{N1, C}, <: LCB{N2, C}} where {C, N1, N2}) && if N1 > N2 end => cpd2.chain
-            _                                                                           => cpd1.chain
-        end
-    end
-    cpd1
+    cpd1.area = i ≡ 1 ? cpd1.area : cpd2.area
+    _union!(cpd1, cpd2, cpd1.chain, cpd2.chain)
 end
 
 union(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(copy_wo_project(analyte1), analyte2.compounds, analyte2.states)
@@ -156,11 +167,7 @@ union!(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(analyte1, analyte2.com
 function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 0, 0, 0])
     for cpd2 in cpds
         id = findfirst(cpd1 -> iscompatible(cpd1, cpd2), analyte1)
-        if isnothing(id)
-            push!(analyte1, cpd2)
-        else
-            union!(analyte1[id], cpd2)
-        end
+        isnothing(id) ? push!(analyte1, cpd2) : union!(analyte1[id], cpd2)
     end
     sort!(analyte1, lt = isless_class)
     analyte1.states = min.(analyte1.states, states2)
@@ -168,80 +175,94 @@ function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 
     analyte1
 end
 
-getproperty(reuseable::ReUseable, sym::Symbol) = sym == :query ? getfield(reuseable, :query) : getfield(getfield(reuseable, :query), sym)
+getproperty(reuseable::ReUseable, sym::Symbol) = sym ≡ :query ? getfield(reuseable, :query) : getfield(getfield(reuseable, :query), sym)
 
+convert(::Type{CompoundSPVanilla}, cpd::CompoundSP) = CompoundSPVanilla(cpd.class, cpd.chain, cpd.fragments)
+convert(::Type{CompoundSP}, cpd::CompoundSPVanilla) = CompoundSP(cpd.class, cpd.chain, cpd.fragments)
+convert(::Type{SPID}, cpd::SPID) = cpd
 # variant of interface
-function iscomponent(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
-    no = nhydroxyl(ion)
-    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || _lcb(cpd1) == ion.molecule)
-end
-iscomponent(cpd1::CompoundSP, ion::Ion{S, <: ACYL}) where S = iscompatible(cpd1, ion)
-iscomponent(cpd1::CompoundSP, ::Ion{S, NeuAc}) where S = isa(cpd1.class, CLS.fg.nana)
-iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{NeuAc, NeuAc}}}) where S = 
-    isa(cpd1.class, CLS.series.b) || isa(cpd1.class, CLS.series.c) || isa(cpd1.class, GT1a) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1c)
-iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{NeuAc, NeuAc, NeuAc}}}) where S = isa(cpd1.class, CLS.series.c)
-iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex}}}) where S = 
-    (isa(cpd1.class, CLS.series.as) && !isa(cpd1.class, Hex2Cer)) ||
-    (isa(cpd1.class, CLS.series.a) && !isa(cpd1.class, GM3)) ||
-    (isa(cpd1.class, CLS.series.b) && !isa(cpd1.class, GD3)) ||
-    (isa(cpd1.class, CLS.series.c) && !isa(cpd1.class, GT3)) ||
-    isa(cpd1.class, HexNAcHex2Cer) ||
-    isa(cpd1.class, HexNAcHex3Cer)
+# iscomponent: whether ion is a component of cpd
+iscomponent(ion::Ion{<: Adduct, <: ClassSP}, cpd::CompoundID) = iscompatible(ion.molecule, cpd.class)
+iscomponent(ion::Ion{<: Adduct, <: ChainSP}, cpd::CompoundID) = iscomponent(ion, cpd.chain)
+iscomponent(ion::Ion{<: Adduct, <: ChainSP}, sc::SumChain) =
+    ncb(ion) <= ncb(sc) && ndbox(ion) <= ndbox(sc) &&
+        any(ox <= nox(sc) && db <= ndb(sc) for (ox, db) in zip(nox(ion):nox(ion.molecule), ndb(ion):-1:ndb(ion.molecule)))
 
-iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc}}}) where S = 
-    isa(cpd1.class, CLS.fg.nana) && iscomponent(cpd1, Ion(S(), Glycan(HexNAc(), Hex())))
+iscomponent(ion::Ion{<: Adduct, <: LCB}, sc::DiChain) = iscomponent(ion, sc.lcb)
+iscomponent(ion::Ion{<: Adduct, <: ACYL}, sc::DiChain) = iscomponent(ion, sc.acyl)
+iscomponent(ion::Ion{<: Adduct, <: LCB}, sc::LCB) =
+    ncb(ion) ≡ ncb(sc) && ndbox(ion) ≡ ndbox(sc) &&
+        any(ox ≡ nox(sc) && db ≡ ndb(sc) for (ox, db) in zip(nox(ion):nox(ion.molecule), ndb(ion):-1:ndb(ion.molecule)))
+iscomponent(ion::Ion{<: Adduct, <: ACYL}, sc::ACYL) =
+    ncb(ion) ≡ ncb(sc) && ndb(ion) ≡ ndb(sc) && nox(ion) ≡ ndb(sc)
 
-iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc, NeuAc}}}) where S = 
-    (isa(cpd1.class, CLS.series.b) && !isa(cpd1.class, GD3)) ||
-    (isa(cpd1.class, CLS.series.c) && !isa(cpd1.class, GT3)) ||
-    isa(cpd1.class, GT1a) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1c) || isa(cpd1.class, GD1α)
+iscomponent(::Ion{<: Adduct, NeuAc}, cpd::CompoundID) = isa(cpd.class, CLS.fg.nana)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{NeuAc, NeuAc}}}, cpd::CompoundID) =
+    isa(cpd.class, CLS.series.b) || isa(cpd.class, CLS.series.c) || isa(cpd.class, GT1a) || isa(cpd.class, GT1aα) || isa(cpd.class, GD1c)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{NeuAc, NeuAc, NeuAc}}}, cpd::CompoundID) = isa(cpd.class, CLS.series.c)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, Hex}}}, cpd::CompoundID) =
+    (isa(cpd.class, CLS.series.as) && !isa(cpd.class, Hex2Cer)) ||
+    (isa(cpd.class, CLS.series.a) && !isa(cpd.class, GM3)) ||
+    (isa(cpd.class, CLS.series.b) && !isa(cpd.class, GD3)) ||
+    (isa(cpd.class, CLS.series.c) && !isa(cpd.class, GT3)) ||
+    isa(cpd.class, HexNAcHex2Cer) ||
+    isa(cpd.class, HexNAcHex3Cer)
 
-iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{HexNAc, NeuAc}}}) where S = 
-    isa(cpd1.class, GP1cα) || isa(cpd1.class, GQ1bα) || isa(cpd1.class, GT1aα) || isa(cpd1.class, GD1α)
+iscomponent(::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc}}}, cpd::CompoundID) where {S <: Adduct} =
+    isa(cpd.class, CLS.fg.nana) && iscomponent(cpd, Ion(S(), Glycan(HexNAc(), Hex())))
 
-iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{Hex, NeuAc}}}) where S = 
-    isa(cpd1.class, CLS.fg.nana)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, Hex, NeuAc, NeuAc}}}, cpd::CompoundID) =
+    (isa(cpd.class, CLS.series.b) && !isa(cpd.class, GD3)) ||
+    (isa(cpd.class, CLS.series.c) && !isa(cpd.class, GT3)) ||
+    isa(cpd.class, GT1a) || isa(cpd.class, GT1aα) || isa(cpd.class, GD1c) || isa(cpd.class, GD1α)
 
-iscomponent(cpd1::CompoundSP, ::Ion{S, Glycan{Tuple{Hex, NeuAc, NeuAc}}}) where S = 
-    isa(cpd1.class, CLS.series.b) ||
-    isa(cpd1.class, CLS.series.c) ||
-    isa(cpd1.class, GT1a) || 
-    isa(cpd1.class, GD1c)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, NeuAc}}}, cpd::CompoundID) =
+    isa(cpd.class, GP1cα) || isa(cpd.class, GQ1bα) || isa(cpd.class, GT1aα) || isa(cpd.class, GD1α)
 
-iscompatible(cpd1::CompoundSP, cpd2::CompoundSP) = 
-    isclasscompatible(cpd1.class, cpd2.class) && ischaincompatible(cpd1, cpd2)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{Hex, NeuAc}}}, cpd::CompoundID) =
+    isa(cpd.class, CLS.fg.nana)
 
-iscompatible(cpd1::CompoundSP, ion::Ion) = iscomponent(cpd1, ion)
-iscompatible(cpd1::CompoundSP, ion::Ion{S, <: ClassSP}) where S = 
-    isclasscompatible(cpd1.class, ion.molecule)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{Hex, NeuAc, NeuAc}}}, cpd::CompoundID) =
+    isa(cpd.class, CLS.series.b) ||
+    isa(cpd.class, CLS.series.c) ||
+    isa(cpd.class, GT1a) ||
+    isa(cpd.class, GD1c)
 
-function iscompatible(cpd1::CompoundSP, ion::Ion{S, <: LCB}) where S 
-    no = nhydroxyl(ion)
-    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || 
-        nhydroxyl(_lcb(cpd1)) >= no && ischaincompatible(_lcb(cpd1), ion.molecule))
-end
+# iscompatible: not exact, allow isomer
+iscompatible(cpd1::CompoundID, cpd2::CompoundID) =
+    iscompatible(cpd1.class, cpd2.class) && iscompatible(cpd1.chain, cpd2.chain)
 
-function iscompatible(cpd1::CompoundSP, ion::Ion{S, <: ACYL}) where S 
-    no = nhydroxyl(ion)
-    cpd1.sum[3] >= no && (isnothing(cpd1.chain) || 
-        nhydroxyl(_acyl(cpd1)) == no)
-end
+iscompatible(cls1::ClassSP, cls2::ClassSP) = cls1 ≡ cls2 ||
+    any(cls1 ≡ cls2 for (cls1, cls2) in Iterators.product(isomer_tuple(cls1), isomer_tuple(cls2)))
 
-isclasscompatible(cls1::ClassSP, cls2::ClassSP) = cls1 == cls2 || begin
+iscompatible(x1, x2) = x1 ≡ x2
+iscompatible(sc1::SumChain, sc2::SumChain) = sumcomp(sc1) ≡ sumcomp(sc2)
+iscompatible(sc1::SumChain, sc2::ChainSP) = sumcomp(sc1) ≡ sumcomp(sc2)
+iscompatible(sc1::ChainSP, sc2::SumChain) = sumcomp(sc1) ≡ sumcomp(sc2)
+iscompatible(sc1::DiChain, sc2::DiChain) = iscompatible(sc1.lcb, sc2.lcb) && iscompatible(sc1.acyl, sc2.acyl)
+iscompatible(sc1::LCB, sc2::LCB) = sumcomp(sc1) ≡ sumcomp(sc2)
+iscompatible(sc1::ACYL, sc2::ACYL) = sc1 ≡ sc2
+iscompatible(sc1::Acyl, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
+iscompatible(sc1::Acyl, sc2::ACYL) = sumcomp(sc1) ≡ sumcomp(sc2)
+iscompatible(sc1::ACYL, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
+
+iscompatible(ion::Ion, cpd::CompoundID) = iscomponent(ion, cpd)
+#=
+isclasscompatible(cls1::ClassSP, cls2::ClassSP) = cls1 ≡ cls2 || begin
     class1 = hasisomer(cls1) ? cls1.isomer : (cls1, )
     class2 = hasisomer(cls2) ? cls2.isomer : (cls2, )
-    any(cls1 == cls2 for (cls1, cls2) in Iterators.product(class1, class2))
+    any(cls1 ≡ cls2 for (cls1, cls2) in Iterators.product(class1, class2))
 end
 
-ischaincompatible(cpd1::CompoundSP, cpd2::CompoundSP) = 
-    cpd1.sum == cpd2.sum && ischaincompatible(cpd1.chain, cpd2.chain)
+ischaincompatible(cpd1::CompoundID, cpd2::CompoundID) =
+    cpd1.sum ≡ cpd2.sum && ischaincompatible(cpd1.chain, cpd2.chain)
 
 ischaincompatible(chain1::Nothing, chain2::Chain) = true
 ischaincompatible(chain1::Chain, chain2::Nothing) = true
 ischaincompatible(chain1::Nothing, chain2::Nothing) = true
 
 ischaincompatible(chain1::Chain, chain2::Chain) = ischaincompatible(chain1.lcb, chain2.lcb) && ischaincompatible(chain1.acyl, chain2.acyl)
-ischaincompatible(lcb1::LCB, lcb2::LCB) = 
+ischaincompatible(lcb1::LCB, lcb2::LCB) =
     @match (lcb1, lcb2) begin
         ::Tuple{<: LCB2{N1, C}, <: LCB2{N2, C}} where {C, N1, N2}   => true
         ::Tuple{<: LCB3{N1, C}, <: LCB3{N2, C}} where {C, N1, N2}   => true
@@ -249,45 +270,37 @@ ischaincompatible(lcb1::LCB, lcb2::LCB) =
         _                                                           => false
     end
 
-ischaincompatible(acyl1::ACYL, acyl2::ACYL) = 
+ischaincompatible(acyl1::ACYL, acyl2::ACYL) =
     @match (acyl1, acyl2) begin
         ::Tuple{<: Acyl{N}, <: ACYL{N}} where N => true
         ::Tuple{<: ACYL{N}, <: Acyl{N}} where N => true
-        _                                       => acyl1 == acyl2
+        _                                       => acyl1 ≡ acyl2
     end
 
-ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(chain2) && sumcomp(chain1.lcb) == sumcomp(chain2.lcb) 
-
-copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.sum, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
+ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(chain2) && sumcomp(chain1.lcb) ≡ sumcomp(chain2.lcb)
+=#
+copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
 copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), deepcopy(analyte.scores), analyte.manual_check)
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
 reuse_copy(aquery::Query) = Query(aquery.project, reuse_copy(aquery.result), deepcopy(aquery.query), true)
 reuse_copy(v::Vector) = copy(v)
 reuse_copy(v::T) where {T <: SubArray} = T(parent(v), v.indices, v.offset1, v.stride1)
 
-
+# equivalent: ion1 and ion2 are the same
 equivalent_in(ion, collection) = any(equivalent(ion, x) for x in collection)
-function equivalent(ion1::Ion{<: Pos, <: LCB}, ion2::Ion{<: Pos, <: LCB})
-    nunsa(ion1.molecule) == nunsa(ion2.molecule) || return false
-    nhydroxyl(ion1.molecule) - findfirst(==(ion1.adduct), SPDB[:NLH2O]) == nhydroxyl(ion2.molecule) - findfirst(==(ion2.adduct), SPDB[:NLH2O])
-end
+equivalent(ion1::Ion{<: Pos, <: LCB}, ion2::Ion{<: Pos, <: LCB}) =
+    ncb(ion1) ≡ ncb(ion2) && ndb(ion1) ≡ ndb(ion2) && nox(ion1) ≡ nox(ion2)
+    #any(ox1 ≡ ox2 && db1 ≡ db2 for ((ox1, db1), (ox2, db2)) in Iterators.product(zip(nox(ion1):nox(ion1.molecule), ndb(ion1):-1:ndb(ion1.molecule)), zip(nox(ion2):nox(ion2.molecule), ndb(ion2):-1:ndb(ion2.molecule))))
 
-equivalent(ion1::Ion{S, T1}, ion2::Ion{S, T2}) where {S, T1 <: ClassSP, T2 <: ClassSP} = 
-    isclasscompatible(ion1.molecule, ion2.molecule)
+equivalent(ion1::AbstractIon{S}, ion2::AbstractIon{S}) where {S <: Adduct} = iscompatible(ion1.molecule, ion2.molecule)
+equivalent(ion1::AbstractIon, ion2::AbstractIon) = false
 
-equivalent(ion1::Ion, ion2::Ion) = ==(ion1, ion2)
-equivalent(ion1::ISF, ion2::Ion) = ==(ion1.adduct, ion2.adduct) && ==(ion1.molecule, ion2.molecule)
-equivalent(ion1::Ion, ion2::ISF) = ==(ion1.adduct, ion2.adduct) && ==(ion1.molecule, ion2.molecule)
-equivalent(ion1::ISF, ion2::ISF) = ==(ion1.adduct, ion2.adduct) && ==(ion1.molecule, ion2.molecule)
+isless_class(cpd1::CompoundID) = true
+isless_class(cpd1::CompoundID, cpd2::CompoundID) =
+    any(connected(cls2, cls1) for (cls1, cls2) in Iterators.product(isomer_tuple(cpd1.class), isomer_tuple(cpd2.class)))
 
-isless_class(cpd1::CompoundSP) = true
-function isless_class(cpd1::CompoundSP, cpd2::CompoundSP)
-    class1 = hasisomer(cpd1.class) ? cpd1.class.isomer : (cpd1.class, )
-    class2 = hasisomer(cpd2.class) ? cpd2.class.isomer : (cpd2.class, )
-    any(connected(cls2, cls1) for (cls1, cls2) in Iterators.product(class1, class2))
-end
 isless_ion(ion1) = true
-function isless_ion(ion1::Ion{S, <: ClassSP}, ion2::Ion{T, <: ClassSP}) where {S, T}
+function isless_ion(ion1::Ion{<: Adduct, <: ClassSP}, ion2::Ion{<: Adduct, <: ClassSP})
     id = class_db_index(ion1.molecule)
     level = (:default_ion, :parent_ion, :adduct_ion)
     id1 = findfirst(p -> in(ion1.adduct, getproperty(id, p)), level)
@@ -300,7 +313,7 @@ function isless_ion(ion1::Ion{S, <: ClassSP}, ion2::Ion{T, <: ClassSP}) where {S
     false
 end
 
-isless_ion(a, b) = isless(a, b) 
+isless_ion(a, b) = isless(a, b)
 
 isless_nan_min(a, b) = isnan(a) || !isnan(b) && isless(a, b)
 isless_nan_max(a, b) = isnan(b) || !isnan(a) && isless(a, b)

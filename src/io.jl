@@ -1,52 +1,135 @@
+function featuretable_mzmine(path)
+    head = split(readline(path), ",")
+    idmain = findall(x -> any(==(x, text) for text in ["id", "rt", "mz", "height", "area"]), head)
+    idfwhm = findall(x-> endswith(x, "fwhm"), head)
+    idsym = findall(x-> endswith(x, "asymmetry_factor"), head)
+    tbl = CSV.read(path, Table; select = idmain)
+    n = size(tbl, 1)
+    fwhm = CSV.read(path, Table; select = idfwhm)
+    sym = CSV.read(path, Table; select = idsym)
+    datafile = Dict(propertynames(fwhm) .=> map(col -> match(r".*:(.*):.*", string(col))[1], propertynames(fwhm)))
+    id = findfirst.(!ismissing, fwhm)
+    tbl = Table(
+        id = zeros(Int, n),
+        mz1 = tbl.mz,
+        mz2 = zeros(Float64, n),
+        rt = tbl.rt,
+        height = tbl.height,
+        area = tbl.area,
+        collision_energy = zeros(Int, n),
+        FWHM = getindex.(fwhm, id),
+        symmetry = get.(sym, replace!(findfirst.(!ismissing, sym), nothing => :_symmetry), 1.0),
+        datafile = getindex.(Ref(datafile), id)
+    )
+    tbl
+end
+
+function featuretable_masshunter_mrm(path)
+    strs = readlines(path)
+    starts = Int[]
+    data = Table(ms1 = Float64[], ms2 = Float64[], eV = Int[])
+    ends = Int[]
+    status = false
+    for (i, l) in enumerate(strs)
+        if !status
+            transition = match(r"\((\d*.\d*) -> (\d*.\d*)\)", l)
+            isnothing(transition) && continue
+            ms1, ms2 = parse.(Float64, transition)
+            eV = parse(Float64, match(r"CID@(\d*.\d*)", l)[1])
+            push!(data, (; ms1, ms2, eV))
+            push!(starts, i + 1)
+            status = true
+        elseif l == ""
+            push!(ends, i - 1)
+            status = false
+        elseif occursin("No integration results available", l)
+            pop!(starts)
+            pop!(data)
+            status = false
+        end
+    end
+    str = map(starts, ends) do st, ed
+        IOBuffer(join(strs[st:ed], "\n"))
+    end
+    rep = ends .- starts
+    txt = ["RT", "Height", "Area", "Symmetry", "FWHM"]
+    tbl = CSV.read(str, Table; select = (i, name) -> any(==(text, String(name)) for text in txt))
+    n = size(tbl, 1)
+    Table(
+        id = zeros(Int, n),
+        mz1 = (@p zip(data.ms1, rep) |> mapmany(repeat([_[1]], _[2]))),
+        mz2 = (@p zip(data.ms2, rep) |> mapmany(repeat([_[1]], _[2]))),
+        rt = tbl.RT,
+        height = tbl.Height,
+        area = tbl.Area,
+        collision_energy = (@p zip(data.eV, rep) |> mapmany(repeat([_[1]], _[2]))),
+        FWHM = tbl.FWHM,
+        symmetry = tbl.Symmetry
+    )
+end
+
+function read_mrm(path::String; vendor = :agilent)
+    tbl = CSV.read(path, Table)
+    if vendor ≡ :agilent
+        Table(
+            compound = [occursin("[", x) ? eval(Meta.parse(x)) : x for x in getproperty(tbl, Symbol("Compound Name"))],
+            mz1 = getproperty(tbl, Symbol("Precursor Ion")),
+            mz2 = getproperty(tbl, Symbol("Product Ion")),
+            rt = getproperty(tbl, Symbol("Ret Time (min)")),
+            Δrt = getproperty(tbl, Symbol("Delta Ret Time")),
+            collision_energy = getproperty(tbl, Symbol("Collision Energy")),
+            polarity = getproperty(tbl, Symbol("Polarity"))
+        )
+    end
+end
+
+function write_mrm(io, tbl::Table; vendor = :agilent)
+    if vendor ≡ :agilent
+        CSV.write(io, tbl;
+            header = ["Compound Name", "Precursor Ion", "Product Ion", "Ret Time (min)", "Delta Ret Time", "Collision Energy", "Polarity"])
+    end
+end
 
 function Base.show(io::IO, ::MIME"text/plain", class::T) where {T <: ClassSP}
     hasisomer(T) ? begin
         str = join(map(repr, class.isomer), ", ")
-        str = isempty(str) ? "" : str 
-        print(io, replace(repr(T), "_" => "?"), isempty(str) ? "" : "($str)") 
-    end : print(io, T)
+        str = isempty(str) ? "" : str
+        print(io, repr(class), isempty(str) ? "" : "($str)")
+    end : print(io, repr(class))
 end
 
-Base.show(io::IO, class::T) where {T <: ClassSP} = print(io, replace(repr(T), r"_$" => ""))
+Base.show(io::IO, ::T) where {T <: ClassSP} = print(io, replace(repr(T), r"_$" => "", "SphingolipidsID." => ""))
 
 Base.show(io::IO, ion::Ion) = print(io, repr_adduct(ion.adduct), " of ", ion.molecule)
-Base.show(io::IO, sugar::T) where {T <: Sugar} = print(io, T)
-Base.show(io::IO, glycan::Glycan{T}) where {T <: Tuple} = print(io, join(T.parameters, "_"))
-Base.show(io::IO, lcb::LCB{N}) where N = print(io, "SPB ", ncb(lcb), ":", ndb(lcb), ";", "O", N > 1 ? nhydroxyl(lcb) : "")
-Base.show(io::IO, lcb::Lcb) = print(io, "SPB ", lcb.cb, ":", lcb.db, ";", "O", lcb.ox > 1 ? lcb.ox : "")
+Base.show(io::IO, ::T) where {T <: Sugar} = print(io, T)
+Base.show(io::IO, ::Glycan{T}) where {T <: Tuple} = print(io, join(T.parameters, "_"))
 
-Base.show(io::IO, acyl::NACYL) = print(io, "Acyl ", acyl.cb, ":", acyl.db, repr_hydroxl(acyl))
-
-Base.show(io::IO, acyl::Acyl{0}) = print(io, "Acyl")
-Base.show(io::IO, acyl::Acyl{N}) where N = print(io, "Acyl (", N, " OH" , ")")
-Base.show(io::IO, acyl::Acylα{N}) where N = print(io, "Acyl (", 1, " α-OH" , N - 1, " other OH", ")")
-Base.show(io::IO, acyl::Acylβ{N}) where N = print(io, "Acyl (", 1, " β-OH" , N - 1, " other OH", ")")
-
-repr_hydroxl(acyl::Nacyl) = acyl.ox == 0 ? "" : acyl.ox == 1 ? ";O" : ";O$(acyl.ox)"
-repr_hydroxl(acyl::Nacylα) = acyl.ox == 0 ? "" : acyl.ox == 1 ? ";(2OH)" : ";(2OH);O$(acyl.ox - 1)"
-repr_hydroxl(acyl::Nacylβ) = acyl.ox == 0 ? "" : acyl.ox == 1 ? ";(3OH)" : ";(3OH);O$(acyl.ox - 1)"
-
-repr_hydroxl(acyl::Acyl{0}) = ""
-repr_hydroxl(acyl::Acyl{1}) = ";O"
-repr_hydroxl(acyl::Acyl{N}) where N = ";O$N"
-repr_hydroxl(acyl::Acylα{1}) = ";(2OH)"
-repr_hydroxl(acyl::Acylα{N}) where N = ";(2OH);O$(N - 1)"
-repr_hydroxl(acyl::Acylβ{1}) = ";(3OH)"
-repr_hydroxl(acyl::Acylβ{N}) where N = ";(3OH);O$(N - 1)"
-
-function Base.show(io::IO, score::Score)
-    println(io, score.score)
+repr_ox = @λ begin
+    0 => ""
+    1 => ";O"
+    n => ";O" * string(n)
 end
 
-function Base.show(io::IO, ::MIME"text/plain", score::Score)
-    println(io, "Score:")
-    println(io, "∘ Current score: ", score.score)
-    println(io, "∘ Target: ", score.parameters.target)
-    println(io, "∘ Converter: ", score.parameters.converter)
-    println(io, "∘ Weight: ", score.parameters.weight)
-    println(io, "∘ Objective: ", score.parameters.objective)
-    println(io, "∘ Threshold: ", score.parameters.threshold)
-end
+Base.show(io::IO, sc::LCB) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
+Base.show(io::IO, ::MIME"text/plain", sc::LCB) = print(io, "SPB ", sc)
+Base.show(io::IO, ::MIME"text/plain", sc::ACYL) = print(io, "Acyl ", sc)
+Base.show(io::IO, sc::Acyl) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
+Base.show(io::IO, sc::Acylα) = print(io, ncb(sc), ":", ndb(sc),
+                                        @match nox(sc) begin
+                                            0 => ""
+                                            1 => ";(2OH)"
+                                            2 => ";(2OH);O"
+                                            o => ";(2OH);O" * string(o - 1)
+                                        end
+                                    )
+Base.show(io::IO, sc::Acylβ) = print(io, ncb(sc), ":", ndb(sc),
+                                        @match nox(sc) begin
+                                            0 => ""
+                                            1 => ";(3OH)"
+                                            2 => ";(3OH);O"
+                                            o => ";(3OH);O" * string(o - 1)
+                                        end
+                                    )
 
 fragment_table(cpd) = map(cpd.fragments) do row
     s = query_raw(cpd.project, row.source, row.id)
@@ -55,17 +138,9 @@ fragment_table(cpd) = map(cpd.fragments) do row
     (ion1 = row.ion1, mz1 = s.mz1, ion2 = row.ion2, mz2 = mz2, area = s.area, error = s.error, CE = s.collision_energy, rt = s.rt, source = mode)
 end
 
-show_cpdid_class(c::Type{T}) where {T <: ClassSP}= "$T "
-show_cpdid_class(c::Type{Nothing}) = ""
-
-function Base.show(io::IO, cpd::CompoundID{C}) where C
-    if isnothing(cpd.lcb)
-        print(io, show_cpdid_class(C), cpd.sum[1], ":", cpd.sum[2], ";", "O", cpd.sum[3] > 1 ? cpd.sum[3] : "")
-    else
-        print(io, show_cpdid_class(C), cpd.lcb.cb, ":", cpd.lcb.db, ";", "O", cpd.lcb.ox > 1 ? cpd.lcb.ox : "", "/")
-        print(io, cpd.acyl.cb, ":", cpd.acyl.db, repr_hydroxl(cpd.acyl))
-    end
-end
+Base.show(io::IO, cpd::SPID) = print(io, cpd.class, " ", cpd.chain)
+Base.show(io::IO, ::MIME"text/html", cpd::SPID) = print(io, cpd.class, " ", cpd.chain)
+Base.show(io::IO, cpd::CompoundSPVanilla) = print(io, cpd.class, " ", cpd.chain)
 
 states_color = @λ begin
     1  => "🟢"
@@ -73,18 +148,15 @@ states_color = @λ begin
     -1 => "🔴"
 end
 
+Base.show(io::IO, sc::ChainSP) = print(io, sc.lcb, "/", sc.acyl)
+Base.show(io::IO, sc::SumChain) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
+
 function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
-    class, chain = states_color.(analyte.states)
-    print(io, "Compound with ", size(cpd.fragments, 1), " fragments ($class,$chain):")
+    class, chain = states_color.(cpd.states)
+    print(io, "Compound with ", size(cpd.fragments, 1), " fragments ($class$chain):")
     print(io, "\n∘ ID: ")
     show(io, MIME"text/plain"(), cpd.class)
-    if isnothing(cpd.chain)
-        print(io, " ", cpd.sum[1], ":", cpd.sum[2], ";", "O", cpd.sum[3] > 1 ? cpd.sum[3] : "")
-    else
-        spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
-        print(io, " ", spb_c, ":", spb_db, ";", "O", spb_o > 1 ? spb_o : "", "/")
-        print(io, cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
-    end
+    print(io, " ", cpd.chain)
     print(io, "\n∘ Area: ", cpd.area[1])
     print(io, "\n∘ Error: ", cpd.area[2])
     dt = fragment_table(cpd)
@@ -92,15 +164,7 @@ function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
     PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r])
 end
 
-function Base.show(io::IO, cpd::CompoundSP)
-    if isnothing(cpd.chain)
-        print(io, cpd.class, " ", cpd.sum[1], ":", cpd.sum[2], ";", "O", cpd.sum[3] > 1 ? cpd.sum[3] : "")
-    else
-        spb_c, spb_db, spb_o = sumcomp(cpd.chain.lcb)
-        print(io, cpd.class, " ", spb_c, ":", spb_db, ";", "O", spb_o > 1 ? spb_o : "", "/")
-        print(io, cpd.sum[1] - spb_c, ":", cpd.sum[2] - spb_db, repr_hydroxl(cpd.chain.acyl))
-    end
-end
+Base.show(io::IO, cpd::CompoundSP) = print(io, cpd.class, " ", cpd.chain)
 
 function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     sc = states_color.(analyte.states)
@@ -109,7 +173,7 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     rt = sc[states_id(:rt)]
     diq = sc[states_id(:error)]
     isf = sc[states_id(:isf)]
-    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " ($class,$chain;$rt;$diq,$isf):")
+    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " (id$class$chain,rt$rt,signal$diq$isf):")
     print(io, "\n∘ Score: ", analyte.scores)
     print(io, "\n∘ Compounds:")
     for cpd in analyte
@@ -127,7 +191,7 @@ function Base.show(io::IO, analyte::AnalyteSP)
     rt = sc[states_id(:rt)]
     diq = sc[states_id(:error)]
     isf = sc[states_id(:isf)]
-    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " ($class,$chain;$rt;$diq,$isf)")
+    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " (id$class$chain,rt$rt,signal$diq$isf):")
 end
 
 function Base.show(io::IO, data::PreIS)
@@ -162,11 +226,26 @@ function Base.show(io::IO, pj::Project)
     end
 end
 
-Base.show(io::IO, reuseable::ReUseable) = Base.show(io, reuseable.query)
+function Base.show(io::IO, qcmd::QueryCommands)
+    length(qcmd.qcmd) > 1 && print(io, "(")
+    print_init(io, qcmd)
+    length(qcmd.qcmd) > 1 && print(io, ")")
+end
+function Base.show(io::IO, qcmd::QueryNot)
+    print(io, "¬(")
+    print_init(io, qcmd.qcmd)
+    print(io, ")")
+end
+Base.show(io::IO, qcmd::QueryCmd) = print(io, qcmd.query)
+print_init(io::IO, qcmd::QueryAnd) = print(io, join(repr.(qcmd.qcmd), " ∧ "))
+print_init(io::IO, qcmd::QueryOr) = print(io, join(repr.(qcmd.qcmd), " ∨ "))
+print_init(io::IO, qcmd::QueryCmd) = print(io, qcmd)
+print_init(io::IO, qcmd::QueryNot) = print(io, qcmd)
+Base.show(io::IO, reuseable::ReUseable) = print(io, "ReUsable ", reuseable.query)
 function Base.show(io::IO, aquery::Query)
     print(io, "Query with ", length(aquery), " analytes: \n")
     print(io, "∘ Queries: ")
-    print(io, join(map(x -> replace(repr(x), "Any" => ""), aquery.query), ", "))
+    print_init(io, aquery.query)
     println(io)
     print(io, "∘ Result")
     aquery.view ? print(io, " (view):") : print(io, ":")
@@ -185,8 +264,4 @@ function Base.show(io::IO, aquery::Query)
             print(io, "\n ", r)
         end
     end
-end
-
-function Base.show(io::IO, pred::Inv)
-    print(io, "Not(", pred.arg, ")")
 end
