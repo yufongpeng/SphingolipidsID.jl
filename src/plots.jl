@@ -1,3 +1,29 @@
+"""
+    plot_rt_mw(aquery::AbstractQuery; kwargs...)
+    plot_rt_mw(project::Project;
+                analytes = project.analytes,
+                all = true,
+                clusters = nothing,
+                groupby = deisomerized ∘ class,
+                model = false,
+                xlabel = "Retention Time (min)",
+                ylabel = "Molecular weight",
+                title = "Analytes",
+                kwargs...)
+
+Plot retention time vs molecular weight on specified analytes.
+
+# Keyword Arguments
+* `analytes`: `Vector{AnalyteSP}`, analytes to be plotted.
+* `all`: determine whether include all other analytes or not.
+* `clusters`: determine which kind of clusters to be used.
+    * `:possible`: create a plot for all clusters in `project.appendix[:clusters_possible][cls]` for each `cls` occured in `analytes`.
+    * `:candidate`: take the union of `project.appendix[:clusters_candidate]` and `analytes`.
+    * `:clusters`: take the union of `project.clusters` and `analytes`.
+* `groupby`: function for grouping analytes. It applies to an analyte and return an unique property.
+* `model`: determine whether plot prediction line or not.
+* Any other keyword arguments for plot.
+"""
 plot_rt_mw(aquery::AbstractQuery; kwargs...) = plot_rt_mw(aquery.project; analytes = aquery.result, kwargs...)
 function plot_rt_mw(project::Project;
                     analytes = project.analytes,

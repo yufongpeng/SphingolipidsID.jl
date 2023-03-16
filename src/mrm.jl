@@ -1,3 +1,8 @@
+"""
+    MRM(featuretable::Table, polarity::Bool = true; mz_tol = 0.35, additional = Dict())
+
+Create `MRM` from a feature table.
+"""
 function MRM(featuretable::Table, polarity::Bool = true; mz_tol = 0.35, additional = Dict())
     mz2v = Vector{Float64}[]
     mz2_loc = Vector{Int}[]

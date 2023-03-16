@@ -14,8 +14,12 @@ const MW = Dict(
     "Ag" => 106.905095u"g"
 )
 
-mw(formula::AbstractString) = mw(string(formula))
-mw(formula::String) = mw(parse_compound(formula))
+"""
+    mw(formula::AbstractString)
+
+Molecular weight of a formula.
+"""
+mw(formula::AbstractString) = mw(parse_compound(string(formula)))
 
 function mw(elements::Vector)
     # Vector of el => #el
@@ -27,6 +31,11 @@ function mw(elements::Vector)
     ustrip(weight)
 end
 
+"""
+    nmw(formula::AbstractString)
+
+Molecular weight of a formula with a prefix number.
+"""
 function nmw(formula::AbstractString)
     # if any prefix number
     n = match(r"^[0-9]+", formula)
@@ -38,6 +47,16 @@ function nmw(formula::AbstractString)
     end
 end
 
+"""
+    mz(cpd::CompoundID, ion::ISF)
+    mz(cpd::CompoundID, ion::Ion)
+    mz(cpd::CompoundID, add::Adduct)
+    mz(ion::Union{Ion, ISF})
+
+Calculate m/z of `cpd`.
+
+If `ion` contains class information, it will substitute the class of `cpd`; otherwise, the m/z is calculated with only `ion`.
+"""
 mz(cpd::CompoundID, ion::ISF) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.chain)))
 #mz(cpd::CompoundID, ions::AcylIon{T}) where T = mz.(ions.ions, (cpd.sum .- sumcomp(T()))...)
 mz(cpd::CompoundID, ion::Ion) = mz(ion)
@@ -46,6 +65,15 @@ mz(cpd::CompoundID, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
 #mz(ion::Ion, cb, db, o) = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
 
+"""
+    mw(analyte::AnalyteSP)
+    mw(cpd::CompoundID)
+    mw(hg::HeadGroup)
+    mw(lcb::LCB)
+    mw(acyl::ACYL)
+
+Molecular weight of analyte, compound, or certain structures.
+"""
 mw(analyte::AnalyteSP) = mw(last(analyte))
 #mw(molecule, cb, db, o) = mw(molecule)
 #hydrosyn(a, b) = a + b - nmw("H2O")
@@ -62,8 +90,15 @@ function mw(cpd::CompoundID)
     unit = cls[[:u1, :u2]]
     init_us = cls[[:nu1, :nu2]]
     Δu = [ncb(cpd) - init_us[1], ndb(cpd) - init_us[2]]
-    ms = mw(merge_formula(cls.formula, unit, Δu; sign = (:+, :-)))
+    ms = mw(merge_formula(cls.formula, unit, Δu))
     ms + nox(cpd) * mw("O")
+end
+
+function parse_unit(s::AbstractString)
+    neg = s[1] == '-'
+    neg && (s = s[2:end])
+    d = parse_compound(String(s))
+    neg ? (@p d map(_[1] => -(_[2]))) : d
 end
 
 merge_species(cn::Int, db::Int, class::AbstractString, pre::AbstractString, post::AbstractString) =
@@ -81,10 +116,10 @@ function merge_formula(elements::Vector, Δcn::Int, Δdb::Int)
     end
 end
 
-function merge_formula(elements::Vector, units, Δu; sign = ntuple(i -> :+, length(init_unit)))
-    adds = mapmany(units, Δu, sign) do unit, nu, s
+function merge_formula(elements::Vector, units, Δu)
+    adds = mapmany(units, Δu) do unit, nu
         map(unit) do (el, num)
-            el => eval(s)(1) * num  * nu
+            el => num  * nu
         end
     end
 

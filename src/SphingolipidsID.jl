@@ -6,7 +6,7 @@ using CSV, PrettyTables,
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # config input
-        read_adduct_code, read_class_db, read_ce, class_db_index,
+        read_adduct_code, read_class_db, read_ce, class_db_index, set_db!,
         # Type Class
         ClassSP, SPB, Cer, CerP, SM, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer,
         HexNAcHex2Cer, HexNAcHex2Cer_, HexNAc_Hex2Cer, HexNAcHex3Cer, HexNAcHex3Cer_, HexNAc_Hex3Cer, Hex_HexNAc_Hex2Cer, ClasswoNANA,
@@ -44,16 +44,16 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # ID
         apply_rules!, id_product,
         # Score
-        nfrags, @cpdscore, filter_score!, apply_score, apply_score!, apply_threshold, apply_threshold!, select_score!,
+        nfrags, @cpdsc, @score, calc_score, apply_score!, calc_threshold, apply_threshold!, w_rank, w_nfrags, w_rank_log, w_rank_exp, 
         normalized_sig_diff, abs_sig_diff,
         # Data output: MRM
-        generate_mrm, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm,
+        mrmtable, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm,
         # Utils/Query
         q!, qand, qor, qnot, spid, lcb, acyl, acylα, acylβ, reuse,
         new_project, mw, mz, class, chain, sumcomp, rt,
         assign_parent!, assign_isf_parent!,
-        initiate_clusters!, analytes2clusters!, select_clusters!,
-        model_clusters!, compare_models, @model, generate_clusters_prediction!,
+        initialize_clusters!, analytes2clusters!, select_clusters!,
+        model_clusters!, compare_models, @model, predfn_clusters!,
         expand_clusters!, update_clusters!, replace_clusters!,
         show_clusters, apply_clusters!,
         # Plots
@@ -67,8 +67,17 @@ import Base: show, print, isless, isempty, keys, length, iterate, getindex, view
 
 A `Dict` contains package configurations.
 
-* `:IOSOMER`: a `Dict` where keys are deisomerized types and values are a tuple of isomers.
-
+* `:IOSOMER`: `Dict` where keys are deisomerized types and values are a tuple of isomers.
+* `:LIBRARY_POS`: `Table`; library for compounds in positive ion mode.
+* `:LIBRARY_NEG`: `Table`; library for compounds in negative ion mode.
+* `:FRAGMENT_POS`: `Matrix`; library for fragments in positive ion mode.
+* `:FRAGMENT_NEG`: `Matrix`; library for fragments in negative ion mode.
+* `:CLASSDB`: `Table`; information of class for generating library.
+* `:ADDUCTCODE`: `Table`; code used in `:CLASSDB` for each adduct.
+* `:NLH2O`: adducts that involve neutral loss of H2O.
+* `:CONNECTION`: `Dict` represents structure relationship where the keys are more complicated compounds and the values are compounds losing one monosaccharide.
+* `:CE`: `Table`; collision energy for generating MRM transition list.
+* `:SCORE`: `Dict` where keys are description of score function and values are the function.
 """
 const SPDB = Dict{Symbol, Any}()
 
@@ -93,10 +102,10 @@ abstract type AbstractCompoundSP end
 """
     SPID{C <: ClassSP, S <: ChainSP}
 
-A `NamedTuple` contains only the minimal information of a compounds.
+A `NamedTuple` contains only the minimal information of a compound.
 
-* `class`: a `ClassSP`.
-* `chain`: a `ChainSP`.
+* `class`: `ClassSP`.
+* `chain`: `ChainSP`.
 """
 const SPID{C <: ClassSP, S <: ChainSP} = @NamedTuple begin
     class::C
@@ -113,7 +122,7 @@ SPID(cpd::AbstractCompoundSP) = SPID(class(cpd), chain(cpd))
 """
     CompoundSPVanilla <: AbstractCompoundSP
 
-A simpler version of `CompoundSP`.
+A simpler version of `CompoundSP` with only `class`, `chain`, and `fragments`.
 """
 mutable struct CompoundSPVanilla <: AbstractCompoundSP
     class::ClassSP
@@ -124,19 +133,19 @@ end
 """
     CompoundSP <: AbstractCompoundSP
 
-A type for storing the identification information.
+A compound which has a specific structure after ionization and in-source fragmentation. For example, [M+H]+ and [M+H-H2O]+ of Cer 18:1;O2/18:0 are considered as the same compound. 
 
-* `class`: a `ClassSP`.
-* `chain`: a `ChainSP`.
-* `fragments`: a `Table` with 4 columns.
+* `class`: `ClassSP`.
+* `chain`: `ChainSP`.
+* `fragments`: `Table` with 4 columns.
     * `ion1`: parent ion.
     * `ion2`: fragments.
     * `source`: the index of the original data in `project.data`.
     * `id`: the index of the original data in the table `project.data[source]`.
-* `area`: a `Tuple`. First is mean area; second is relative error.
-* `states`: a `Vector{Int}`. First value repressents class; second value repressents chain. 1 means this compound was matched; 0 means this compounds was uncertain; -1 means there was contradiction.
-* `results`: a `Vector{RuleSet}`. First element repressents class; second element repressents chain.
-* `project`: a `AbstractProject`.
+* `area`: `Tuple{Float64, Float64}`. First element is the mean area; second element is the relative error.
+* `states`: `Vector{Int}`. First element represents class; second element represents chain. `1` means this compound was matched; `0` means this compounds was uncertain; `-1` means there was contradiction.
+* `results`: `Vector{RuleSet}`. First element represents class; second element represents chain.
+* `project`: `AbstractProject`; project associated with this compound.
 """
 mutable struct CompoundSP <: AbstractCompoundSP
     class::ClassSP
@@ -160,29 +169,39 @@ const CompoundID = Union{<: SPID, <: AbstractCompoundSP}
 """
     AnalyteSP
 
-A type repressenting an analyte. 
+An analyte which has specific structure in sample but it may become several compounds in MS due to in-source fragmentation.
 
-* `compounds`: a `Vector{CompoundSP}`. The last element is the true compound identification of this analyte; the preceeding elements repressent in-source fragmentation.
+* `compounds`: `Vector{CompoundSP}`. The last element is the true identification of this analyte; the preceeding elements represent in-source fragments.
 * `rt`: retention time in minutes.
-* `states`: a `Vector{Int}`. 
+* `states`: `Vector{Int}`
     1. class
     2. chain
     3. rt
     4. error
     5. isf
-* `scores` a `Vector{Float64}`
-    1. class
-    2. chain
-* `manual_check`: 1 means checked and approved; 0 means unchecked, -1 means checked but disapproved.
+    6. total
+    `1` indicates that it is qualified; `0` indicates that it is uncertain or not tested; `1` indicates that it is disqualified.
+* `cpdsc`: `Pair{Int, Float64}`; score from `analyte.compounds` in the form of `index of function in SPDB[:SCORE] => score`
+* `score`: `Pair{Int, Float64}`; score from analyte itself in the form of `index of function in SPDB[:SCORE] => score`
+* `manual_check`: `1` indicates that it is checked and approved; `0` indicates that it is not checked, `-1` indicates that it is disapproved.
+
+This type is considered as `Vector{CompoundSP}` and it supports iteration and most functions for `Vector`. 
 """
 mutable struct AnalyteSP
     compounds::Vector{CompoundSP}
     rt::Float64
     states::Vector{Int}
-    scores::Vector{Float64}
+    cpdsc::Pair{Int, Float64}
+    score::Pair{Int, Float64}
     manual_check::Int
 end
 # ==()
+"""
+    AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64) 
+
+Create a `AnalyteSP` with a vector of `CompoundSP` and their retention time.
+"""
+AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64) = AnalyteSP(compounds, rt, repeat([0], 6), 0 => 0.0, 0 => 0.0, 0)
 
 ### connect db
 """
@@ -195,9 +214,9 @@ abstract type Data end
 """
     PreIS <: Data
 
-A type for precursor ion scan data.
+Precursor ion scan data.
 
-* `raw`: a `Table`; raw data processed by MZMINE.
+* `raw`: `Table` from raw data processed by MZMINE.
     * `id`: a unique `Int`.
     * `mz1`: m/z of parent ion.
     * `mz2_id`: index of fragments in the attribute `mz2`.
@@ -208,12 +227,12 @@ A type for precursor ion scan data.
     * `symmetry`: peak symmetry.
     * `error`: relative error of `area`.
     * `alignment`: index of `analyte` for alignment.
-    * `isf`: 1 means not a isf; 0 means uncertain; -1 means a isf.
-* `range`: a `Vector{Tuple{Float64, Float64}}`. Each tuple repressents the scan range of the correspond `mz2`.
-* `mz2`: a `Vector{Float64}`. m/z of fragments.
-* `mz_tol`: a `Float64`. Tolerance of m/z deviation when contructing this object.
-* `polarity`: a `Bool`; `true` for positive ion mode; `false` for negative ion mode.
-* `additional`: a `Dict` containing additional information.
+    * `isf`: `1` indicates that it is not a isf; `0` indicates that it is uncertain; `-1` indicates that it is a isf.
+* `range`: `Vector{Tuple{Float64, Float64}}`. Each tuple represents the scan range of the corresponding `mz2`.
+* `mz2`: `Vector{Float64}`, m/z of fragments.
+* `mz_tol`: `Float64`. Tolerance of m/z deviation when contructing this object.
+* `polarity`: `Bool`; `true` for positive ion mode; `false` for negative ion mode.
+* `additional`: `Dict` containing additional information.
 """
 struct PreIS <: Data
     raw::Table #id, mz1, mz2_id, area, ev, rt, alignment, isf
@@ -226,9 +245,9 @@ end
 """
     MRM <: Data
 
-A type for multiple reaction monitoring data.
+Multiple reaction monitoring data.
 
-* `raw`: a `Table`; raw data processed by MZMINE.
+* `raw`: `Table` from raw data processed by MZMINE.
     * `id`: a unique `Int`.
     * `mz1`: m/z of parent ion.
     * `mz2_id`: index of fragments in the attribute `mz2`.
@@ -239,11 +258,11 @@ A type for multiple reaction monitoring data.
     * `symmetry`: peak symmetry.
     * `error`: relative error of `area`.
     * `alignment`: index of `analyte` for alignment.
-    * `isf`: 1 means not a isf; 0 means uncertain; -1 means a isf.
-* `mz2`: a `Vector{Float64}`. m/z of fragments.
-* `mz_tol`: a `Float64`. Tolerance of m/z deviation when contructing this object.
-* `polarity`: a `Bool`; `true` for positive ion mode; `false` for negative ion mode.
-* `additional`: a `Dict` containing additional information.
+    * `isf`: `1` indicates that it is not a isf; `0` indicates that it is uncertain; `-1` indicates that it is a isf.
+* `mz2`: `Vector{Float64}`, m/z of fragments.
+* `mz_tol`: `Float64`. Tolerance of m/z deviation when contructing this object.
+* `polarity`: `Bool`; `true` for positive ion mode; `false` for negative ion mode.
+* `additional`: `Dict` containing additional information.
 """
 struct MRM <: Data
     raw::Table #id, mz1, mz2_id, area, ev, rt, alignment, isf
@@ -256,24 +275,30 @@ end
 """
     Project <: AbstractProject
 
-The type containg all information of a analysis project.
+An LC-MS analysis project.
 
-* `analytes`: a `Vector{AnalyteSP}`.
-* `data`: a `Vector{Data}`.
+* `analytes`: `Vector{AnalyteSP}`.
+* `data`: `Vector{Data}`. Each data is considered as different experiments, and they will not be compared during identification.
 * `anion`: the anion used in mobile phase (`:acetate`, `:formate`).
-* `clusters`: a `Dictionary` containg clusters of analytes.
-* `alignment`: the index of data which all other data was aligned to.
-* `appendix`: a `Dictionary` containg additional information.
+* `clusters`: `Dictionary` containg clusters of analytes.
+* `appendix`: `Dictionary` containg additional information.
+
+This type is considered as `Vector{AnalyteSP}` and it supports iteration and most functions for `Vector`.
 """
 struct Project <: AbstractProject
     analytes::Vector{AnalyteSP}
     data::Vector{Data}
     anion::Symbol
     clusters::Dictionary
-    alignment::Int
+    #alignment::Int
     appendix::Dictionary
 end
+"""
+    Project(; anion = :acetate)
 
+Create an empty `Project`.
+"""
+Project(; anion = :acetate) = Project(AnalyteSP[], Data[], anion, Dictionary{ClassSP, Vector{Int}}(), Dictionary{Symbol, Any}())
 """
     AbstractQuery
 
@@ -283,12 +308,12 @@ abstract type AbstractQuery end
 """
     Query <: AbstractQuery
 
-The type for query.
+Query object.
 
 * `project`: queried `Project`.
 * `result`: the result of query.
 * `query`: the query commands.
-* `view`: a `Bool` determining whether `result` is a view or a new vector.
+* `view`: `Bool` determining whether `result` is a view or a new vector.
 """
 mutable struct Query <: AbstractQuery
     project::Project
@@ -299,7 +324,7 @@ end
 """
     ReUseable <: AbstractQuery
 
-A type of query object which is reusable.
+Reusable query object.
 """
 struct ReUseable <: AbstractQuery
     query::Query

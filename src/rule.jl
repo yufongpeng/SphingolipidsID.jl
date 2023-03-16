@@ -1,3 +1,8 @@
+"""
+    rule(c::ClassSP, x...)
+
+Identification rules.
+"""
 rule(c::ClassSP, x...) = rule(c)
 rule(::Missing) = EmptyRule()
 rule(::Nothing) = EmptyRule()

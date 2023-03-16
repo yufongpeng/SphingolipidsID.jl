@@ -1,9 +1,15 @@
 """
-    IonPlus{T}
+    AbstractCriteria
 
-The type indicates adding all signals of in the attribute `ions`.
+Abstarct type for criteria in rules.
 """
-struct IonPlus{T}
+abstract type AbstractCriteria end
+"""
+    IonPlus{T} <: AbstractCriteria
+
+Adding all signals in the attribute `ions`.
+"""
+struct IonPlus{T} <: AbstractCriteria
     ions::T
 end
 for fn in (:IonPlus, )
@@ -11,16 +17,24 @@ for fn in (:IonPlus, )
         $fn(x...) = $fn(x)
     end
 end
-@as_record IonPlus
 """
-    IonComparison{S <: Union{Ion, IonPlus}, T <: Union{Ion, IonPlus}}
+    IonComparison{S <: Union{Ion, IonPlus}, T <: Union{Ion, IonPlus}} <: AbstractCriteria
 
-This type indicates comparing two signals by computing the ratio.
+Comparing two signals by computing the ratio.
 """
-struct IonComparison{S <: Union{Ion, IonPlus}, T <: Union{Ion, IonPlus}}
+struct IonComparison{S <: Union{Ion, IonPlus}, T <: Union{Ion, IonPlus}} <: AbstractCriteria
     ions::Tuple{S, T}
 end
 IonComparison(ion1, ion2) = IonComparison((ion1, ion2))
+"""
+    CalcOx <: AbstractCriteria
+
+Calculating the number of additional oxygen of the attribute `lcb`.
+"""
+struct CalcOx <: AbstractCriteria
+    lcb::LCB
+end
+@as_record AbstractCriteria
 """
     AbstractRule
 
@@ -30,7 +44,7 @@ abstract type AbstractRule end
 """
     Rule{T} <: AbstractRule
 
-Typical rules for identification.
+Typical rule for identification.
 
 * `criteria`: the condition to be tested
 * `rule`: next rule
@@ -48,7 +62,7 @@ struct EmptyRule <: AbstractRule end
 """
     RuleUnion <: AbstractRule
 
-This type indicates taking the union of results of the attribute `rules` as final result.
+Taking the union of the attribute `rules` as the final result.
 
 When all results are empty, the attribute `exception` will be returned.
 """
@@ -60,7 +74,7 @@ end
 """
     RuleMode <: AbstractRule
 
-This type indicates taking the mode of results of the attribute `rules` as final result.
+Taking the mode of the attribute `rules` as the final result.
 
 When all results are empty, the attribute `exception` will be returned.
 """
@@ -73,7 +87,7 @@ end
 """
     RuleSet
 
-This type is for storing identification mode and previous matched result or ongoing matching state.
+A type for storing identification mode and previous matched result or on-going matching state.
 """
 struct RuleSet
     mode::Symbol
@@ -91,7 +105,7 @@ abstract type AbstractResult{T} end
 Typical identification result.
 
 * `matched`: a `Bool`; whether there's a match or not.
-* `rule`: ongoing matching state or final identification.
+* `rule`: on-going matching state or final identification.
 """
 struct Result{T} <: AbstractResult{T}
     matched::Bool
@@ -103,8 +117,8 @@ end
 Identification result including multiple possible structures.
 
 * `matched`: a `Bool`; whether there's a match or not.
-* `rule`: ongoing matching state.
-* `result`: identification which some structures might not be specific.
+* `rule`: on-going matching state.
+* `result`: identification which the exact structure is not settled.
 """
 struct PartialResult{T, C <: Union{ChainSP, ClassSP}} <: AbstractResult{T}
     matched::Bool
@@ -112,14 +126,6 @@ struct PartialResult{T, C <: Union{ChainSP, ClassSP}} <: AbstractResult{T}
     result::C
 end
 @as_record AbstractResult
-"""
-    CalcOx
-
-A type indicates calculating the number of additional oxygen of the attribute `lcb`.
-"""
-struct CalcOx
-    lcb::LCB
-end
 """
     QueryCommands
 
@@ -129,7 +135,7 @@ abstract type QueryCommands end
 """
     QueryCmd <: QueryCommands
 
-A type for ordinary query commands.
+Ordinary query commands.
 """
 struct QueryCmd <: QueryCommands
     query
@@ -137,7 +143,7 @@ end
 """
     QueryAnd <: QueryCommands
 
-A type for taking intersection of the queries in the attribute `qcmd`. 
+Taking the intersection of attribute `qcmd`. 
 """
 struct QueryAnd <: QueryCommands
     qcmd::Vector{QueryCommands}
@@ -145,7 +151,7 @@ end
 """
     QueryOr <: QueryCommands
 
-A type for taking union of the queries in the attribute `qcmd`. 
+Taking the union of attribute `qcmd`. 
 """
 struct QueryOr <: QueryCommands
     qcmd::Vector{QueryCommands}
@@ -153,7 +159,7 @@ end
 """
     QueryNot{T} <: QueryCommands
 
-A type for taking negation of the query in the attribute `qcmd`. 
+Taking the negation of attribute `qcmd`. 
 """
 struct QueryNot{T} <: QueryCommands
     qcmd::T

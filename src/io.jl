@@ -173,8 +173,14 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     rt = sc[states_id(:rt)]
     diq = sc[states_id(:error)]
     isf = sc[states_id(:isf)]
-    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " (id$class$chain,rt$rt,signal$diq$isf):")
-    print(io, "\n∘ Score: ", analyte.scores)
+    total = sc[states_id(:total)]
+    manual = states_color(analyte.manual_check)
+    sc = map([analyte.cpdsc, analyte.score]) do sc
+        sc.first > 0 ? *(string(SPDB[:SCORE].param[sc.first].target), " => ", string(sc.second)) : ""
+    end
+    scs = join(filter!(!isempty, sc), ", ")
+    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " $(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf):")
+    print(io, "\n∘ Score: ", scs)
     print(io, "\n∘ Compounds:")
     for cpd in analyte
         print(io, "\n ", cpd)
@@ -191,7 +197,9 @@ function Base.show(io::IO, analyte::AnalyteSP)
     rt = sc[states_id(:rt)]
     diq = sc[states_id(:error)]
     isf = sc[states_id(:isf)]
-    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " (id$class$chain,rt$rt,signal$diq$isf):")
+    total = sc[states_id(:total)]
+    manual = states_color(analyte.manual_check)
+    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " $(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf):")
 end
 
 function Base.show(io::IO, data::PreIS)

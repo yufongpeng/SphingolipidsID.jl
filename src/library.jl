@@ -1,19 +1,61 @@
+
+"""
+    set_db!(key::Symbol, db = eval(key); kwargs...)
+
+Set `SPDB[key]` to `db`. If customized db is used for `:ADDUCTCODE`, keyword argument `NLH2O` must provided.
+"""
+function set_db!(key::Symbol, db = eval(key); kwargs...)
+    SPDB[key] = db
+    if key == :ADDUCTCODE
+        v = db === ADDUCTCODE ? (1:4) : begin
+            haskey(kwargs, :NLH2O) || throw(ArgumentError("Keyword argument NLH2O is required."))
+            getindex(kwargs, :NLH2O)
+        end
+        SPDB[:NLH2O] = @view SPDB[:ADDUCTCODE].object[v]
+    end
+    db
+end
+
+"""
+    read_adduct_code(file::String)
+
+Read config file for `SPDB[:ADDUCTCODE]`. The csv file should not contain header and the columns are the string representation and type of the adduct, respectively.
+"""
 function read_adduct_code(file::String)
     code = CSV.read(file, Table, header = [:repr, :object])
     Table(
         repr = code.repr,
-        object = (eval ∘ Meta.parse).(code.object)
+        object = (@p code.object map((eval ∘ Meta.parse)(_)()))
     )
 end
+"""
+    const ADDUCTCODE
 
+Default `SPDB[:ADDUCTCODE]`.
+"""
 const ADDUCTCODE = read_adduct_code(joinpath(@__DIR__, "..", "config", "ADDUCTCODE.csv"))
-
-SPDB[:ADDUCTCODE] = ADDUCTCODE
-SPDB[:NLH2O] = @view SPDB[:ADDUCTCODE].object[1:4]
+set_db!(:ADDUCTCODE)
 
 repr_adduct(x::Adduct) = SPDB[:ADDUCTCODE].repr[findfirst(==(x), SPDB[:ADDUCTCODE].object)]
 object_adduct(x::AbstractString) = SPDB[:ADDUCTCODE].object[findfirst(==(x), SPDB[:ADDUCTCODE].repr)]
 
+"""
+    read_class_db(file::String,
+                    col_name = :Abbreviation,
+                    col_regex = :regex,
+                    col_formula = [:formula, :u1, :u2],
+                    col_unit = [:nu1, :nu2],
+                    col_ions = [:default_ion, :parent_ion, :adduct_ion, :isf_ion]
+                )
+
+Read config file for `SPDB[:CLASSDB]`. The csv file should contain columns controlled by the following keyword arguments:
+* `col_name`: the abbreviation of the class.
+* `col_regex`: regular expression for mathching this class.
+* `col_formula`: the first column is the formula of the base compound; the second and third one are the difference in formula when adding one to each units. For sphingolipids, this is always "CH2" and "-H2".
+* `col_unit`: number of units(chain and double bonds) of base compound.
+* `col_ions`: ions that will be generated. The first column is the default ions for generating MRM; the second one is parent ions which a compound must contain at least one; 
+the third one is adduct ion which are all possible ions; the fourth one is isf ions generating from in-source fragmentation. Ions are represented by the index in `SPDB[:ADDUCTCODE]`.
+"""
 function read_class_db(file::String,
                         col_name = :Abbreviation,
                         col_regex = :regex,
@@ -30,9 +72,9 @@ function read_class_db(file::String,
         regex = (eval ∘ Meta.parse).(getproperty(class_db, col_regex)),
         formula = (parse_compound ∘ String).(getproperty(class_db, col_formula[1])),
         nu1 = getproperty(class_db, col_unit[1]),
-        u1 = (parse_compound ∘ String).(getproperty(class_db, col_formula[2])),
+        u1 = parse_unit.(getproperty(class_db, col_formula[2])),
         nu2 = getproperty(class_db, col_unit[2]),
-        u2 = (parse_compound ∘ String).(getproperty(class_db, col_formula[3])),
+        u2 = parse_unit.(getproperty(class_db, col_formula[3])),
         default_ion = parse_ion.(getproperty(class_db, col_ions[1])),
         parent_ion = parse_ion.(getproperty(class_db, col_ions[2])),
         adduct_ion = parse_ion.(getproperty(class_db, col_ions[3])),
@@ -40,16 +82,29 @@ function read_class_db(file::String,
     )
 end
 
+"""
+    const CLASSDB
+
+Default `SPDB[:CLASSDB]`.
+"""
 const CLASSDB = read_class_db(joinpath(@__DIR__, "..", "config", "CLASSDB.csv"))
-SPDB[:CLASSDB] = CLASSDB
+set_db!(:CLASSDB)
 
 class_db_index(spb::LCB) = SPDB[:CLASSDB][findfirst(==(spb), SPDB[:CLASSDB].Abbreviation)]
 #class_db_index(cls::T) where {T <: ClassSP} = SPDB[:CLASSDB][findfirst(==(deisomerized(cls)), SPDB[:CLASSDB].Abbreviation)]
 class_db_index(cls::T) where {T <: ClassSP} = SPDB[:CLASSDB][findfirst(==(deisomerized(T)), SPDB[:CLASSDB].Abbreviation)]
 
+"""
+    library(class, adduct, range)
+
+Create a library. 
+
+* `class`: a type of `ClassSP` or a `Vector{<: ClassSP}`.
+* `adduct`: `Adduct` or `Vector{<: Adduct}`.
+* `range`: `Tuple` or `Vector{<: Tuple}`. Each tuple contains the range of carbon chain, double bonds, and addtional elements as `String`.
+"""
 library(class::Vector, adduct::Vector{<: Adduct}, range::Vector{<: Tuple}) = library(class, map(repr_adduct, adduct), range)
 #library(class::Vector{Type{<: ClassSP}}, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple}) = library([cls() for cls in class], adduct, range)
-
 function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple})
     range = map(range) do r
         vectorize.(r)
@@ -112,7 +167,7 @@ function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector
 
         for (post, elements) in zip(sp_posts, init_elements), u2 in last(rng), u1 in first(rng)
             Δu = [u1 - init_us[1], u2 - init_us[2]]
-            newf = merge_formula(elements, unit, Δu; sign = (:+, :-))
+            newf = merge_formula(elements, unit, Δu)
             for fn in add_fn
                 tbl.Abbreviation[i] = cls
                 tbl.Species[i] = spid(cls, u1, u2, post)
@@ -127,6 +182,11 @@ end
 
 library(class, adduct, range) = library(vectorize(class), vectorize(adduct), vectorize(range))
 
+"""
+    const LIBRARY_POS
+
+Default `SPDB[:LIBRARY_POS]`.
+"""
 const LIBRARY_POS = reduce(append!, (
     library(Cer, ["[M+H]+"], [(32:46, 1:2, "O"), (32:46, 0:4, "O2"), (32:46, 0:3, "O3")]),
     library([HexCer, Hex2Cer, Hex3Cer, GM3], ["[M+H]+", "[M+H-H2O]+"], [(32:46, 0:4, "O2"), (32:46, 0:3, "O3")]),
@@ -136,10 +196,13 @@ const LIBRARY_POS = reduce(append!, (
     library(GQ1, "[M+2H]2+", (32:46, 0:4, "O2")),
     library(GP1, ["[M+2H]2+", "[M+3H]3+"], (34:2:38, 0:4, "O2")),
 ))
-SPDB[:LIBRARY_POS] = LIBRARY_POS
 
 #LIBRARY_NEG
+"""
+    const FRAGMENT_POS
 
+Default `SPDB[:FRAGMENT_POS]`.
+"""
 const FRAGMENT_POS = let
     frags = [lcb(18, 1, 1), lcb(18, 0, 2),
             lcb(16, 1, 2), lcb(17, 1, 2), lcb(18, 1, 2), lcb(18, 0, 3), lcb(19, 1, 2), lcb(20, 1, 2),
@@ -158,11 +221,13 @@ const FRAGMENT_POS = let
     [ion map(mz, ion)]
 end
 
-SPDB[:FRAGMENT_POS] = FRAGMENT_POS
-
 #FRAGMENT_NEG
 
+"""
+    const CONNECTION
 
+Default `SPDB[:CONNECTION]`.
+"""
 const CONNECTION = Dict{ClassSP, Any}(
     GP1c()                  => (GQ1c(), GQ1b()),
     GP1cα()                 => (GQ1bα(), GQ1c()),
@@ -201,23 +266,34 @@ const CONNECTION = Dict{ClassSP, Any}(
     HexCer()                => Cer()
 )
 
-SPDB[:CONNECTION] = CONNECTION
+"""
+    read_ce(file::String; col_ms = [:ms1, :ms2], col_adduct = [:adduct1, :adduct2], col_ev = :eV)
 
-function read_ce(file::String)
+Read config file for `SPDB[:CE]`. The csv file should contain columns controlled by the following keyword arguments:
+* `col_ms`: 2-element vector containing the type of ms1 and ms2, repectively.
+* `col_adduct`: 2-element vector containing the index of adducts for ms1 and ms2, repectively. `0` indicates default value.
+* `col_ev`: collision aenergy.
+"""
+function read_ce(file::String; col_ms = [:ms1, :ms2], col_adduct = [:adduct1, :adduct2], col_ev = :eV)
     ce = CSV.read(file, Table; select = 1:5)
     Table(
-        ms1 = [t() for t in (eval ∘ Meta.parse).(ce.ms1)],
-        adduct1 = [SPDB[:ADDUCTCODE].object[x] for x in ce.adduct1],
-        ms2 = ce.ms2,
-        adduct2 = map(ce.adduct2) do adduct
+        ms1 = [t() for t in (eval ∘ Meta.parse).(getproperty(ce, col_ms[1]))],
+        adduct1 = [SPDB[:ADDUCTCODE].object[x] for x in getproperty(ce, col_adduct[1])],
+        ms2 = getproperty(ce, col_ms[2]),
+        adduct2 = map(getproperty(ce, col_adduct[2])) do adduct
             @match adduct begin
                 0 => :default
                 _ => SPDB[:ADDUCTCODE].object[adduct]
             end
         end,
-        eV = ce.eV
+        eV = getproperty(ce, col_ev)
     )
 end
+"""
+    const CE
 
+Default `SPDB[:CE]`.
+"""
 const CE = read_ce(joinpath(@__DIR__, "..", "config", "CE.csv"))
-SPDB[:CE] = CE
+
+set_db!.([:LIBRARY_POS, :FRAGMENT_POS, :CONNECTION, :CE])
