@@ -1,29 +1,53 @@
-preis(anion = :acetate) = Project(AnalyteSP[], Data[], anion, Dictionary{ClassSP, Vector{Int}}(), 1, Dictionary{Symbol, Any}())
+"""
+    preis(
+            featuretable::Table,
+            mz_range::Union{Tuple{<: Number, <: Number}, Vector{<: Tuple{<: Number, <: Number}}},
+            polarity::Bool;
+            mz_tol = 0.35,
+            rt_tol = 0.1,
+            anion = :acetate,
+            data = -1,
+            additional = Dict()
+        )
+
+Create an empty `Project` and add precursor ion scan features. See `preis!` for details.
+"""
 preis(
-        featuretable,
-        mz_range,
+        featuretable::Table,
+        mz_range::Union{Tuple{<: Number, <: Number}, Vector{<: Tuple{<: Number, <: Number}}},
         polarity::Bool;
-        db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
-        db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
         mz_tol = 0.35,
         rt_tol = 0.1,
         anion = :acetate,
         data = -1,
         additional = Dict()
-    ) = preis!(Project(AnalyteSP[], Data[], anion, Dictionary{ClassSP, Vector{Int}}(), 1, Dictionary{Symbol, Any}()), deepcopy(featuretable), mz_range, polarity; db, db_product, mz_tol, rt_tol, data, additional)
+    ) = preis!(Project(anion), deepcopy(featuretable), mz_range, polarity; mz_tol, rt_tol, data, additional)
 
+"""
+    preis(
+            project::Project,
+            featuretable::Table,
+            mz_range::Union{Tuple{<: Number, <: Number}, Vector{<: Tuple{<: Number, <: Number}}},
+            polarity::Bool;
+            mz_tol = 0.35,
+            rt_tol = 0.1,
+            anion = :acetate,
+            data = -1,
+            additional = Dict()
+        )
+
+Copy the `project` and add precursor ion scan features. See `preis!` for details.
+"""
 preis(
         project::Project,
-        featuretable,
-        mz_range,
+        featuretable::Table,
+        mz_range::Union{Tuple{<: Number, <: Number}, Vector{<: Tuple{<: Number, <: Number}}},
         polarity::Bool;
-        db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
-        db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
         mz_tol = 0.35,
         rt_tol = 0.1,
         data = -1,
         additional = Dict()
-    ) = preis!(deepcopy(project), deepcopy(featuretable), mz_range, polarity; db, db_product, mz_tol, rt_tol, data, additional)
+    ) = preis!(deepcopy(project), deepcopy(featuretable), mz_range, polarity; mz_tol, rt_tol, data, additional)
 
 function preprocess_preis!(data, data_id, featuretable, mz_range, mz_tol, polarity, additional)
     mzr = vectorize(mz_range)
@@ -60,7 +84,8 @@ function new_ft(featuretable, mz2_loc)
         mz2_id = (@p eachindex(featuretable) |> map(findfirst(x -> in(_, x), mz2_loc))),
         mz2 = nothing,
         alignment = zeros(Float64, size(featuretable, 1)),
-        isf = zeros(Int, size(featuretable, 1))
+        isf = zeros(Int, size(featuretable, 1)),
+        repeat = ones(Int, size(featuretable, 1))
     )
 end
 
@@ -85,7 +110,8 @@ function push_ft!(dt, subft, mzb)
         mz2_id = repeat([lastindex(dt.mz2)], size(subft, 1)),
         mz2 = nothing,
         alignment = zeros(Float64, size(subft, 1)),
-        isf = zeros(Int, size(subft, 1))
+        isf = zeros(Int, size(subft, 1)),
+        repeat = ones(Int, size(subft, 1))
     )
     append!(dt.raw, subft)
 end
@@ -100,7 +126,8 @@ function merge_ft!(dt, subft, mzb, mz2_id)
         mz2_id = repeat([mz2_id], size(subft, 1)),
         mz2 = nothing,
         alignment = zeros(Float64, size(subft, 1)),
-        isf = zeros(Int, size(subft, 1))
+        isf = zeros(Int, size(subft, 1)),
+        repeat = ones(Int, size(subft, 1))
     )
     for ft_id in eachindex(subft)
         rt = subft.rt[ft_id]
@@ -112,8 +139,8 @@ function merge_ft!(dt, subft, mzb, mz2_id)
             origin.id[end] = last_id
         else
             # record # to recalculate
-            ft = (; subft[ft_id]..., id = origin.id[id])
-            origin[id] = (; (x => mean(v) for (x, v) in zip(propertynames(origin), zip(origin[id], ft)))...)
+            #ft = (; subft[ft_id]..., id = origin.id[id], )
+            origin[id] = merge_nt(origin[id], subft[ft_id])
         end
     end
     append!(dt.raw, origin)
@@ -168,14 +195,37 @@ function agg_cpd!(cpd, subanalytes, rt)
         end
     end
 end
+"""
+    preis!(
+            project::Project,
+            featuretable::Table,
+            mz_range::Union{Tuple{<: Number, <: Number}, Vector{<: Tuple{<: Number, <: Number}}},
+            polarity::Bool;
+            mz_tol = 0.35,
+            rt_tol = 0.1,
+            data_id = -1,
+            additional = Dict()
+        )
 
+Add precursor ion scan features.
+
+# Arguments
+* `project`: `Project`.
+* `featuretable`: `Table`.
+* `mz_range`: `Tuple{Float64, Float64}` or `Vector{Tuple{Float64, Float64}}`. The m/z range of PreIS is represented as `(low, up)`. When mutiple ranges are provided, the number should match the number of `mz2` in `featuretable`.
+* `polarity`: `Bool`; `true` for positive ion mode; `false` for negative ion mode.
+
+# Keyword Arguments
+* `mz_tol`: Tolerance of m/z deviation or maximum allowable difference in m/z.
+* `rt_tol`: Maximum allowable difference in retention time.
+* `data_id`: `0` indicates adding a new `PreIS`; `-n` indicates merging to last `n` data; `n` indicates merging to `n`th data.
+* `addtional`: `Dict` for additional information. 
+"""
 function preis!(
                     project::Project,
-                    featuretable,
-                    mz_range,
+                    featuretable::Table,
+                    mz_range::Union{Tuple{<: Number, <: Number}, Vector{<: Tuple{<: Number, <: Number}}},
                     polarity::Bool;
-                    db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG],
-                    db_product = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
                     mz_tol = 0.35,
                     rt_tol = 0.1,
                     data_id = -1,
@@ -183,6 +233,7 @@ function preis!(
                 )
 
     # check data compatibility ?
+    db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG]
     source, ft = preprocess_preis!(project.data, data_id, featuretable, mz_range, mz_tol, polarity, additional)
     dt = project.data[source]
     for analyte in project
@@ -190,7 +241,7 @@ function preis!(
     end
 
     for subft in groupview(getproperty(:mz2_id), ft)
-        products = id_product(dt.mz2[subft.mz2_id[1]], polarity; mz_tol, db = db_product)
+        products = id_product(dt.mz2[subft.mz2_id[1]], polarity; mz_tol)
         printstyled("PreIS> ", color = :green, bold = true)
         println(products)
         for ft_id in eachindex(subft)
@@ -216,7 +267,14 @@ function preis!(
     end
     project
 end
+"""
+    finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
 
+Sort, merge, split, and delete analytes after all PreIS data are added.
+
+* `rt_tol`: maximum allowable difference in retention time for two compounds to consider them as the same.
+* `err_tol`: maximum allowable error.
+"""
 function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     printstyled("PreIS> ", color = :green, bold = true)
     println("Sorting compounds")

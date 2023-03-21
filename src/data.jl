@@ -1,55 +1,108 @@
-sort_data(tbl::Table) = sort_data!(tbl)
+"""
+    sort_data(tbl::Table)
+
+Create a new `Table` and sort it by `:datafile`.
+"""
+sort_data(tbl::Table) = sort_data!(deepcopy(tbl))
+"""
+    sort_data!(tbl::Table)
+
+Sort the table by `:datafile` in place.
+"""
 function sort_data!(tbl::Table)
     sort!(tbl, :datafile)
     tbl
 end
 
-file_order(tbl::Table) = in(:datafile, propertynames(tbl)) ? unique(tbl.datafile) : throw(ArgumentError("This table doesn't contain datafile."))
-function fill_mz2!(tbl::Table, mz2::Float64)
-    fill!(tbl.mz2, mz2)
-    tbl
-end
+"""
+    file_order(tbl::Table)
 
-function fill_mz2!(tbl::Table{
-    NamedTuple{
-        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile),
-        Tuple{Int64, Float64, Float64, Float64, Float64, Float64, Int64, Float64, Float64, SubString{String}}}, 1,
-    NamedTuple{
-        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile),
-        Tuple{Vector{Int64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Int64}, Vector{Float64}, Vector{Float64}, Vector{SubString{String}}}}
-    },
-    mz2::Union{<: Vector, <: Tuple})
+Return unique `tbl.datafile` for filling CE or mz2 by the order.
+"""
+file_order(tbl::Table) = in(:datafile, propertynames(tbl)) ? unique(tbl.datafile) : throw(ArgumentError("This table doesn't contain datafile."))
+
+"""
+    fill_mz2!(tbl::Table, mz2::Union{<: Vector, <: Tuple})
+    fill_mz2!(tbl::Table, mz2::Dict)
+    fill_mz2!(tbl::Table, mz2::Float64)
+
+Fill column `mz2` with `mz2`.
+
+If the input is not a number, it requires that column `datafile` exists and uses the order or values as keys to assign mz2.
+
+When the input is a `Vector` or `Tuple`, the values should represent mz2 of each data file in the order as same as `file_order(tbl)`.
+"""
+function fill_mz2!(tbl::Table, mz2::Union{<: Vector, <: Tuple})
+    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
     mapping = Dict(unique(tbl.datafile) .=> mz2)
     tbl.mz2 .= getindex.(Ref(mapping), tbl.datafile)
     tbl
 end
 
-function fill_ce!(tbl::Table, eV::Float64)
-    fill!(tbl.collision_energy, eV)
+function fill_mz2!(tbl::Table, mz2::Dict)
+    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
+    tbl.mz2 .= getindex.(Ref(mz2), tbl.datafile)
     tbl
 end
 
-function fill_ce!(tbl::Table{
-    NamedTuple{
-        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile),
-        Tuple{Int64, Float64, Float64, Float64, Float64, Float64, Int64, Float64, Float64, SubString{String}}}, 1,
-    NamedTuple{
-        (:id, :mz1, :mz2, :rt, :height, :area, :collision_energy, :FWHM, :symmetry, :datafile),
-        Tuple{Vector{Int64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Int64}, Vector{Float64}, Vector{Float64}, Vector{SubString{String}}}}
-    },
-    eV::Union{<: Vector, <: Tuple})
-    mapping = Dict(unique(tbl.datafile) .=> eV)
+function fill_mz2!(tbl::Table, mz2::Float64)
+    fill!(tbl.mz2, mz2)
+    tbl
+end
+
+"""
+    fill_ce!(tbl::Table, ce::Union{<: Vector, <: Tuple})
+    fill_ce!(tbl::Table, ce::Dict)
+    fill_ce!(tbl::Table, ce::Float64)
+
+Fill column `ce` with `ce`.
+
+If the input is not a number, it requires that column `datafile` exists and uses the order or values as keys to assign ce.
+
+When the input is a `Vector` or `Tuple`, the values should represent ce of each data file in the order as same as `file_order(tbl)`.
+"""
+function fill_ce!(tbl::Table, ce::Union{<: Vector, <: Tuple})
+    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
+    mapping = Dict(unique(tbl.datafile) .=> ce)
     tbl.collision_energy .= getindex.(Ref(mapping), tbl.datafile)
     tbl
 end
 
-fill_mz2!(tbl, mz2) = tbl
-fill_ce!(tbl, eV) = tbl
+function fill_ce!(tbl::Table, ce::Dict)
+    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
+    tbl.collision_energy .= getindex.(Ref(ce), tbl.datafile)
+    tbl
+end
 
+function fill_ce!(tbl::Table, ce::Float64)
+    fill!(tbl.collision_energy, ce)
+    tbl
+end
+
+"""
+    rsd(v)
+
+Relative standard deviation, i.e., `std(v) / mean(v)`.
+"""
 rsd(v) = std(v) / mean(v)
+"""
+    re(v)
+
+Relative error, i.e., `(maximum(v) - minimum(v)) / 2 / mean(v)`.
+"""
 re(v) =  - foldl(-, extrema(v)) / mean(v) / 2
 default_error(v) = length(v) > 2 ? rsd(v) : re(v)
 
+"""
+    filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5)
+
+Filter out duplicated or unstable data.
+
+* `rt_tol`: maximum allowable difference in retention time for two compounds to consider them as the same.
+* `mz_tol`: maximum allowable difference in m/z for two compounds to consider them as the same.
+* `err`: error function. If the length is three or above, the default is `rsd`; otherwise, it is `re`. 
+* `err_tol`: maximum allowable error.
+"""
 function filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5)
     tbl = Table(tbl; datafile = nothing)
     sort!(tbl, [:mz2, :mz1, :rt])
@@ -79,7 +132,14 @@ function filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err =
     @p gtbl map(map(mean, columns(Table(_; id = nothing)))) Table(Table(id = unique!(tbl.id)); error = errors)
 end
 
-function compoundspvanilla(cpd, product)
+"""
+    compoundspvanilla(cpd::NamedTuple, product::Ion)
+
+Create a `CompoundSPVanilla` by a row of database(matched by mz1) and product. 
+
+If there are conflicts, it returns `nothing`.
+"""
+function compoundspvanilla(cpd::NamedTuple, product::Ion)
     cls = (cpd.Abbreviation)()
     sc = sumcomp(cpd.Species)
     adduct_class = object_adduct(cpd.Adduct)
@@ -87,12 +147,19 @@ function compoundspvanilla(cpd, product)
     isnothing(pr) && return pr
     ion2, sc = pr
     CompoundSPVanilla(cls, sc,
-        Table(ion1 = Ion[Ion(adduct_class, cls)], ion2 = ion2, source = [1], id = [1])
+        Table(ion1 = Ion[Ion(adduct_class, cls)], ion2 = Ion[ion2], source = [1], id = [1])
     )
 end
 
+"""
+    process_product(product::Ion, cls::ClassSP, sc::SumChain)
+
+Infer the structure of side chain and adjust `product` if neccessary.
+
+This function returns `(product, sidechain)` if there are no conflicts; otherwise, it returns `nothing`.
+"""
 process_product(product::Ion, cls::ClassSP, sc::SumChain) =
-    (in(product, NANA) && !hasnana(cls)) ? nothing : (Ion[product], sc)
+    (in(product, NANA) && !hasnana(cls)) ? nothing : (product, sc)
 function process_product(product::Ion{<: Adduct, <: LCB}, cls::ClassSP, sc::SumChain)
     lcb_o = nox(product.molecule)
     lcb_db = ndb(product.molecule)
@@ -122,20 +189,44 @@ function process_product(product::Ion{<: Adduct, <: LCB}, cls::ClassSP, sc::SumC
         end
     end
     lcb_new = product_new.molecule
-    Ion[product_new], DiChain(lcb_new, Acyl(ncb(sc) - ncb(lcb_new), sum_db - ndb(lcb_new), sum_o - nox(lcb_new)))
+    product_new, DiChain(lcb_new, Acyl(ncb(sc) - ncb(lcb_new), sum_db - ndb(lcb_new), sum_o - nox(lcb_new)))
 end
 
-AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64) = AnalyteSP(compounds, rt, repeat([0], 5), repeat([0.0], 5), 0)
+"""
+    id_product(ms2::Float64, polarity::Bool; mz_tol = 0.35)
 
-function id_product(ms2, polarity; db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG], mz_tol = 0.35)
+Identify possible products based on given ms2 value.
+
+Return `Vector{Ion}`.
+"""
+function id_product(ms2::Float64, polarity::Bool; mz_tol = 0.35)
     products = Ion[]
-    for row in eachrow(db)
+    for row in eachrow(SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG])
         between(ms2, row[2], mz_tol) && push!(products, row[1])
     end
     products
 end
 
+"""
+    union_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+
+Take the union of two MRM raw data and create a new `Table`. MRM data will be merged into one data if they are considered close enough.
+
+The tables should containing the following columns:
+* `compound`: `Vector{CompoundSP}`; possible compounds.
+* `mz1`: m/z of parent ion.
+* `mz2`: m/z of fragment ion.
+* `rt`: retention time.
+* `Δrt`: the difference between the maximum and minimum retention time.
+* `collision_energy`: collision energy.
+* `polarity`: `Bool`; `true` for positive ion,; `false` for negative ion.
+"""
 union_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5) = union_mrm!(deepcopy(tbl1), tbl2; mz_tol, rt_tol)
+"""
+    union_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+
+Take the union of two MRM raw data and mutate `tbl1` in place. See `union_mrm`.
+"""
 function union_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
     sort!(tbl1, [:mz1, :rt])
     for id2 in eachindex(tbl2)
@@ -166,7 +257,30 @@ function union_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
     sort!(tbl1, [:mz1, :rt])
 end
 
+"""
+    diff_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+
+Take the set difference of two MRM raw data. MRM data will be merged into one data if they are considered close enough.
+
+This function return a `NamedTuple`:
+* `extended`: data from `tbl1` that has been modified with data from `tbl2`.
+* `new`: data from `tbl1` that do not exist in `tbl2`.
+
+The tables should containing the following columns:
+* `compound`: `Vector{CompoundSP}`; possible compounds.
+* `mz1`: m/z of parent ion.
+* `mz2`: m/z of fragment ion.
+* `rt`: retention time.
+* `Δrt`: the difference between the maximum and minimum retention time.
+* `collision_energy`: collision energy.
+* `polarity`: `Bool`; `true` for positive ion,; `false` for negative ion.
+"""
 diff_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5) = diff_mrm!(deepcopy(tbl1), tbl2; mz_tol, rt_tol)
+"""
+    diff_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+
+Take the set difference of two MRM raw data and mutate `tbl1` in place. See `diff_mrm`.
+"""
 function diff_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
     sort!(tbl1, [:mz1, :rt])
     extended = Int[]
@@ -196,7 +310,7 @@ function diff_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
             pushed = true
         end
         pushed && continue
-        push!(new, id2)
+        #push!(new, id2)
         push!(tbl1, (compound = tbl2.compound[id2], mz1 = ms1, mz2 = ms2, rt = tbl2.rt[id2], Δrt = rt_tol * 2, collision_energy = ce, polarity = tbl2.polarity[id2]))
     end
     (extended = tbl1[extended], new = size(tbl1, 1) > l ? tbl1[l + 1:end] : nothing)

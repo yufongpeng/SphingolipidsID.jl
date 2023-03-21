@@ -1,7 +1,7 @@
 """
     HeadGroup
 
-Abstarct type for head groups.
+Abstract type for head groups.
 """
 abstract type HeadGroup end
 """
@@ -13,25 +13,25 @@ abstract type Sugar <: HeadGroup end
 """
     NeuAc <: Sugar
 
-The type repressenting N-acetyl neuraminic acid(nana).
+N-acetyl neuraminic acid(nana).
 """
 struct NeuAc <: Sugar end
 """
     NeuAc <: Sugar
 
-The type repressenting hexose.
+hexose.
 """
 struct Hex <: Sugar end
 """
     HexNAc <: Sugar
 
-The type repressenting N-acetyl hexosamine.
+N-acetyl hexosamine.
 """
 struct HexNAc <: Sugar end
 """
     Glycan{T} <: HeadGroup
 
-The type repressenting polysaccharides.
+Polysaccharides.
 """
 struct Glycan{T} <: HeadGroup
     chain::T
@@ -40,37 +40,37 @@ Glycan(sugar::Sugar...) = Glycan(sugar)
 """
     PhosphoCholine <: HeadGroup
 
-The type repressenting phosphocholine.
+Phosphocholine.
 """
 struct PhosphoCholine <: HeadGroup end
 """
     Adduct
 
-Abstarct type for all kinds of adducts.
+Abstract type for all kinds of adducts.
 """
 abstract type Adduct end
 """
     Pos <: Adduct
 
-Abstarct type for adducts with positive charges.
+Abstract type for adducts with positive charges.
 """
 abstract type Pos <: Adduct end
 """
     Neg <: Adduct
 
-Abstarct type for adducts with negative charges.
+Abstract type for adducts with negative charges.
 """
 abstract type Neg <: Adduct end
 """
     AbstractIon{S, T}
 
-Abstarct type for Ions.
+Abstract type for Ions.
 """
 abstract type AbstractIon{S, T} end
 """
     Ion{S <: Adduct, T <: Union{HeadGroup, ClassSP, ChainSP}} <: AbstractIon{S, T}
 
-The type repressenting an ion forming in collsional cell.
+Ion forming in the collisional cell.
 """
 struct Ion{S <: Adduct, T <: Union{HeadGroup, ClassSP, ChainSP}} <: AbstractIon{S, T}
     adduct::S
@@ -79,7 +79,7 @@ end
 """
     ISF{S <: Adduct, T <: ClassSP} <: AbstractIon{S, T}
 
-The type repressenting an ion forming in ion source(in-source fragmentation).
+Ion forming in the ion source(in-source fragmentation).
 """
 struct ISF{S <: Adduct, T <: ClassSP} <: AbstractIon{S, T}
     adduct::S

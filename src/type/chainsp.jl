@@ -7,33 +7,33 @@ abstract type ChainSP end
 """
     LCB <: ChainSP
 
-Abstract type for long chain bases.
+Abstract type for long-chain bases.
 """
 abstract type LCB <: ChainSP end
 """
     LCB4 <: LCB
 
-Abstract type for long chain bases with number of double bonds and additional oxygen adding up to 4.
+Abstract type for long-chain bases with double bonds and additional oxygen adding up to four.
 """
 abstract type LCB4 <: LCB end
 """
     LCB3 <: LCB
 
-Abstract type for long chain bases with number of double bonds and additional oxygen adding up to 3.
+Abstract type for long-chain bases with double bonds and additional oxygen adding up to three.
 """
 abstract type LCB3 <: LCB end
 """
     LCB2 <: LCB
 
-Abstract type for long chain bases with number of double bonds and additional oxygen adding up to 2.
+Abstract type for long-chain bases with double bonds and additional oxygen adding up to two.
 """
 abstract type LCB2 <: LCB end
 """
     SPB4 <: LCB4
 
-The type repressenting sphingosine or sphinganine with number of double bonds and additional oxygen adding up to 4.
+Sphingosine or sphinganine with double bonds and additional oxygen adding up to four.
 
-When the number of addtional oxygen is 3 and above, it's assumed that the long chain base is a phytospingosine.
+When the additional oxygen is three and above, it's assumed that the long-chain base is a phytosphingosine.
 """
 struct SPB4 <: LCB4
     carbon::Int
@@ -42,9 +42,9 @@ end
 """
     NotPhyto4 <: LCB4
 
-The type repressenting sphingosine or sphinganine with number of double bonds and additional oxygen adding up to 4.
+Sphingosine or sphinganine with double bonds and additional oxygen adding up to four.
 
-When the number of addtional oxygen is 3 and above, it's assumed that the long chain base is not a phytospingosine.
+When the additional oxygen is three and above, it's assumed that the long-chain base is not a phytosphingosine.
 """
 struct NotPhyto4 <: LCB4
     carbon::Int
@@ -53,9 +53,9 @@ end
 """
     SPB3 <: LCB3
 
-The type repressenting sphingosine or sphinganine with number of double bonds and additional oxygen adding up to 3.
+Sphingosine or sphinganine with double bonds and additional oxygen adding up to three.
 
-When the number of addtional oxygen is 3 and above, it's assumed that the long chain base is a phytospingosine.
+When the additional oxygen is three and above, it's assumed that the long-chain base is a phytosphingosine.
 """
 struct SPB3 <: LCB3
     carbon::Int
@@ -64,9 +64,9 @@ end
 """
     NotPhyto3 <: LCB3
 
-The type repressenting sphingosine or sphinganine with number of double bonds and additional oxygen adding up to 3.
+Sphingosine or sphinganine with double bonds and additional oxygen adding up to three.
 
-When the number of addtional oxygen is 3 and above, it's assumed that the long chain base is not a phytospingosine.
+When the additional oxygen is three and above, it's assumed that the long-chain base is not a phytosphingosine.
 """
 struct NotPhyto3 <: LCB3
     carbon::Int
@@ -75,7 +75,7 @@ end
 """
     SPB2 <: LCB2
 
-The type repressenting sphingosine or sphinganine with number of double bonds and additional oxygen adding up to 2.
+Sphingosine or sphinganine with double bonds and additional oxygen adding up to two.
 """
 struct SPB2 <: LCB2
     carbon::Int
@@ -91,7 +91,7 @@ abstract type ACYL <: ChainSP end
 """
     Acyl <: ACYL
 
-The type repressenting N-acyl chain with additional oxygen at unknown position or no additional oxygen.
+N-acyl chain with additional oxygen at an unknown position or no additional oxygen.
 """
 struct Acyl <: ACYL
     carbon::Int
@@ -101,7 +101,7 @@ end
 """
     Acylα <: ACYL
 
-The type repressenting N-acyl chain with additional oxygen at α position.
+N-acyl chain with additional oxygen at the α position.
 """
 struct Acylα <: ACYL
     carbon::Int
@@ -111,7 +111,7 @@ end
 """
     Acylβ <: ACYL
 
-The type repressenting N-acyl chain with additional oxygen at β position.
+N-acyl chain with additional oxygen at the β position.
 """
 struct Acylβ <: ACYL
     carbon::Int
@@ -121,7 +121,7 @@ end
 """
     SumChain <: ChainSP
 
-The type repressenting chains with only species-level information(sum composition).
+Side chain with only species-level information(sum composition).
 """
 struct SumChain <: ChainSP
     carbon::Int
@@ -131,7 +131,7 @@ end
 """
     DiChain{S <: LCB, T <: ACYL} <: ChainSP
 
-The type repressenting two side chains, one long chain base and one N-acyl chain.
+Two known side chains, one long-chain base, and one N-acyl chain.
 """
 struct DiChain{S <: LCB, T <: ACYL} <: ChainSP
     lcb::S

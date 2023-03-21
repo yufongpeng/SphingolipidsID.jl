@@ -164,14 +164,13 @@ union(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(copy_wo_project(analyte
 union(analyte1::AnalyteSP, cpds::Vector{CompoundSP}) = union!(copy_wo_project(analyte1), cpds)
 union!(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(analyte1, analyte2.compounds, analyte2.states)
 
-function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 0, 0, 0])
+function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 0, 0, 0, 0])
     for cpd2 in cpds
         id = findfirst(cpd1 -> iscompatible(cpd1, cpd2), analyte1)
         isnothing(id) ? push!(analyte1, cpd2) : union!(analyte1[id], cpd2)
     end
     sort!(analyte1, lt = isless_class)
     analyte1.states = min.(analyte1.states, states2)
-    analyte1.scores .= 0
     analyte1
 end
 
@@ -180,6 +179,7 @@ getproperty(reuseable::ReUseable, sym::Symbol) = sym ≡ :query ? getfield(reuse
 convert(::Type{CompoundSPVanilla}, cpd::CompoundSP) = CompoundSPVanilla(cpd.class, cpd.chain, cpd.fragments)
 convert(::Type{CompoundSP}, cpd::CompoundSPVanilla) = CompoundSP(cpd.class, cpd.chain, cpd.fragments)
 convert(::Type{SPID}, cpd::SPID) = cpd
+
 # variant of interface
 # iscomponent: whether ion is a component of cpd
 iscomponent(ion::Ion{<: Adduct, <: ClassSP}, cpd::CompoundID) = iscompatible(ion.molecule, cpd.class)
@@ -245,42 +245,10 @@ iscompatible(sc1::ACYL, sc2::ACYL) = sc1 ≡ sc2
 iscompatible(sc1::Acyl, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(sc1::Acyl, sc2::ACYL) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(sc1::ACYL, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
-
 iscompatible(ion::Ion, cpd::CompoundID) = iscomponent(ion, cpd)
-#=
-isclasscompatible(cls1::ClassSP, cls2::ClassSP) = cls1 ≡ cls2 || begin
-    class1 = hasisomer(cls1) ? cls1.isomer : (cls1, )
-    class2 = hasisomer(cls2) ? cls2.isomer : (cls2, )
-    any(cls1 ≡ cls2 for (cls1, cls2) in Iterators.product(class1, class2))
-end
 
-ischaincompatible(cpd1::CompoundID, cpd2::CompoundID) =
-    cpd1.sum ≡ cpd2.sum && ischaincompatible(cpd1.chain, cpd2.chain)
-
-ischaincompatible(chain1::Nothing, chain2::Chain) = true
-ischaincompatible(chain1::Chain, chain2::Nothing) = true
-ischaincompatible(chain1::Nothing, chain2::Nothing) = true
-
-ischaincompatible(chain1::Chain, chain2::Chain) = ischaincompatible(chain1.lcb, chain2.lcb) && ischaincompatible(chain1.acyl, chain2.acyl)
-ischaincompatible(lcb1::LCB, lcb2::LCB) =
-    @match (lcb1, lcb2) begin
-        ::Tuple{<: LCB2{N1, C}, <: LCB2{N2, C}} where {C, N1, N2}   => true
-        ::Tuple{<: LCB3{N1, C}, <: LCB3{N2, C}} where {C, N1, N2}   => true
-        ::Tuple{<: LCB4{N1, C}, <: LCB4{N2, C}} where {C, N1, N2}   => true
-        _                                                           => false
-    end
-
-ischaincompatible(acyl1::ACYL, acyl2::ACYL) =
-    @match (acyl1, acyl2) begin
-        ::Tuple{<: Acyl{N}, <: ACYL{N}} where N => true
-        ::Tuple{<: ACYL{N}, <: Acyl{N}} where N => true
-        _                                       => acyl1 ≡ acyl2
-    end
-
-ischainequal(chain1::Chain, chain2::Chain) = !isnothing(chain1) && !isnothing(chain2) && sumcomp(chain1.lcb) ≡ sumcomp(chain2.lcb)
-=#
 copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
-copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), deepcopy(analyte.scores), analyte.manual_check)
+copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), analyte.cpdsc, analyte.score, analyte.manual_check)
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
 reuse_copy(aquery::Query) = Query(aquery.project, reuse_copy(aquery.result), deepcopy(aquery.query), true)
 reuse_copy(v::Vector) = copy(v)
@@ -295,6 +263,23 @@ equivalent(ion1::Ion{<: Pos, <: LCB}, ion2::Ion{<: Pos, <: LCB}) =
 equivalent(ion1::AbstractIon{S}, ion2::AbstractIon{S}) where {S <: Adduct} = iscompatible(ion1.molecule, ion2.molecule)
 equivalent(ion1::AbstractIon, ion2::AbstractIon) = false
 
+function equivalent_in_ion2(cpd::AbstractCompoundSP, criteria, prec)
+    eqin = x -> equivalent_in(x.ion1, prec)
+    equivalent_in(criteria, filterview(eqin, cpd.fragments).ion2)
+end
+
+function equivalent_in_ion2(cpd::AbstractCompoundSP, criteria::Tuple, prec)
+    eqin = x -> equivalent_in(x.ion1, prec)
+    any(equivalent_in(frag, criteria) for frag in filterview(eqin, cpd.fragments).ion2)
+end
+
+equivalent_in_ion2(analyte::AnalyteSP, criteria, prec) = any(equivalent_in_ion2(cpd, criteria, prec) for cpd in analyte)
+
+equivalent_in_ion1(cpd::AbstractCompoundSP, criteria) = equivalent_in(criteria, cpd.fragments.ion1)
+equivalent_in_ion1(cpd::AbstractCompoundSP, criteria::Tuple) = any(equivalent_in(frag, criteria) for frag in cpd.fragments.ion1)
+equivalent_in_ion1(analyte::AnalyteSP, criteria) = any(equivalent_in_ion1(cpd, criteria) for cpd in analyte)
+
+# order
 isless_class(cpd1::CompoundID) = true
 isless_class(cpd1::CompoundID, cpd2::CompoundID) =
     any(connected(cls2, cls1) for (cls1, cls2) in Iterators.product(isomer_tuple(cpd1.class), isomer_tuple(cpd2.class)))
