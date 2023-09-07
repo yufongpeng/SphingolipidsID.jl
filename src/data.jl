@@ -101,7 +101,7 @@ Filter out duplicated or unstable data.
 * `rt_tol`: maximum allowable difference in retention time for two compounds to consider them as the same.
 * `mz_tol`: maximum allowable difference in m/z for two compounds to consider them as the same.
 * `err`: error function. If the length is three or above, the default is `rsd`; otherwise, it is `re`. 
-* `err_tol`: maximum allowable error.
+* `err_tol`: maximum allowable signal error.
 """
 function filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5)
     tbl = Table(tbl; datafile = nothing)
@@ -208,9 +208,9 @@ function id_product(ms2::Float64, polarity::Bool; mz_tol = 0.35)
 end
 
 """
-    union_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+    union_transition(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
 
-Take the union of two MRM raw data and create a new `Table`. MRM data will be merged into one data if they are considered close enough.
+Take the union of two MRM transition tables and create a new `Table`. MRM data will be merged into one data if they are considered close enough.
 
 The tables should containing the following columns:
 * `compound`: `Vector{CompoundSP}`; possible compounds.
@@ -221,46 +221,43 @@ The tables should containing the following columns:
 * `collision_energy`: collision energy.
 * `polarity`: `Bool`; `true` for positive ion,; `false` for negative ion.
 """
-union_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5) = union_mrm!(deepcopy(tbl1), tbl2; mz_tol, rt_tol)
+union_transition(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5) = union_transition!(deepcopy(tbl1), tbl2; mz_tol, rt_tol)
 """
-    union_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+    union_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
 
-Take the union of two MRM raw data and mutate `tbl1` in place. See `union_mrm`.
+Take the union of two MRM transition tables and mutate `tbl1` in place. See `union_transition`.
 """
-function union_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+function union_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
     sort!(tbl1, [:mz1, :rt])
-    for id2 in eachindex(tbl2)
+    for data2 in tbl2
         pushed = false
-        ms1 = tbl2.mz1[id2]
-        ms2 = tbl2.mz2[id2]
-        ce = tbl2.collision_energy[id2]
-        for id1 in eachindex(tbl1)
-            (!between(tbl1.mz1[id1], ms1, mz_tol) || !between(tbl1.mz2[id1], ms2, mz_tol)) && continue
-            tbl1.collision_energy[id1] == ce || continue
-            rt_l = min(tbl1.rt[id1] - tbl1.Δrt[id1] / 2, tbl2.rt[id2] - tbl2.Δrt[id2] / 2)
-            rt_r = max(tbl1.rt[id1] + tbl1.Δrt[id1] / 2, tbl2.rt[id2] + tbl2.Δrt[id2] / 2)
-            n = length(vectorize(tbl1.compound[id1]))
+        for (id1, data1) in enumerate(tbl1)
+            (!between(data1.mz1, data2.mz1, mz_tol) || !between(data1.mz2, data2.mz2, mz_tol)) && continue
+            data1.collision_energy == data2.collision_energy || continue
+            rt_l = min(data1.rt - data1.Δrt / 2, data2.rt - data2.Δrt / 2)
+            rt_r = max(data1.rt + data1.Δrt / 2, data2.rt + data2.Δrt / 2)
+            n = length(vectorize(data1.compound))
             tbl1[id1] = (;
-                compound = vectorize(tbl1.compound[id1]),
-                mz1 = (tbl1.mz1[id1] * n + ms1) / (n + 1),
-                mz2 = (tbl1.mz2[id1] * n + ms2) / (n + 1),
+                compound = vectorize(data1.compound),
+                mz1 = (data1.mz1 * n + data2.mz1) / (n + 1),
+                mz2 = (data1.mz2 * n + data2.mz2) / (n + 1),
                 rt = (rt_l + rt_r) / 2,
                 Δrt = rt_r - rt_l,
-                collision_energy = tbl1.collision_energy[id1],
-                polarity = tbl1.polarity[id1]
+                collision_energy = data1.collision_energy,
+                polarity = data1.polarity
             )
-            union!(tbl1.compound[id1], vectorize(tbl2.compound[id2]))
+            union!(data1.compound, vectorize(data2.compound))
             pushed = true
         end
-        pushed || push!(tbl1, (compound = tbl2.compound[id2], mz1 = ms1, mz2 = ms2, rt = tbl2.rt[id2], Δrt = rt_tol * 2, collision_energy = ce, polarity = tbl2.polarity[id2]))
+        pushed || push!(tbl1, (compound = data2.compound, mz1 = data2.mz1, mz2 = data2.mz2, rt = data2.rt, Δrt = rt_tol * 2, collision_energy = data2.collision_energy, polarity = data2.polarity))
     end
     sort!(tbl1, [:mz1, :rt])
 end
 
 """
-    diff_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+    diff_transition(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
 
-Take the set difference of two MRM raw data. MRM data will be merged into one data if they are considered close enough.
+Take the set difference of two MRM transition tables. MRM data will be merged into one data if they are considered close enough.
 
 This function return a `NamedTuple`:
 * `extended`: data from `tbl1` that has been modified with data from `tbl2`.
@@ -275,43 +272,40 @@ The tables should containing the following columns:
 * `collision_energy`: collision energy.
 * `polarity`: `Bool`; `true` for positive ion,; `false` for negative ion.
 """
-diff_mrm(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5) = diff_mrm!(deepcopy(tbl1), tbl2; mz_tol, rt_tol)
+diff_transition(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5) = diff_transition!(deepcopy(tbl1), tbl2; mz_tol, rt_tol)
 """
-    diff_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+    diff_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
 
-Take the set difference of two MRM raw data and mutate `tbl1` in place. See `diff_mrm`.
+Take the set difference of two MRM transition tables and mutate `tbl1` in place. See `diff_transition`.
 """
-function diff_mrm!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
+function diff_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
     sort!(tbl1, [:mz1, :rt])
     extended = Int[]
     l = size(tbl1, 1)
-    for id2 in eachindex(tbl2)
+    for data2 in tbl2
         pushed = false
-        ms1 = tbl2.mz1[id2]
-        ms2 = tbl2.mz2[id2]
-        ce = tbl2.collision_energy[id2]
-        for id1 in eachindex(tbl1)
-            (!between(tbl1.mz1[id1], ms1, mz_tol) || !between(tbl1.mz2[id1], ms2, mz_tol)) && continue
-            tbl1.collision_energy[id1] == ce || continue
-            rt_l = min(tbl1.rt[id1] - tbl1.Δrt[id1] / 2, tbl2.rt[id2] - tbl2.Δrt[id2] / 2)
-            rt_r = max(tbl1.rt[id1] + tbl1.Δrt[id1] / 2, tbl2.rt[id2] + tbl2.Δrt[id2] / 2)
-            n = length(vectorize(tbl1.compound[id1]))
-            isempty(setdiff(vectorize(tbl2.compound[id2]), vectorize(tbl1.compound[id1]))) || push!(extended, id1)
+        for (id1, data1) in enumerate(tbl1)
+            (!between(data1.mz1, data2.mz1, mz_tol) || !between(data1.mz2, data2.mz2, mz_tol)) && continue
+            data1.collision_energy == data2.collision_energy || continue
+            rt_l = min(data1.rt - data1.Δrt / 2, data2.rt - data2.Δrt / 2)
+            rt_r = max(data1.rt + data1.Δrt / 2, data2.rt + data2.Δrt / 2)
+            n = length(vectorize(data1.compound))
+            isempty(setdiff(vectorize(data2.compound), vectorize(data1.compound))) || push!(extended, id1)
             tbl1[id1] = (;
-                compound = vectorize(tbl1.compound[id1]),
-                mz1 = (tbl1.mz1[id1] * n + ms1) / (n + 1),
-                mz2 = (tbl1.mz2[id1] * n + ms2) / (n + 1),
+                compound = vectorize(data1.compound),
+                mz1 = (data1.mz1 * n + data2.mz1) / (n + 1),
+                mz2 = (data1.mz2 * n + data2.mz2) / (n + 1),
                 rt = (rt_l + rt_r) / 2,
                 Δrt = rt_r - rt_l,
-                collision_energy = tbl1.collision_energy[id1],
-                polarity = tbl1.polarity[id1]
+                collision_energy = data1.collision_energy,
+                polarity = data1.polarity
             )
-            union!(tbl1.compound[id1], vectorize(tbl2.compound[id2]))
+            union!(data1.compound, vectorize(data2.compound))
             pushed = true
         end
         pushed && continue
         #push!(new, id2)
-        push!(tbl1, (compound = tbl2.compound[id2], mz1 = ms1, mz2 = ms2, rt = tbl2.rt[id2], Δrt = rt_tol * 2, collision_energy = ce, polarity = tbl2.polarity[id2]))
+        push!(tbl1, (compound = data2.compound, mz1 = data2.mz1, mz2 = data2.mz2, rt = data2.rt, Δrt = rt_tol * 2, collision_energy = data2.collision_energy, polarity = data2.polarity))
     end
     (extended = tbl1[extended], new = size(tbl1, 1) > l ? tbl1[l + 1:end] : nothing)
 end

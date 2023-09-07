@@ -38,7 +38,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # Create library/rule
         library, rule,
         # Data inputs
-        featuretable_mzmine, sort_data!, sort_data, file_order, fill_mz2!, fill_ce!, featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
+        read_featuretable, read_featuretable_mzmine3, sort_data!, sort_data, file_order, fill_mz2!, fill_ce!, read_featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
         # PreIS
         preis, preis!, finish_profile!,
         # ID
@@ -46,8 +46,8 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # Score
         nfrags, @cpdsc, @score, calc_score, apply_score!, calc_threshold, apply_threshold!, w_rank, w_nfrags, w_rank_log, w_rank_exp, 
         normalized_sig_diff, abs_sig_diff,
-        # Data output: MRM
-        mrmtable, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm,
+        # Transition
+        transitiontable, concurrent_transition, write_transition, read_transition, union_transition!, union_transition, diff_transition!, diff_transition,
         # Utils/Query
         q!, qand, qor, qnot, spid, lcb, acyl, acylα, acylβ, reuse,
         new_project, mw, mz, class, chain, sumcomp, rt,
@@ -57,7 +57,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         expand_clusters!, update_clusters!, replace_clusters!,
         show_clusters, apply_clusters!,
         # Plots
-        plot_rt_mw, plotlyjs, gr
+        plot_rt_mw, plotlyjs, gr, histogram_transition
 
 import Base: show, print, isless, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!,
             union, union!, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy, convert
@@ -344,7 +344,7 @@ include("plots.jl")
 include("ruleID.jl")
 include("score.jl")
 include("query.jl")
-include("mrmtable.jl")
+include("transition.jl")
 
 # S: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-237.2224
 # DHS: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-239.2224

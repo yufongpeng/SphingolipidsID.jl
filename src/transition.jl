@@ -1,14 +1,15 @@
 """
-    mrmtable(project::Project, adduct, product, polarity::Bool; kwargs...)
-    mrmtable(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...)
-    mrmtable(adduct, product, polarity::Bool, pq::Union{Project, AbstractQuery}; kwargs...)
-    mrmtable(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool;
-            mz_tol = 0.35, rt_tol = 0.5,
-            db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
-            anion = :acetate,
-            default = mz(Ion(ProtonationNL2H2O(), SPB3(18, 1))))
+    transitiontable(project::Project, adduct, product, polarity::Bool; kwargs...)
+    transitiontable(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...)
+    transitiontable(adduct, product, polarity::Bool, pq::Union{Project, AbstractQuery}; kwargs...)
+    transitiontable(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool;
+                    mz_tol = 0.35, rt_tol = 0.5,
+                    db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
+                    anion = :acetate,
+                    default = mz(Ion(ProtonationNL2H2O(), SPB3(18, 1)))
+                    )
 
-Create a table of MRM transition.
+Create a table of MRM transitions.
 
 # Arguuments
 * `analytes`: analytes to be included.
@@ -22,13 +23,14 @@ Create a table of MRM transition.
 * `default`: default m/z value.
 """
 mrmtable(project::Project, adduct, product, polarity::Bool; kwargs...) = mrmtable(project.analytes, adduct, product, polarity; kwargs..., anion = project.anion)
-mrmtable(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...) = mrmtable(aquery.result, adduct, product, polarity; kwargs..., anion = aquery.project.anion)
-mrmtable(adduct, product, polarity::Bool, pq::Union{Project, AbstractQuery}; kwargs...) = mrmtable(pq, adduct, product, polarity; kwargs...)
+transitiontable(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...) = transitiontable(aquery.result, adduct, product, polarity; kwargs..., anion = aquery.project.anion)
+transitiontable(adduct, product, polarity::Bool, pq::Union{Project, AbstractQuery}; kwargs...) = transitiontable(pq, adduct, product, polarity; kwargs...)
 
-function mrmtable(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool;
-                    mz_tol = 0.35, rt_tol = 0.5,
-                    anion = :acetate,
-                    default = mz(Ion(ProtonationNL2H2O(), SPB3(18, 1))))
+function transitiontable(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool;
+                        mz_tol = 0.35, rt_tol = 0.5,
+                        anion = :acetate,
+                        default = mz(Ion(ProtonationNL2H2O(), SPB3(18, 1)))
+                        )
     adduct = proc_adduct(vectorize(adduct))
     cpd_list = isempty(adduct) ? cpdlist(analytes, polarity, anion) :
         cpdlist(analytes, filter_adduct(adduct, polarity, anion), anion)

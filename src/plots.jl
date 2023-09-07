@@ -35,7 +35,7 @@ function plot_rt_mw(project::Project;
                     ylabel = "Molecular weight",
                     title = "Analytes",
                     kwargs...)
-    ≡(clusters, :possible) && return map(unique(map(deisomerized ∘ class, analytes))) do cls
+    ≡(clusters, :possible) && return map(keys(project.appendix[:clusters_possible])) do cls
         plot_rt_mw(project, cls; all, xlabel, ylabel, deepcopy(kwargs)...)
     end
     gana = isnothing(groupby) ? Dictionary([:Analytes], [analytes]) : groupview(groupby, analytes)
@@ -94,3 +94,39 @@ end
 get_attributes!(x::Base.Pairs) = @p keys(x) map(_ => get_attributes!(getproperty(values(x), _))) filter(!isnothing(_[2]))
 get_attributes!(v::Vector) = isempty(v) ? nothing : popfirst!(v)
 get_attributes!(v) = v
+
+"""
+histogram_transition(tbl::Table; 
+                        end_time = nothing,                     
+                        xlabel = "Retention Time (min)",
+                        ylabel = "Counts",
+                        title = "Transitions", 
+                        color = :steelblue, 
+                        label = nothing,
+                        linecolor = :steelblue,
+                        kwargs...
+                    )
+
+Plot histogram of transitions. The input `tbl` can be a transition table or table from `concurrent_transition`.
+
+# Keyword Arguments
+* `end_time` is the end of aquisition.
+* Any other keyword arguments for plot.
+"""
+function histogram_transition(tbl::Table; 
+                                end_time = nothing,                     
+                                xlabel = "Retention Time (min)",
+                                ylabel = "Counts",
+                                title = "Transitions", 
+                                color = :steelblue, 
+                                label = nothing,
+                                linecolor = :steelblue,
+                                kwargs...
+                            )
+    if !in(:count, propertynames(tbl)) 
+        tbl = isnothing(end_time) ? concurrent_transition(tbl) : concurrent_transition(tbl; end_time)
+    end
+    x = (tbl.rt[1:end - 1] .+ tbl.rt[2:end]) ./ 2
+    w = tbl.rt[2:end] .- tbl.rt[1:end - 1]
+    bar(x, tbl.count[1:end - 1]; xlabel, ylabel, title, color, label, linecolor, bar_width = w, kwargs...)
+end

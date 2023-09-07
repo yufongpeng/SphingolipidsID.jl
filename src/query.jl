@@ -67,9 +67,9 @@ function q!(aquery::Query, qc::Pair; view = aquery.view, neg = false, kwargs...)
     end
     qf = @match qc.first begin
         :rt => analyte -> between(analyte.rt, qc.second)
-        :mw => analyte -> between(mw(last(analyte)), qc.second)
+        :mw => analyte -> between(mw(last(analyte)), isa(qc.second, Tuple) ? qc.second : (qc.second, qc.second + 1))
         :mz => analyte -> any(between(query_raw(aquery.project, frag.source, frag.id).mz1,
-                                                qc.second) for frag in last(analyte).fragments)
+                                        isa(qc.second, Tuple) ? qc.second : (qc.second, qc.second + 1)) for frag in last(analyte).fragments)
     end
     finish_query!(aquery, qcmd(qc, neg), qf; view)
 end
@@ -273,5 +273,3 @@ function set_raw_if!(project::Project, source::Int, id::Int, col, val, crit)
     crit(getproperty(project.data[source].raw, col)[i]) || return
     getproperty(project.data[source].raw, col)[i] = val
 end
-
-# filter/comparator

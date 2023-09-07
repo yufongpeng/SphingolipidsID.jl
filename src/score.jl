@@ -36,7 +36,7 @@ macro cpdsc(targetconvert, weight, objective)
         transform_score(dict) = $objective
         push!(SPDB[:SCORE].param, $parameters)
         i = lastindex(SPDB[:SCORE].param)
-        function score_fn!(analyte::AnalyteSP, mutate::Bool)
+        fn = (analyte::AnalyteSP, mutate::Bool) -> begin
             dict = Dict{Int, Float64}()
             for cpd in analyte
                 uw = $converter(cpd.states)
@@ -45,8 +45,8 @@ macro cpdsc(targetconvert, weight, objective)
             result = i => transform_score(dict)
             mutate ? (analyte.cpdsc = result) : result
         end
-        push!(SPDB[:SCORE].fn, score_fn!)
-        score_fn!
+        push!(SPDB[:SCORE].fn, fn)
+        SPDB[:SCORE].fn[i]
     end
 end
 

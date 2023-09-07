@@ -1,12 +1,58 @@
-function featuretable_mzmine(path)
+"""
+    read_featuretable(path, type = :mzmine3; kwargs...)
+
+Read feature data. 
+
+# Arguments
+* `path`: csv file path.
+* `type`: the type of csv file. `:mzmine3` for data from MZMINE3; `:masshunter_mrm` or `:mh_mrm` for MRM feature data from MassHunter. 
+
+# Keyword Arguments
+* `silencewarnings`: whether invalid value warnings should be silenced.
+* `maxwarnings`: if more than `maxwarnings` number of warnings are printed while parsing, further warnings will be
+silenced by default; for multithreaded parsing, each parsing task will print up to `maxwarnings`.
+* `debug`: passing `true` will result in many informational prints while a dataset is parsed; can be useful when
+reporting issues or figuring out what is going on internally while a dataset is parsed.
+"""
+function read_featuretable(path, type = :mzmine3; kwargs...)
+    if type == :mzmine3
+        read_featuretable_mzmine3(path; kwargs...)
+    elseif type == :masshunter_mrm || type == :mh_mrm
+        read_featuretable_masshunter_mrm(path; kwargs...)
+    else
+        nothing
+    end
+end 
+
+"""
+    read_featuretable_mzmine3(path;
+                                silencewarnings::Bool = false,
+                                maxwarnings::Int = 10, 
+                                debug::Bool = false
+                            )
+
+Read feature data from MZMINE3.
+
+# Keyword Arguments
+* `silencewarnings`: whether invalid value warnings should be silenced.
+* `maxwarnings`: if more than `maxwarnings` number of warnings are printed while parsing, further warnings will be
+silenced by default; for multithreaded parsing, each parsing task will print up to `maxwarnings`.
+* `debug`: passing `true` will result in many informational prints while a dataset is parsed; can be useful when
+reporting issues or figuring out what is going on internally while a dataset is parsed.
+"""
+function read_featuretable_mzmine3(path;
+                                silencewarnings::Bool = false,
+                                maxwarnings::Int = 10, 
+                                debug::Bool = false
+                            )
     head = split(readline(path), ",")
     idmain = findall(x -> any(==(x, text) for text in ["id", "rt", "mz", "height", "area"]), head)
     idfwhm = findall(x-> endswith(x, "fwhm"), head)
     idsym = findall(x-> endswith(x, "asymmetry_factor"), head)
-    tbl = CSV.read(path, Table; select = idmain)
+    tbl = CSV.read(path, Table; select = idmain, silencewarnings, maxwarnings, debug)
     n = size(tbl, 1)
-    fwhm = CSV.read(path, Table; select = idfwhm)
-    sym = CSV.read(path, Table; select = idsym)
+    fwhm = CSV.read(path, Table; select = idfwhm, silencewarnings, maxwarnings, debug)
+    sym = CSV.read(path, Table; select = idsym, silencewarnings, maxwarnings, debug)
     datafile = Dict(propertynames(fwhm) .=> map(col -> match(r".*:(.*):.*", string(col))[1], propertynames(fwhm)))
     id = findfirst.(!ismissing, fwhm)
     tbl = Table(
@@ -24,7 +70,27 @@ function featuretable_mzmine(path)
     tbl
 end
 
-function featuretable_masshunter_mrm(path)
+"""
+    read_featuretable_masshunter_mrm(path;
+                                        silencewarnings::Bool = false,
+                                        maxwarnings::Int = 10, 
+                                        debug::Bool = false
+                                    )
+
+Read MRM feature data from MassHunter.
+
+# Keyword Arguments
+* `silencewarnings`: whether invalid value warnings should be silenced.
+* `maxwarnings`: if more than `maxwarnings` number of warnings are printed while parsing, further warnings will be
+silenced by default; for multithreaded parsing, each parsing task will print up to `maxwarnings`.
+* `debug`: passing `true` will result in many informational prints while a dataset is parsed; can be useful when
+reporting issues or figuring out what is going on internally while a dataset is parsed.
+"""
+function read_featuretable_masshunter_mrm(path;
+                                        silencewarnings::Bool = false,
+                                        maxwarnings::Int = 10, 
+                                        debug::Bool = false
+                                    )
     strs = readlines(path)
     starts = Int[]
     data = Table(ms1 = Float64[], ms2 = Float64[], eV = Int[])
@@ -53,7 +119,7 @@ function featuretable_masshunter_mrm(path)
     end
     rep = ends .- starts
     txt = ["RT", "Height", "Area", "Symmetry", "FWHM"]
-    tbl = CSV.read(str, Table; select = (i, name) -> any(==(text, String(name)) for text in txt))
+    tbl = CSV.read(str, Table; select = (i, name) -> any(==(text, String(name)) for text in txt), silencewarnings, maxwarnings, debug)
     n = size(tbl, 1)
     Table(
         id = zeros(Int, n),
@@ -68,8 +134,32 @@ function featuretable_masshunter_mrm(path)
     )
 end
 
-function read_mrm(path::String; vendor = :agilent)
-    tbl = CSV.read(path, Table)
+"""
+    read_transition(path::String, vendor = :agilent;
+                        silencewarnings::Bool = false,
+                        maxwarnings::Int = 10, 
+                        debug::Bool = false
+                    )
+                    
+Read MRM transition table.
+
+# Arguments
+* `path`: csv file path.
+* `vendor`: the vendor of data source. `:agilent` for data from Agilent. 
+
+# Keyword Arguments
+* `silencewarnings`: whether invalid value warnings should be silenced.
+* `maxwarnings`: if more than `maxwarnings` number of warnings are printed while parsing, further warnings will be
+silenced by default; for multithreaded parsing, each parsing task will print up to `maxwarnings`.
+* `debug`: passing `true` will result in many informational prints while a dataset is parsed; can be useful when
+reporting issues or figuring out what is going on internally while a dataset is parsed.
+"""
+function read_transition(path::String, vendor = :agilent;
+                            silencewarnings::Bool = false,
+                            maxwarnings::Int = 10, 
+                            debug::Bool = false
+                        )
+    tbl = CSV.read(path, Table; silencewarnings, maxwarnings, debug)
     if vendor ≡ :agilent
         Table(
             compound = [occursin("[", x) ? eval(Meta.parse(x)) : x for x in getproperty(tbl, Symbol("Compound Name"))],
@@ -83,7 +173,17 @@ function read_mrm(path::String; vendor = :agilent)
     end
 end
 
-function write_mrm(io, tbl::Table; vendor = :agilent)
+"""
+    write_transition(io, tbl::Table, vendor = :agilent)
+
+Write MRM transition table into csv file.
+
+# Arguments
+* `io`: csv file path.
+* `tbl`: transition table.
+* `vendor`: desired vendor for transition table. `:agilent` for Agilent. 
+"""
+function write_transition(io, tbl::Table, vendor = :agilent)
     if vendor ≡ :agilent
         CSV.write(io, tbl;
             header = ["Compound Name", "Precursor Ion", "Product Ion", "Ret Time (min)", "Delta Ret Time", "Collision Energy", "Polarity"])
@@ -131,7 +231,7 @@ Base.show(io::IO, sc::Acylβ) = print(io, ncb(sc), ":", ndb(sc),
                                         end
                                     )
 
-fragment_table(cpd) = map(cpd.fragments) do row
+fragmenttable(cpd) = map(cpd.fragments) do row
     s = query_raw(cpd.project, row.source, row.id)
     mz2 = cpd.project.data[row.source].mz2[s.mz2_id]
     mode = isa(cpd.project.data[row.source], PreIS) ? "PreIS" : "MRM"
@@ -159,7 +259,7 @@ function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
     print(io, " ", cpd.chain)
     print(io, "\n∘ Area: ", cpd.area[1])
     print(io, "\n∘ Error: ", cpd.area[2])
-    dt = fragment_table(cpd)
+    dt = fragmenttable(cpd)
     println(io, "\n∘ Fragments: ")
     PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r])
 end
@@ -185,7 +285,7 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     for cpd in analyte
         print(io, "\n ", cpd)
     end
-    dt = mapreduce(fragment_table, vcat, analyte)
+    dt = mapreduce(fragmenttable, vcat, analyte)
     println(io, "\n∘ Fragments: ")
     PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r])
 end

@@ -6,20 +6,20 @@ Number of fragments of a compund, i.e., `size(cpd.fragments, 1)`.
 """
 nfrags(cpd::AbstractCompoundSP) = size(cpd.fragments, 1)
 """
-    nMRM(tbl::Table, precision::Float64 = 0.1; end_time = maximum(tbl.rt .+ tbl.Δrt))
+    concurrent_transition(tbl::Table; end_time = maximum(tbl.rt .+ tbl.Δrt))
 
-Estimate number of transition. Retention time is sliced into small fragments of given precision.
+Number of transitions at each time bins. The `rt` represents the start of bin. `end_time` is the end of aquisition.
 """
-function nMRM(tbl::Table, precision::Float64 = 0.1; end_time = maximum(tbl.rt .+ tbl.Δrt))
-    trans = Dict(0:precision:end_time .=> 0)
-    for id in eachindex(tbl)
-        for k in keys(trans)
-            if k <= tbl.rt[id] + tbl.Δrt[id] / 2 && k >= tbl.rt[id] - tbl.Δrt[id] / 2
-                trans[k] += 1
-            end
-        end
-    end
-    sort!(collect(trans), by = (x -> x.second))
+function concurrent_transition(tbl::Table; end_time = nothing)
+    tbl_s = Table((rt = tbl.rt .- tbl.Δrt ./ 2, count = repeat([1], length(tbl.rt))))
+    tbl_e = Table((rt = tbl.rt .+ tbl.Δrt ./ 2, count = repeat([-1], length(tbl.rt))))
+    tbl_t = vcat(tbl_s, tbl_e)
+    tbl_t = @p tbl_t group(getproperty(:rt)) map(getproperty(:count)) map(sum) pairs map((rt = _.first, count = _.second)) Table
+    sort!(tbl_t, :rt)
+    tbl_t.count .= accumulate(+, tbl_t.count)
+    end_time = isnothing(end_time) ? last(tbl_t.rt) * 1.1 : max(end_time, last(tbl_t.rt))
+    push!(tbl_t, (rt = end_time, count = 0))
+    tbl_t
 end
 
 """
@@ -65,7 +65,7 @@ intersection(ranges::AbstractVector) = (maximum(first(r) for r in ranges), minim
 
 Calculate retention time.
 """
-calc_rt(analyte::AnalyteSP) = mean(mean(query_raw(cpd.project, cpd.fragments.source[id], cpd.fragments.id[id]).rt for id in eachindex(cpd.fragments)) for cpd in analyte)
+calc_rt(analyte::AnalyteSP) = mean(mean(query_raw(cpd.project, fragments.source, fragments.id).rt for fragments in cpd.fragments) for cpd in analyte)
 """
     states_id
 

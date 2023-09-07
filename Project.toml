@@ -1,7 +1,7 @@
 name = "SphingolipidsID"
 uuid = "c1ebf20f-b457-45e9-b029-ffb3f0746310"
 authors = ["Yu-Fong Peng <sciphypar@gmail.com"]
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 AnovaGLM = "0a47a8e3-ec57-451e-bddb-e0be9d22772b"
@@ -23,7 +23,7 @@ UnitfulMoles = "999f2bd7-36bf-5ba7-9bc1-c9473aa75374"
 [compat]
 AnovaGLM = "0.2"
 CSV = "0.10"
-Clustering = "0.14"
+Clustering = "0.15"
 DataPipes = "0.3"
 Dictionaries = "0.3"
 GLM = "1"

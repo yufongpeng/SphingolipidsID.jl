@@ -35,7 +35,7 @@ function analytes2clusters!(project::Project; new = false, scale = 0.0, radius =
     scale = scale > 0 ? scale : median(map(m -> quantile(m, 0.9) - quantile(m, 0.1), mass)) * 2 / maxrt
     mass = @p mass map(_ / scale)
     radius = radius > 0 ? radius : maxrt / 20 * sqrt(2)
-    clusters = @p zip(ret, mass) map(dbscan(hcat(_...)', radius; kwargs...)) map(map(getproperty(:core_indices), _))
+    clusters = @p zip(ret, mass) map(dbscan(hcat(_...)', radius; kwargs...)) map(map(getproperty(:core_indices), _.clusters))
     clusters = @p zip(clusters, groups) map(map(x -> _[2][x], _[1]))
     clusters_possible = get!(project.appendix, :clusters_possible, Dictionary{ClassSP, Vector{Vector{Int}}}())
     new && empty!(clusters_possible)

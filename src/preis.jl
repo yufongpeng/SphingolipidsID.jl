@@ -129,18 +129,16 @@ function merge_ft!(dt, subft, mzb, mz2_id)
         isf = zeros(Int, size(subft, 1)),
         repeat = ones(Int, size(subft, 1))
     )
-    for ft_id in eachindex(subft)
-        rt = subft.rt[ft_id]
-        mz1 = subft.mz1[ft_id]
-        id = findfirst(id -> abs(origin.rt[id] - rt) <= rt_tol && abs(origin.mz1[id] - mz1) <= mz_tol, eachindex(origin))
+    for data in subft
+        id = findfirst(id -> abs(origin.rt[id] - data.rt) <= rt_tol && abs(origin.mz1[id] - data.mz1) <= mz_tol, eachindex(origin))
         if isnothing(id)
-            push!(origin, subft[ft_id])
+            push!(origin, data)
             last_id += 1
             origin.id[end] = last_id
         else
             # record # to recalculate
             #ft = (; subft[ft_id]..., id = origin.id[id], )
-            origin[id] = merge_nt(origin[id], subft[ft_id])
+            origin[id] = merge_nt(origin[id], data)
         end
     end
     append!(dt.raw, origin)
@@ -244,25 +242,24 @@ function preis!(
         products = id_product(dt.mz2[subft.mz2_id[1]], polarity; mz_tol)
         printstyled("PreIS> ", color = :green, bold = true)
         println(products)
-        for ft_id in eachindex(subft)
+        for data in subft
             cpdsvanilla = mapreduce(vcat, eachindex(db)) do db_id
-                abs(db.mz[db_id] - subft.mz1[ft_id]) > mz_tol ? CompoundSPVanilla[] :
+                abs(db.mz[db_id] - data.mz1) > mz_tol ? CompoundSPVanilla[] :
                     generate_cpd(db, db_id, products)
             end
             isempty(cpdsvanilla) && continue
             cpds = convert.(CompoundSP, cpdsvanilla)
             for cpd in cpds
                 cpd.project = project
-                cpd.fragments.id .= subft.id[ft_id]
+                cpd.fragments.id .= data.id
                 cpd.fragments.source .= source
-                cpd.area = (subft.area[ft_id], subft.error[ft_id])
+                cpd.area = (data.area, data.error)
             end
-            rt = subft.rt[ft_id]
             # Unidentified
-            subanalytes = @views [analyte for analyte in project if abs(analyte.rt - rt) <= rt_tol]
-            isempty(subanalytes) && (foreach(cpd -> push!(project, AnalyteSP([cpd], rt)), cpds); continue)
+            subanalytes = @views [analyte for analyte in project if abs(analyte.rt - data.rt) <= rt_tol]
+            isempty(subanalytes) && (foreach(cpd -> push!(project, AnalyteSP([cpd], data.rt)), cpds); continue)
             # Aggregates
-            foreach(cpd -> agg_cpd!(cpd, subanalytes, rt), cpds)
+            foreach(cpd -> agg_cpd!(cpd, subanalytes, data.rt), cpds)
         end
     end
     project
@@ -273,7 +270,7 @@ end
 Sort, merge, split, and delete analytes after all PreIS data are added.
 
 * `rt_tol`: maximum allowable difference in retention time for two compounds to consider them as the same.
-* `err_tol`: maximum allowable error.
+* `err_tol`: maximum allowable signal error.
 """
 function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     printstyled("PreIS> ", color = :green, bold = true)
