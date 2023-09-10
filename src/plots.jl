@@ -35,7 +35,7 @@ function plot_rt_mw(project::Project;
                     ylabel = "Molecular weight",
                     title = "Analytes",
                     kwargs...)
-    ≡(clusters, :possible) && return map(keys(project.appendix[:clusters_possible])) do cls
+    ≡(clusters, :possible) && return map(collect(keys(project.appendix[:clusters_possible]))) do cls
         plot_rt_mw(project, cls; all, xlabel, ylabel, deepcopy(kwargs)...)
     end
     gana = isnothing(groupby) ? Dictionary([:Analytes], [analytes]) : groupview(groupby, analytes)
