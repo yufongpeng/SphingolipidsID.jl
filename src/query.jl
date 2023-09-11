@@ -115,19 +115,19 @@ function q!(aquery::Query, qc::Symbol; view = aquery.view, neg = false)
 end
 
 function q!(aquery::Query, mrm::MRM;
-                view = aquery.view, neg = false, compatible = false, db_product = SPDB[mrm.polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
+                view = aquery.view, neg = false, compatible = false,
                 mode::Symbol = :default)
-    products = @p mrm.mz2 map(id_product(_, mrm.polarity; db = db_product, mz_tol = mrm.mz_tol))
+    products = @p mrm.mz2 map(id_product(_, mrm.polarity; mz_tol = mrm.mz_tol))
     if compatible
         qf = cpd -> begin
             _, ms1 = generate_ms(cpd, mode, aquery.project.anion)
-            any(!isempty(products[i]) && any(iscompatible(cpd, product) for product in products[i]) &&
+            any(!isempty(products[i]) && any(iscompatible(product, cpd) for product in products[i]) &&
                 any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ≡(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
         end
     else
         qf = cpd -> begin
             _, ms1 = generate_ms(cpd, mode, aquery.project.anion)
-            any(!isempty(products[i]) && any(iscomponent(cpd, product) for product in products[i]) &&
+            any(!isempty(products[i]) && any(iscomponent(product, cpd) for product in products[i]) &&
                 any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ≡(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
         end
     end
