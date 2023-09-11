@@ -250,14 +250,14 @@ de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
     rule_acyl(DiChain(de_phyto(sc.lcb), sc.acyl))
 )
 @rule rule(sc::DiChain{<: LCB2}) = IonComparison(Ion(ProtonationNL2H2O(), SPB2(ncb(sc.lcb), 0)), Ion(ProtonationNLH2O(), SPB2(ncb(sc.lcb), 0))) |> (
-    (0.0, 1.0) => (
+    (0.0, 1.5) => (
         CalcOx(SPB2(ncb(sc.lcb), 0)) |> (
             0 => DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 0)),
             1 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 1))),
             2 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 2)))
         )
     ),
-    (1.0, Inf64) => (
+    (1.5, Inf64) => (
         CalcOx(SPB2(ncb(sc.lcb), 1)) |> (
             0 => DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0)),
             1 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
@@ -266,14 +266,14 @@ de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
     )
 )
 @rule rule(sc::DiChain{<: LCB3}) = IonComparison(Ion(ProtonationNL3H2O(), SPB3(ncb(sc.lcb), 0)), Ion(ProtonationNL2H2O(), SPB3(ncb(sc.lcb), 0))) |> (
-    (0.0, 1.0) => (
+    (0.0, 1.5) => (
         CalcOx(SPB3(ncb(sc.lcb), 0)) |> (
             0 => rule_phytoacyl0(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 0))),
             1 => rule_phytoacyl(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 1))),
             2 => rule_phytoacyl(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 2)))
         )
     ),
-    (1.0, Inf64) => (
+    (1.5, Inf64) => (
         CalcOx(SPB3(ncb(sc.lcb), 1)) |> (
             0 => DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0)),
             1 => rule_acyl(DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
@@ -282,14 +282,14 @@ de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
     )
 )
 @rule rule(sc::DiChain{<: LCB4}) = IonComparison(Ion(ProtonationNL3H2O(), SPB4(ncb(sc.lcb), 1)), Ion(ProtonationNL2H2O(), SPB4(ncb(sc.lcb), 1))) |> (
-    (0.0, 1.0) => (
+    (0.0, 1.5) => (
         CalcOx(SPB4(ncb(sc.lcb), 1)) |> (
             0 => rule_phytoacyl0(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0))),
             1 => rule_phytoacyl(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
             2 => rule_phytoacyl(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 2)))
         )
     ),
-    (1.0, Inf64) => (
+    (1.5, Inf64) => (
         CalcOx(SPB4(ncb(sc.lcb), 2)) |> (
             0 => DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 0)),
             1 => rule_acyl(DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 1))),
