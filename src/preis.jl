@@ -291,7 +291,7 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
             abs(a.rt - analyte.rt) > rt_tol && continue
             id = findfirst(cpd -> iscompatible(cpd, last(analyte)), a)
             isnothing(id) && continue
-            any(cpd.area[1] >= area_error[1] && cpd.area[2] <= err_tol for cpd in @view a[id:end]) || continue
+            any(cpd.area[1] > area_error[1] && cpd.area[2] <= err_tol for cpd in @view a[id:end]) || continue
             todel = true
             union!(a, analyte)
             a.rt = calc_rt(a)
