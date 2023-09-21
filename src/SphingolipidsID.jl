@@ -38,7 +38,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # Create library/rule
         library, rule,
         # Data inputs
-        read_featuretable, read_featuretable_mzmine3, sort_data!, sort_data, file_order, fill_mz2!, fill_ce!, read_featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
+        read_featuretable, read_featuretable_mzmine3, sort_data!, sort_data, file_order, fill_mz2!, fill_ce!, split_datafile, read_featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
         # PreIS
         preis, preis!, finish_profile!,
         # ID

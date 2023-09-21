@@ -94,6 +94,17 @@ re(v) =  - foldl(-, extrema(v)) / mean(v) / 2
 default_error(v) = length(v) > 2 ? rsd(v) : re(v)
 
 """
+    split_datafile(tbl::Table; name = r"(.*)-r\\d*\\.d", rep = r".*-r(\\d*)\\.d")
+
+Split the feature table accoding to data file name. `name` specifies the name pattern, and the resulting name will be the keys of the dictionary. `rep` specifies the repeating pattern, and will be furhter parsed as integer. If `rep` is nothing, the column `:datafile` will be removed; otherwise, the resulting number will be stored in this column.
+"""
+function split_datafile(tbl::Table; name = r"(.*)-r\d*\.d", rep = r".*-r(\d*)\.d")
+    datafile = (@p tbl.datafile map(match(name, _)[1]))
+    tbl = Table(tbl; datafile = isnothing(rep) ? nothing : (@p tbl.datafile map(parse(Int, match(rep, _)[1]))))
+    group(datafile, tbl)
+end
+
+"""
     filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5)
 
 Filter out duplicated or unstable data.

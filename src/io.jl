@@ -93,7 +93,7 @@ function read_featuretable_masshunter_mrm(path;
                                     )
     strs = readlines(path)
     starts = Int[]
-    data = Table(ms1 = Float64[], ms2 = Float64[], eV = Int[])
+    data = Table(ms1 = Float64[], ms2 = Float64[], eV = Int[], datafile = String[])
     ends = Int[]
     status = false
     for (i, l) in enumerate(strs)
@@ -102,7 +102,8 @@ function read_featuretable_masshunter_mrm(path;
             isnothing(transition) && continue
             ms1, ms2 = parse.(Float64, transition)
             eV = parse(Float64, match(r"CID@(\d*.\d*)", l)[1])
-            push!(data, (; ms1, ms2, eV))
+            datafile = match(r"(.*\.d).*\.d", l)[1]
+            push!(data, (; ms1, ms2, eV, datafile))
             push!(starts, i + 1)
             status = true
         elseif l == ""
@@ -130,7 +131,8 @@ function read_featuretable_masshunter_mrm(path;
         area = tbl.Area,
         collision_energy = (@p zip(data.eV, rep) |> mapmany(repeat([_[1]], _[2]))),
         FWHM = tbl.FWHM,
-        symmetry = tbl.Symmetry
+        symmetry = tbl.Symmetry,
+        datafile = (@p zip(data.datafile, rep) |> mapmany(repeat([_[1]], _[2]))),
     )
 end
 
