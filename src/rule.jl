@@ -57,8 +57,8 @@ rule(::Cer, sc::DiChain) = ((is4e(sc.lcb) && nox(sc.lcb) > 1) || nox(sc.acyl) > 
     (ISF(Protonation(), GM3()), ISF(ProtonationNLH2O(), GM3())) |> (GM1a(), ()),
     IonComparison(HexNAcHexNANA, HexNAcHex) |> (
         0           => GM1a(),
-        (0, 5)      => GM1_(GM1a(), GM1b()),
-        (5, Inf64)  => GM1b(),
+        ri"(0, 5)"  => GM1_(GM1a(), GM1b()),
+        ri"[5, ∞]"  => GM1b(),
         NaN         => ()
     )
 )
@@ -76,10 +76,10 @@ rule(::Cer, sc::DiChain) = ((is4e(sc.lcb) && nox(sc.lcb) > 1) || nox(sc.acyl) > 
 rule_ab(::GD1) = NANA |> (
     RuleUnion(
         IonComparison(HexNAcHexNANA, HexNAcHex) |> (
-            0 => GD1b(),
-            (0, 1) => GD1_(GD1b(), GD1a()),
-            (1, 10) => GD1_(GD1a(), GD1b()),
-            (10, Inf) => GD1a()
+            0           => GD1b(),
+            ri"(0, 1)"  => GD1_(GD1b(), GD1a()),
+            ri"[1, 10)" => GD1_(GD1a(), GD1b()),
+            ri"[10, ∞]" => GD1a()
         ),
         NANA2           |> (GD1b(), ())
     ),
@@ -88,10 +88,10 @@ rule_ab(::GD1) = NANA |> (
 @rule rule(::GD1) = NANA |> (
     NANA2 |> (
         IonComparison(HexNAcHexNANA2, HexNAcHex) |> (
-            0 => GD1b(),
-            (0, 1) => GD1_(GD1b(), GD1c()),
-            (1, 10) => GD1_(GD1c(), GD1b()),
-            (10, Inf) => GD1c()
+            0           => GD1b(),
+            ri"(0, 1)"  => GD1_(GD1b(), GD1c()),
+            ri"[1, 10)" => GD1_(GD1c(), GD1b()),
+            ri"[10, ∞]" => GD1c()
         ),
         RuleUnion(
             (ISF(Protonation(), GM3()), ISF(ProtonationNLH2O(), GM3())) |> (
@@ -130,10 +130,10 @@ rule_ab(::GD1) = NANA |> (
 @rule rule_ab(::GT1) = NANA |> (
     NANA2 |> (
         IonComparison(HexNAcHexNANA2, HexNAcHexNANA) |> (
-            0 => GT1b(),
-            (0, 1) => RuleUnion(GT1b(), rule_α(GT1a())),
-            (1, 10) => RuleUnion(rule_α(GT1a()), GT1b()),
-            (10, Inf) => rule_α(GT1a())
+            0           => GT1b(),
+            ri"(0, 1)"  => RuleUnion(GT1b(), rule_α(GT1a())),
+            ri"[1, 10)" => RuleUnion(rule_α(GT1a()), GT1b()),
+            ri"[10, ∞]" => rule_α(GT1a())
         ),
         HexNAcHexNANA2 |> (
             GT1aα(),
@@ -146,9 +146,9 @@ rule_ab(::GD1) = NANA |> (
     ()
 )
 @rule rule_ab_neg(::GT1) = IonComparison(NANA1, NANA2) |> (
-    (0, 0.4)    => GT1a(),
-    (0.4, 7)    => GT1_(GT1a(), GT1b()),
-    (7, Inf64)  => GT1b()
+    ri"[0, 0.4)"    => GT1a(),
+    ri"[0.4, 7)"    => GT1_(GT1a(), GT1b()),
+    ri"[7, ∞]"      => GT1b()
 )
 @rule rule(::GT1) = NANA |> (
     NANA2 |> (
@@ -156,18 +156,18 @@ rule_ab(::GD1) = NANA |> (
             RuleUnion(
                 rule_α(GT1a()),
                 IonComparison(HexNAcHexNANA2, HexNAcHexNANA) |> (
-                    (0, 10) => GT1b(),
-                    (10, Inf) => ()
+                    ri"[0, 10)" => GT1b(),
+                    ri"[10, ∞]" => ()
                 ),
                 IonComparison(IonPlus(HexNAcHexNANA2, HexNAcHexNANA), HexNAcHex) |> (
-                    (0, 10) => GT1c(),
-                    (10, Inf) => ()
+                    ri"[0, 10)" => GT1c(),
+                    ri"[10, ∞]" => ()
                 )
             ),
             HexNAcHexNANA |> (
                 IonComparison(HexNAcHexNANA, HexNAcHex) |> (
-                    (0, 10) => GT1_(GT1c(), GT1b()),
-                    (10, Inf) => GT1b(),
+                    ri"[0, 10)" => GT1_(GT1c(), GT1b()),
+                    ri"[10, ∞]" => GT1b(),
                 ),
                 HexNAcHex |> (
                     GT1c(),
@@ -205,8 +205,8 @@ rule_ab(::GD1) = NANA |> (
 @rule rule(::GQ1) = NANA |> (
     IonComparison(HexNAcHexNANA2, HexNAcHexNANA) |> (
         0           => GQ1c(),
-        (0, 5)      => RuleUnion(GQ1c(), rule_ab(GQ1_())),
-        (5, Inf64)  => rule_ab(GQ1_()),
+        ri"(0, 5)"  => RuleUnion(GQ1c(), rule_ab(GQ1_())),
+        ri"[5, ∞]"  => rule_ab(GQ1_()),
         NaN         => ()
     ),
     ()
@@ -250,14 +250,14 @@ de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
     rule_acyl(DiChain(de_phyto(sc.lcb), sc.acyl))
 )
 @rule rule(sc::DiChain{<: LCB2}) = IonComparison(Ion(ProtonationNL2H2O(), SPB2(ncb(sc.lcb), 0)), Ion(ProtonationNLH2O(), SPB2(ncb(sc.lcb), 0))) |> (
-    (0.0, 1.5) => (
+    ri"[0.0, 1.5)"  => (
         CalcOx(SPB2(ncb(sc.lcb), 0)) |> (
             0 => DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 0)),
             1 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 1))),
             2 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 2)))
         )
     ),
-    (1.5, Inf64) => (
+    ri"[1.5, ∞]"    => (
         CalcOx(SPB2(ncb(sc.lcb), 1)) |> (
             0 => DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0)),
             1 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
@@ -266,14 +266,14 @@ de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
     )
 )
 @rule rule(sc::DiChain{<: LCB3}) = IonComparison(Ion(ProtonationNL3H2O(), SPB3(ncb(sc.lcb), 0)), Ion(ProtonationNL2H2O(), SPB3(ncb(sc.lcb), 0))) |> (
-    (0.0, 1.5) => (
+    ri"[0.0, 1.5)"  => (
         CalcOx(SPB3(ncb(sc.lcb), 0)) |> (
             0 => rule_phytoacyl0(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 0))),
             1 => rule_phytoacyl(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 1))),
             2 => rule_phytoacyl(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 2)))
         )
     ),
-    (1.5, Inf64) => (
+    ri"[1.5, ∞]"    => (
         CalcOx(SPB3(ncb(sc.lcb), 1)) |> (
             0 => DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0)),
             1 => rule_acyl(DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
@@ -282,14 +282,14 @@ de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
     )
 )
 @rule rule(sc::DiChain{<: LCB4}) = IonComparison(Ion(ProtonationNL3H2O(), SPB4(ncb(sc.lcb), 1)), Ion(ProtonationNL2H2O(), SPB4(ncb(sc.lcb), 1))) |> (
-    (0.0, 1.5) => (
+    ri"[0.0, 1.5)" => (
         CalcOx(SPB4(ncb(sc.lcb), 1)) |> (
             0 => rule_phytoacyl0(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0))),
             1 => rule_phytoacyl(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
             2 => rule_phytoacyl(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 2)))
         )
     ),
-    (1.5, Inf64) => (
+    ri"[1.5, ∞]"    => (
         CalcOx(SPB4(ncb(sc.lcb), 2)) |> (
             0 => DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 0)),
             1 => rule_acyl(DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 1))),

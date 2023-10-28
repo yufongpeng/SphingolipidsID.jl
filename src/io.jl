@@ -56,15 +56,17 @@ function read_featuretable_mzmine3(path;
     datafile = Dict(propertynames(fwhm) .=> map(col -> match(r".*:(.*):.*", string(col))[1], propertynames(fwhm)))
     id = findfirst.(!ismissing, fwhm)
     tbl = Table(
-        id = zeros(Int, n),
+        id = collect(1:n),
         mz1 = tbl.mz,
         mz2 = zeros(Float64, n),
+        mz_range = repeat([RealInterval(0, 0, <=, <=)], n),
         rt = tbl.rt,
         height = tbl.height,
         area = tbl.area,
         collision_energy = zeros(Int, n),
         FWHM = getindex.(fwhm, id),
         symmetry = get.(sym, replace!(findfirst.(!ismissing, sym), nothing => :_symmetry), 1.0),
+        polarity = trues(n),
         datafile = getindex.(Ref(datafile), id)
     )
     tbl
@@ -93,19 +95,23 @@ function read_featuretable_masshunter_mrm(path;
                                     )
     strs = readlines(path)
     starts = Int[]
-    data = Table(ms1 = Float64[], ms2 = Float64[], eV = Int[])
+    data = Table(ms1 = Float64[], ms2 = Float64[], eV = Int[], polarity = Bool[], datafile = String[])
     ends = Int[]
     status = false
     for (i, l) in enumerate(strs)
         if !status
+            pol = match(r"([+-])ESI MRM Frag", l)
+            isnothing(pol) && continue
+            polarity = pol[1] == "+"
             transition = match(r"\((\d*.\d*) -> (\d*.\d*)\)", l)
             isnothing(transition) && continue
             ms1, ms2 = parse.(Float64, transition)
             eV = parse(Float64, match(r"CID@(\d*.\d*)", l)[1])
-            push!(data, (; ms1, ms2, eV))
-            push!(starts, i + 1)
+            datafile = match(r"(.*\.d).*\.d", l)[1]
+            push!(data, (; ms1, ms2, eV, polarity, datafile))
+            push!(starts, i + 2)
             status = true
-        elseif l == ""
+        elseif l == "" || unique(l) == [',']
             push!(ends, i - 1)
             status = false
         elseif occursin("No integration results available", l)
@@ -114,15 +120,19 @@ function read_featuretable_masshunter_mrm(path;
             status = false
         end
     end
-    str = map(starts, ends) do st, ed
-        IOBuffer(join(strs[st:ed], "\n"))
+    if length(ends) == length(starts) - 1
+        push!(ends, length(strs))
     end
-    rep = ends .- starts
+    rep = @. ends - starts + 1
+    starts[1] -= 1
+    str = IOBuffer(join(mapreduce(vcat, starts, ends) do st, ed
+        strs[st:ed]
+    end, "\n"))
     txt = ["RT", "Height", "Area", "Symmetry", "FWHM"]
     tbl = CSV.read(str, Table; select = (i, name) -> any(==(text, String(name)) for text in txt), silencewarnings, maxwarnings, debug)
     n = size(tbl, 1)
     Table(
-        id = zeros(Int, n),
+        id = collect(1:n),
         mz1 = (@p zip(data.ms1, rep) |> mapmany(repeat([_[1]], _[2]))),
         mz2 = (@p zip(data.ms2, rep) |> mapmany(repeat([_[1]], _[2]))),
         rt = tbl.RT,
@@ -130,7 +140,9 @@ function read_featuretable_masshunter_mrm(path;
         area = tbl.Area,
         collision_energy = (@p zip(data.eV, rep) |> mapmany(repeat([_[1]], _[2]))),
         FWHM = tbl.FWHM,
-        symmetry = tbl.Symmetry
+        symmetry = tbl.Symmetry,
+        polarity = (@p zip(data.polarity, rep) |> mapmany(repeat([_[1]], _[2]))),
+        datafile = (@p zip(data.datafile, rep) |> mapmany(repeat([_[1]], _[2])))
     )
 end
 
@@ -210,11 +222,17 @@ repr_ox = @λ begin
     n => ";O" * string(n)
 end
 
-Base.show(io::IO, sc::LCB) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
-Base.show(io::IO, ::MIME"text/plain", sc::LCB) = print(io, "SPB ", sc)
-Base.show(io::IO, ::MIME"text/plain", sc::ACYL) = print(io, "Acyl ", sc)
-Base.show(io::IO, sc::Acyl) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
-Base.show(io::IO, sc::Acylα) = print(io, ncb(sc), ":", ndb(sc),
+print_comp(io::IO, x) = print(io, x)
+print_comp(io::IO, x...) = foreach(s -> print_comp(io, s), x)
+Base.show(io::IO, sc::LCB) = (print(io, "SPB "); print_comp(io, sc))
+print_comp(io::IO, sc::LCB) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
+#Base.show(io::IO, ::MIME"text/plain", sc::LCB) = print(io, "SPB ", sc)
+#Base.show(io::IO, ::MIME"text/plain", sc::ACYL) = print(io, "Acyl ", sc)
+Base.show(io::IO, sc::Acyl) = (print(io, "Acyl "); print_comp(io, sc))
+
+
+print_comp(io::IO, sc::Acyl) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
+print_comp(io::IO, sc::Acylα) = print(io, ncb(sc), ":", ndb(sc),
                                         @match nox(sc) begin
                                             0 => ""
                                             1 => ";(2OH)"
@@ -222,7 +240,7 @@ Base.show(io::IO, sc::Acylα) = print(io, ncb(sc), ":", ndb(sc),
                                             o => ";(2OH);O" * string(o - 1)
                                         end
                                     )
-Base.show(io::IO, sc::Acylβ) = print(io, ncb(sc), ":", ndb(sc),
+print_comp(io::IO, sc::Acylβ) = print(io, ncb(sc), ":", ndb(sc),
                                         @match nox(sc) begin
                                             0 => ""
                                             1 => ";(3OH)"
@@ -232,10 +250,10 @@ Base.show(io::IO, sc::Acylβ) = print(io, ncb(sc), ":", ndb(sc),
                                     )
 
 fragmenttable(cpd) = map(cpd.fragments) do row
-    s = query_raw(cpd.project, row.source, row.id)
+    s = query_data(cpd.project, row.source, row.id)
     mz2 = cpd.project.data[row.source].mz2[s.mz2_id]
     mode = isa(cpd.project.data[row.source], PreIS) ? "PreIS" : "MRM"
-    (ion1 = row.ion1, mz1 = s.mz1, ion2 = row.ion2, mz2 = mz2, area = s.area, error = s.error, CE = s.collision_energy, rt = s.rt, source = mode)
+    (ion1 = row.ion1, mz1 = s.mz1, ion2 = row.ion2, mz2 = mz2, area = s.area, height = s.height, error = s.error, CE = s.collision_energy, rt = s.rt, source = mode)
 end
 
 Base.show(io::IO, cpd::SPID) = print(io, cpd.class, " ", cpd.chain)
@@ -248,20 +266,20 @@ states_color = @λ begin
     -1 => "🔴"
 end
 
-Base.show(io::IO, sc::ChainSP) = print(io, sc.lcb, "/", sc.acyl)
-Base.show(io::IO, sc::SumChain) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
+Base.show(io::IO, sc::ChainSP) = print_comp(io, sc.lcb, "/", sc.acyl)
+Base.show(io::IO, sc::SumChain) = print_comp(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
 
 function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
     class, chain = states_color.(cpd.states)
-    print(io, "Compound with ", size(cpd.fragments, 1), " fragments ($class$chain):")
+    print(io, "Compound with ", size(cpd.fragments, 1), " fragments|$class$chain:")
     print(io, "\n∘ ID: ")
     show(io, MIME"text/plain"(), cpd.class)
     print(io, " ", cpd.chain)
-    print(io, "\n∘ Area: ", cpd.area[1])
-    print(io, "\n∘ Error: ", cpd.area[2])
+    print(io, "\n∘ Estimate: ", cpd.signal[1])
+    print(io, "\n∘ Error: ", cpd.signal[2])
     dt = fragmenttable(cpd)
     println(io, "\n∘ Fragments: ")
-    PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r])
+    PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Height", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r, :r])
 end
 
 Base.show(io::IO, cpd::CompoundSP) = print(io, cpd.class, " ", cpd.chain)
@@ -274,12 +292,12 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     diq = sc[states_id(:error)]
     isf = sc[states_id(:isf)]
     total = sc[states_id(:total)]
-    manual = states_color(analyte.manual_check)
+    manual = sc[states_id(:manual)]
     sc = map([analyte.cpdsc, analyte.score]) do sc
         sc.first > 0 ? *(string(SPDB[:SCORE].param[sc.first].target), " => ", string(sc.second)) : ""
     end
     scs = join(filter!(!isempty, sc), ", ")
-    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " $(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf):")
+    print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 2), " st$(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf):")
     print(io, "\n∘ Score: ", scs)
     print(io, "\n∘ Compounds:")
     for cpd in analyte
@@ -287,7 +305,7 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     end
     dt = mapreduce(fragmenttable, vcat, analyte)
     println(io, "\n∘ Fragments: ")
-    PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r])
+    PrettyTables.pretty_table(io, dt; header = ["Ion1", "m/z", "Ion2", "m/z", "Area", "Height", "Error", "CE (eV)", "RT (min)", "Source"], header_alignment = :l, alignment = [:r, :l, :r, :l, :r, :r, :r, :r, :r, :r])
 end
 
 function Base.show(io::IO, analyte::AnalyteSP)
@@ -298,20 +316,21 @@ function Base.show(io::IO, analyte::AnalyteSP)
     diq = sc[states_id(:error)]
     isf = sc[states_id(:isf)]
     total = sc[states_id(:total)]
-    manual = states_color(analyte.manual_check)
-    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " $(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf):")
+    manual = sc[states_id(:manual)]
+    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " st$(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf)")
 end
 
 function Base.show(io::IO, data::PreIS)
-    println(io, "PreIS: ")
+    println(io, "PreIS with $(length(data.mz2)) products: ")
     for dt in zip(data.range, data.mz2)
-        println(io, " ", dt[1][1], " ~ ", dt[1][2], " -> ", dt[2])
+        println(io, " ", dt[1], " -> ", round(dt[2]; digits = 4))
     end
 end
 
 function Base.show(io::IO, pj::Project)
     println(io, "Project with ", length(pj), " analytes:")
-    println(io, "∘ Salt: ", pj.anion)
+    println(io, "∘ Salt: ", get(pj.appendix, :anion, "unknown"))
+    println(io, "∘ Signal: ", get(pj.appendix, :signal, "unknown"))
     println(io, "∘ Data: ")
     for data in pj.data
         show(io, data)
@@ -344,12 +363,24 @@ function Base.show(io::IO, qcmd::QueryNot)
     print_init(io, qcmd.qcmd)
     print(io, ")")
 end
-Base.show(io::IO, qcmd::QueryCmd) = print(io, qcmd.query)
-print_init(io::IO, qcmd::QueryAnd) = print(io, join(repr.(qcmd.qcmd), " ∧ "))
-print_init(io::IO, qcmd::QueryOr) = print(io, join(repr.(qcmd.qcmd), " ∨ "))
-print_init(io::IO, qcmd::QueryCmd) = print(io, qcmd)
-print_init(io::IO, qcmd::QueryNot) = print(io, qcmd)
-Base.show(io::IO, reuseable::ReUseable) = print(io, "ReUsable ", reuseable.query)
+Base.show(io::IO, qcmd::QueryCmd) = print_qcmd(io, qcmd.query)
+function print_init(io::IO, qcmd::QueryAnd)
+    print_qcmd(io, first(qcmd.qcmd))
+    for q in @view qcmd.qcmd[2:end]
+        print(io, " ∧ ")
+        print_qcmd(io, q)
+    end
+end
+function print_init(io::IO, qcmd::QueryOr)
+    print_qcmd(io, first(qcmd.qcmd))
+    for q in @view qcmd.qcmd[2:end]
+        print(io, " ∨ ")
+        print_qcmd(io, q)
+    end
+end
+print_init(io::IO, qcmd::QueryCmd) = print_qcmd(io, qcmd)
+print_init(io::IO, qcmd::QueryNot) = print_qcmd(io, qcmd)
+Base.show(io::IO, reusable::ReusableQuery) = print(io, "Reusable ", reusable.query)
 function Base.show(io::IO, aquery::Query)
     print(io, "Query with ", length(aquery), " analytes: \n")
     print(io, "∘ Queries: ")
@@ -373,3 +404,134 @@ function Base.show(io::IO, aquery::Query)
         end
     end
 end
+
+function Base.show(io::IO, ri::UnionInterval)
+    print(io, ri.intervals[1])
+    i = 1
+    while i < length(ri.intervals)
+        i += 1
+        print(io, " ∪ ", ri.intervals[i])
+    end
+end
+
+function Base.show(io::IO, ::MIME"text/plain", ri::UnionInterval)
+    print(io, typeof(ri), ":\n ")
+    print(io, ri)
+end
+
+function Base.show(io::IO, ri::RealInterval)
+    @match ri.leftoperator begin
+        (&<)    => print(io, "(", ri.lowerbound, ", ")
+        (&<=)   => print(io, "[", ri.lowerbound, ", ")
+        x       => print(io, ri.lowerbound, " ", x ," x ")
+    end
+    @match ri.rightoperator begin
+        (&<)    => print(io, ri.upperbound, ")")
+        (&<=)   => print(io, ri.upperbound, "]")
+        x       => print(io, x, " ", ri.upperbound)
+    end
+end
+
+function Base.show(io::IO, ::MIME"text/plain", ri::RealInterval)
+    print(io, typeof(ri), ":\n ")
+    print(io, ri)
+end
+
+Base.show(io::IO, ri::EmptyInterval) = 
+    print(io, "∅")
+
+Base.show(io::IO, ::MIME"text/plain", ri::EmptyInterval) = 
+    print(io, typeof(ri), "()")
+
+Base.show(io::IO, fln::FunctionalFunction) = 
+    print(io, fln.fl, "(", fln.fn, ")")
+
+function print_qcmd(io::IO, c::ComposedFunction)
+    c.outer isa ComposedFunction ? print(io, c.outer) : _printcomposed(io, c.outer)
+    print(io, " ∘ ")
+    _printcomposed(io, c.inner)
+end
+print_qcmd(io::IO, x...) = print(io, x...)
+print_qcmd(io::IO, mrm::MRM) = print(io, "MRM")
+print_qcmd(io::IO, p::Pair) = (print_qcmd(io, p.first); print(io, " => "); print_qcmd(io, p.second))
+function print_qcmd(io::IO, p::Pair{T, F}) where {T, F <: FunctionalFunction}
+    print_qcmd(io, p.first => p.second.fn)
+    print(io, "[")
+    print_qcmd(io, p.second.fl)
+    print(io, "]")
+end
+function print_qcmd(io::IO, p::Pair{T, F}) where {T, G <: Function, F <: ComposedFunction{<: Union{Base.Fix1, Base.Fix2, RealInterval}, G}}
+    print_qcmd(io, p.second.inner ∘ p.first => p.second.outer)
+end
+function print_qcmd(io::IO, p::Pair{T, F}) where {T, F <: Base.Fix2}
+    if Base.isoperator(repr(p.second.f))
+        print(io, "(")
+        print_qcmd(io, p.first)
+        print(io, " ")
+        print_qcmd(io, p.second.f)
+        print(io, " ")
+        print_qcmd(io, p.second.x)
+        print(io, ")")
+    elseif repr(p.second.f) == "in"
+        print(io, "(")
+        print_qcmd(io, p.first)
+        print(io, " ")
+        print_qcmd(io, "∈")
+        print(io, " ")
+        print_qcmd(io, p.second.x)
+        print(io, ")")
+    else
+        print_qcmd(io, p.second.f)
+        print_qcmd(io, "(")
+        print_qcmd(io, p.first)
+        print_qcmd(io, ", ")
+        print_qcmd(io, p.second.x)
+        print_qcmd(io, ")")
+    end
+end
+
+function print_qcmd(io::IO, p::Pair{T, F}) where {T, F <: Base.Fix1}
+    if Base.isoperator(repr(p.second.f))
+        print(io, "(")
+        print_qcmd(io, p.second.x)
+        print(io, " ")
+        print_qcmd(io, p.second.f)
+        print(io, " ")
+        print_qcmd(io, p.first)
+        print(io, ")")
+    else
+        print_qcmd(io, p.second.f)
+        print_qcmd(io, "(")
+        print_qcmd(io, p.second.x)
+        print_qcmd(io, ", ")
+        print_qcmd(io, p.first)
+        print_qcmd(io, ")")
+    end
+end
+
+function print_qcmd(io::IO, p::Pair{T, F}) where {T, F <: RealInterval}
+    print(io, "(")
+    print(io, p.second.lowerbound)
+    print(io, " ")
+    print(io, repr(p.second.leftoperator))
+    print(io, " ")
+    print_qcmd(io, p.first)
+    print(io, " ")
+    print(io, repr(p.second.rightoperator))
+    print(io, " ")
+    print(io, p.second.upperbound)
+    print(io, ")")
+end
+#shows !f instead of (!) ∘ f when ! is the outermost function
+function print_qcmd(io::IO, c::ComposedFunction{typeof(!)})
+    print(io, '!')
+    _printcomposed(io, c.inner)
+end
+
+_printcomposed(io::IO, x) = print(io, x)
+#display operators like + and - inside parens
+_printcomposed(io::IO, f::Function) = Base.isoperator(Symbol(f)) ? (print(io, '('); print(io, f); print(io, ')')) : print(io, f)
+#nesting for chained composition
+_printcomposed(io::IO, f::ComposedFunction) = (print(io, '('); print_qcmd(io, f); print(io, ')'))
+#no nesting when ! is the outer function in a composition chain
+_printcomposed(io::IO, f::ComposedFunction{typeof(!)}) = print(io, f)

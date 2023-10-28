@@ -8,7 +8,7 @@ group_analyte(analytes) = @p analytes groupview(deisomerized(class(_))) map((fir
     initialize_clusters!(aquery::AbstractQuery; kwargs...)
     initialize_clusters!(project::Project; analytes = project.analytes)
 
-Initialize `project.clusters` with `group_analyte(analytes)`.
+Initialize `project.appendix[:clusters]` with `group_analyte(analytes)`.
 """
 initialize_clusters!(aquery::AbstractQuery; kwargs...) = (initialize_clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
 initialize_clusters!(project::Project; analytes = project.analytes) = replace_clusters!(project, group_analyte(analytes))
@@ -28,7 +28,7 @@ See `dbscan` for more detailed settings.
 analytes2clusters!(aquery::AbstractQuery; kwargs...) = (analytes2clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
 function analytes2clusters!(project::Project; new = false, scale = 0.0, radius = 0.0, analytes = project.analytes, kwargs...)
     valid_id = collect((first ∘ parentindices)(analytes))
-    groups = @p project.clusters map(filter(x -> in(x, valid_id), _)) filter(length(_) > 2)
+    groups = @p project.appendix[:clusters] map(filter(x -> in(x, valid_id), _)) filter(length(_) > 2)
     ret = @p groups map(map(rt, @views project.analytes[_]))
     maxrt = maximum(maximum(r) for r in ret)
     mass = @p groups map(map(mw, @views project.analytes[_]))
@@ -102,18 +102,63 @@ find_tbl(expr) = @match expr begin
     _                   => false
 end
 
-model_fn(expr) = expr == Expr(:tuple) ? Expr(:tuple) :
-    Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), find_tbl(expr) ? expr : Expr(expr.head, push!(expr.args, :tbl)...)))
+find_terms(expr) = @match expr begin
+    Expr(:macrocall, arg, args...) && if arg == Symbol("@formula") end => unique(reduce_terms.(union(getterms(eval(expr))...)))
+    Expr(:(.), :tbl, QuoteNode(x))                  => [x]
+    Expr(head, args...)                             => begin
+        terms = find_terms.(args)
+        terms = union(terms...)
+        isempty(terms) ? [] : terms
+    end
+    x                                               => []
+end
+
+reduce_terms(expr) = @match expr begin
+    Expr(:call, :(^), arg, arg2)    => arg
+    x                               => x
+end
+
+replace_formula(expr, fnterms, nmterms) = @match expr begin
+    Expr(:macrocall, arg, args...) && if arg == Symbol("@formula") end => replace_terms(expr, fnterms, nmterms)
+    Expr(head, args...) => Expr(head, map(x -> replace_formula(x, fnterms, nmterms), args)...)
+    x                   => x
+end
+replace_terms(expr, fnterms, nmterms) = @match expr begin
+    Expr(:call, :(∘), args...)  => nmterms[findfirst(==(expr), fnterms)]
+    Expr(:(->), args...)        => nmterms[findfirst(==(expr), fnterms)]
+    Expr(head, args...)         => Expr(head, map(x -> replace_terms(x, fnterms, nmterms), args)...)
+    if expr in fnterms end      => nmterms[findfirst(==(expr), fnterms)]
+    x                           => x
+end
+
+fnterm2symbol(e) = occursin("∘", string(e)) ? Symbol(replace(string(e), " ∘ " => "_")) : e
+
+model_fn() = Expr(:call, :CurrentModelCall)
+function model_fn(expr)
+    expr == Expr(:tuple) && return Expr(:call, :CurrentModelCall)
+    fnterms = find_terms(expr)
+    cl = :cluster in fnterms
+    filter!(!=(:cluster), fnterms)
+    nmterms = fnterm2symbol.(fnterms)
+    expr = find_tbl(expr) ? expr : Expr(expr.head, push!(expr.args, :tbl)...)
+    expr = replace_formula(expr, fnterms, nmterms)
+    Expr(:call, Expr(:curly, :ModelCall, cl), QuoteNode(nmterms), QuoteNode(fnterms), Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), expr)))
+end
 """
+    @model()
     @model(expr)
     @model(expr...)
 
-Create function(s) taking data as input and return `GLM` model.
+Create function(s) taking data as input and return a regression model.
     
 # Arguuments
-* `_` or no input represent current model, i.e., `preject.appendix[:model_fn]`.
-* An expression as if fitting a `GLM` model. `tbl` represents the data which can be omited or used in other arguments, e.g., `lm(@fomula(y~x); wts=tbl.wts)`.
+* `()` or no input represent current model, i.e., `preject.appendix[:model_formula]`.
+* An expression as if fitting a regression model. `tbl` represents the data which can be omited or used in other arguments, e.g., `lm(@fomula(y~x); wts=tbl.wts)`.
 """
+macro model()
+    return quote $(model_fn()) end
+end
+
 macro model(expr)
     return quote $(model_fn(expr)) end
 end
@@ -124,15 +169,12 @@ macro model(expr...)
 end
 """
     model_clusters!(project::Project)
-    model_clusters!(model, project::Project)
+    model_clusters!(model::RetentionModelCall, project::Project)
 
-Apply `model` to the `project`. `model` must be a 1-arg function taking data as input and return `GLM` model.
+Fit `model` with `project.appendix[:clusters_candidate]`. The result is stored in `project.appendix[:clusters_model]`.
 """
-model_clusters!(project::Project) = model_clusters!(tbl -> lm(@formula(rt ~ mw + cluster), tbl), project)
-function model_clusters!(model, project::Project)
+function model_clusters!(modelcall::RetentionModelCall, project::Project)
     haskey(project.appendix, :clusters_model) && delete!(project.appendix, :clusters_model)
-    haskey(project.appendix, :clusters_formula) && delete!(project.appendix, :clusters_formula)
-    insert!(project.appendix, :clusters_formula, model)
     @p pairs(project.appendix[:clusters_candidate]) |>
         map(Table(
                 mw = map(mw, @views project.analytes[_[2]]),
@@ -140,28 +182,59 @@ function model_clusters!(model, project::Project)
                 cluster = repeat([_[1]], length(_[2]))
             )) |>
         reduce(vcat) |>
-        model |>
+        modelcall |> 
+        RetentionModel(modelcall) |> 
         insert!(project.appendix, :clusters_model)
-    display(project.appendix[:clusters_model])
+    display(project.appendix[:clusters_model].model)
     println()
     project
 end
+#model_clusters!(project::Project) = model_clusters!(ModelCall{true}([:rt, :mw, :cluster], [:rt, :mw, :cluster], tbl -> lm(@formula(rt ~ mw + cluster), tbl)), project)
 """
-    compare_models(project::Project, models::Tuple)
-    compare_models(project::Project, models...)
+    model_rt!(modelcall::RetentionModelCall, aquery::AbstractQuery)
+    model_rt!(modelcall::RetentionModelCall, project::Project; analytes = project.analytes)
+
+Fit `model` with `analytes`. The result is stored in `project.appendix[:rt_model]`.
+"""
+model_rt!(modelcall::RetentionModelCall, aquery::AbstractQuery) = (model_rt!(modelcall, aquery.project; analytes = aquery.result); aquery)
+function model_rt!(modelcall::RetentionModelCall, project::Project; analytes = project.analytes)
+    haskey(project.appendix, :rt_model) && delete!(project.appendix, :rt_model)
+    @p Table(; (modelcall.nmterms .=> map(x -> eval(x).(analytes), modelcall.fnterms))...) |>
+        modelcall |> 
+        RetentionModel(modelcall) |> 
+        insert!(project.appendix, :rt_model)
+    display(project.appendix[:rt_model].model)
+    println()
+    project
+end
+
+"""
+    compare_models(project::Project, models::Tuple; analytes = project.analytes)
+    compare_models(aquery::AbstractQuery, models::Tuple)
+    compare_models(project::Project, models...; analytes = project.analytes)
+    compare_models(aquery::AbstractQuery, models...)
 
 Compare models by ANOVA.
 """
-compare_models(project::Project, models::Tuple) = compare_models(project, models...)
-function compare_models(project::Project, models...)
-    models = replace(collect(models), () => project.appendix[:clusters_formula])
-    tbl = @p pairs(project.appendix[:clusters_candidate]) |>
-        map(Table(
-                mw = map(mw, @views project.analytes[_[2]]),
-                rt = map(rt, @views project.analytes[_[2]]),
-                cluster = repeat([_[1]], length(_[2]))
-            )) |>
-        reduce(vcat)
+compare_models(aquery::AbstractQuery, models::Tuple) = compare_models(aquery.project, models...; analytes = aquery.result)
+compare_models(aquery::AbstractQuery, models...) = compare_models(aquery.project, models...; analytes = aquery.result)
+compare_models(project::Project, models::Tuple; analytes = project.analytes) = compare_models(project, models...; analytes = analytes)
+function compare_models(project::Project, models...; analytes = project.analytes)
+    if any(model -> isa(model, ModelCall{true}), models)
+        models = replace(collect(models), CurrentModelCall() => project.appendix[:clusters_model].fn)
+        tbl = @p pairs(project.appendix[:clusters_candidate]) |>
+            map(Table(
+                    mw = map(mw, @views project.analytes[_[2]]),
+                    rt = map(rt, @views project.analytes[_[2]]),
+                    cluster = repeat([_[1]], length(_[2]))
+                )) |>
+            reduce(vcat)
+    else
+        models = replace(collect(models), CurrentModelCall() => project.appendix[:rt_model].fn)
+        nmterms = mapreduce(x -> x.nmterms, union, models)
+        fnterms = mapreduce(x -> x.fnterms, union, models)
+        tbl = Table(; (nmterms .=> map(x -> eval(x).(analytes), fnterms))...)
+    end
     anova(map(f -> f(tbl), models)...)
 end
 """
@@ -170,21 +243,21 @@ end
 Create predition function for clusters.
 
 # Keyword argument
-Any suntypes of `ClassSP`. The key represents class that is going to be assigned to other class. The value is the assigned class.
+Any subtypes of `ClassSP`. The key represents class that is going to be assigned to other class. The value is the assigned class.
 """
 function predfn_clusters!(project::Project; replaces...)
-    replaces = @p pairs(Dictionary(replaces)) map(eval(first(_))() => last(_)()) filter(in(last(_), project.appendix[:clusters_model].mf.schema.schema[Term(:cluster)].contrasts.levels))
+    replaces = @p pairs(Dictionary(replaces)) map(eval(first(_))() => last(_)()) filter(in(last(_), project.appendix[:clusters_model].model.mf.schema.schema[Term(:cluster)].contrasts.levels))
     function fn(model, analyte::AnalyteSP, rt_tol)
         cluster = replace!(ClassSP[deisomerized(class(analyte))], replaces...)[1]
-        in(cluster, model.mf.schema.schema[Term(:cluster)].contrasts.levels) ?
-            abs(rt(analyte) - predict(model, [(mw = mw(analyte), cluster = cluster)])[1]) <= rt_tol : false
+        in(cluster, model.model.mf.schema.schema[Term(:cluster)].contrasts.levels) ?
+            abs(rt(analyte) - predict(model.model, [(mw = mw(analyte), cluster = cluster)])[1]) <= rt_tol : false
     end
     haskey(project.appendix, :clusters_predict) && delete!(project.appendix, :clusters_predict)
     insert!(project.appendix, :clusters_predict, fn)
     project
 end
 """
-expand_clusters!(project::Project; rt_tol = 1)
+    expand_clusters!(project::Project; rt_tol = 1)
 
 Expand each cluster by `project.appendix[:clusters_predict]`.
 """
@@ -207,7 +280,7 @@ Display clusters.
 """
 function show_clusters(project::Project)
     printstyled("Current clusters:\n", color = :green)
-    display(project.clusters)
+    display(get(project.appendix, :clusters, Dictionary{ClassSP, Vector{Int}}()))
     println()
     printstyled("Possible clusters:\n", color = :green)
     display(get(project.appendix, :clusters_possible, Dictionary{ClassSP, Vector{Vector{Int}}}()))
@@ -221,30 +294,111 @@ end
 
 Replace old clusters with `new_clusters`.
 """
-replace_clusters!(project::Project, new_clusters = project.appendix[:clusters_candidate]) = (empty!(project.clusters); update_clusters!(project, new_clusters))
+replace_clusters!(project::Project, new_clusters = project.appendix[:clusters_candidate]) = (empty!(get!(project.appendix, :clusters, Dictionary{ClassSP, Vector{Int}}())); update_clusters!(project, new_clusters))
 """
     update_clusters!(project::Project, new_clusters = project.appendix[:clusters_candidate])
 
-Update `project.clusters` with `new_clusters`.
+Update `project.appendix[:clusters]` with `new_clusters`.
 """
 function update_clusters!(project::Project, new_clusters = project.appendix[:clusters_candidate])
-    @p pairs(new_clusters) foreach(union!(get!(project.clusters, _[1], Int[]), _[2]))
+    clusters = get!(project.appendix, :clusters, Dictionary{ClassSP, Vector{Int}}())
+    @p pairs(new_clusters) foreach(union!(get!(clusters, _[1], Int[]), _[2]))
     printstyled("Updated clusters:\n", color = :green)
-    display(project.clusters)
+    display(clusters)
     println()
     project
 end
-"""
-    apply_clusters!(aquery::AbstractQuery; kwargs...)
-    apply_clusters!(project::Project; analytes = project.analytes)
 
-Apply the clusters to each analytes. `analyte.states[states_id(:rt)]` is set as `1` if the analyte is in the correct cluster; `-1` if the analyte is in a wrong cluster; `0` if there is no cluster for the class. 
-"""
 apply_clusters!(aquery::AbstractQuery; kwargs...) = (apply_clusters!(aquery.project; analytes = aquery.result, kwargs...); aquery)
 function apply_clusters!(project::Project; analytes = project.analytes)
     for (i, analyte) in enumerate(analytes)
         cls = deisomerized(class(analyte))
-        analyte.states[states_id(:rt)] = in(cls, keys(project.clusters)) ? (in((first ∘ parentindices)(analytes)[i], project.clusters[cls]) ? 1 : -1) : 0
+        analyte.states[states_id(:rt)] = in(cls, keys(project.appendix[:clusters])) ? (in((first ∘ parentindices)(analytes)[i], project.appendix[:clusters][cls]) ? 1 : -1) : 0
     end
     project
+end
+"""
+    apply_rt!(aquery::AbstractQuery; kwargs...)
+    apply_rt!(project::Project; analytes = project.analytes, atol = 0.5, rtol = 0.05)
+
+Apply rt prediction to each analytes. `analyte.states[states_id(:rt)]` is set as `1` if the prediction error is under certain value; `-1` if the prediction error is too large; `0` if there is no prediction can be made. Prediction is based on `project.appendix[:rt_model]`.
+"""
+apply_rt!(aquery::AbstractQuery; kwargs...) = (apply_rt!(aquery.project; analytes = aquery.result, kwargs...); aquery)
+function apply_rt!(project::Project; analytes = project.analytes, atol = 0.5, rtol = 0.05)
+    tbl = Table(; (project.appendix[:rt_model].fn.nmterms .=> map(x -> eval(x).(analytes), project.appendix[:rt_model].fn.fnterms))...)
+    include_id = find_predictable(project.appendix[:rt_model].model, tbl)
+    ŷ = predict(project.appendix[:rt_model].model, tbl[include_id])
+    y = @view getproperty(tbl, first(propertynames(tbl)))[include_id]
+    for (v, v̂, analyte) in zip(y, ŷ, view(analytes, include_id))
+        analyte.states[states_id(:rt)] = (abs(v - v̂) < atol || abs(v - v̂) / v < rtol) ? 1 : -1
+    end
+    project
+end
+
+function find_predictable(model, tbl)
+    sch = model.mf.schema
+    toval = [name for name in propertynames(tbl) if isa(get(sch, Term(name), nothing), CategoricalTerm)]
+    todel = Int[]
+    for name in toval
+        level = sch[Term(name)].contrasts.levels
+        union!(todel, findall(!in(level), getproperty(tbl, name)))
+    end
+    setdiff(eachindex(tbl), todel)
+end
+"""
+    predict_rt(analyte::AnalyteSP)
+    predict_rt(analytes::AbstractVector{AnalyteSP})
+
+Predict rt of analyte(s) based on `project.appendix[:rt_model]`. If prediction is not available, it returns `nothing`.
+"""
+function predict_rt(analyte::AnalyteSP)
+    project = last(analyte).project
+    tbl = Table(; (project.appendix[:rt_model].fn.nmterms .=> map(x -> eval(x).([analyte]), project.appendix[:rt_model].fn.fnterms))...)
+    sch = project.appendix[:rt_model].model.mf.schema
+    toval = [name for name in propertynames(tbl) if isa(get(sch, Term(name), nothing), CategoricalTerm)]
+    for name in toval
+        level = sch[Term(name)].contrasts.levels
+        any(!in(level), getproperty(tbl, name)) && return nothing
+    end
+    predict(project.appendix[:rt_model].model, tbl)
+end
+function predict_rt(analytes::AbstractVector{AnalyteSP})
+    project = last(first(analytes)).project
+    tbl = Table(; (project.appendix[:rt_model].fn.nmterms .=> map(x -> eval(x).(analytes), project.appendix[:rt_model].fn.fnterms))...)
+    include_id = find_predictable(project.appendix[:rt_model].model, tbl)
+    ŷ = Vector{Union{Float64, Nothing}}(undef, length(tbl))
+    fill!(ŷ, nothing)
+    ŷ[include_id] .= predict(project.appendix[:rt_model].model, tbl[include_id])
+end
+"""
+    err_rt(analyte::AnalyteSP)
+    err_rt(analytes::AbstractVector{AnalyteSP})
+
+Compute the error of rt predition based on `project.appendix[:rt_model]`. If prediction is not available, it returns `nothing`.
+"""
+function err_rt(analyte::AnalyteSP)
+    prt = predict_rt(analyte)
+    isnothing(prt) ? prt : prt[1] - analyte.rt
+end
+function err_rt(analytes::AbstractVector{AnalyteSP})
+    ŷs = predict_rt(analytes::AbstractVector{AnalyteSP})
+    map(analytes, ŷs) do analyte, ŷ
+        isnothing(ŷ) ? nothing : ŷ - analyte.rt
+    end
+end
+"""
+    abs_err_rt(analyte::AnalyteSP)
+    abs_err_rt(analytes::AbstractVector{AnalyteSP})
+
+Compute the absolute error of rt predition based on `project.appendix[:rt_model]`. If prediction is not available, it returns `nothing`.
+"""
+function abs_err_rt(analyte::AnalyteSP)
+    v = err_rt(analyte)
+    isnothing(v) ? v : abs(v)
+end
+function abs_err_rt(analytes::AbstractVector{AnalyteSP})
+    vs = err_rt(analytes)
+    map(vs) do v
+        isnothing(v) ? v : abs(v)
+    end
 end

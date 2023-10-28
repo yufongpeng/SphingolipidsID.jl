@@ -17,13 +17,52 @@ end
 """
     file_order(tbl::Table)
 
-Return unique `tbl.datafile` for filling CE or mz2 by the order.
+Return unique `tbl.datafile` for filling CE, mz2 or m/z range by the order.
 """
 file_order(tbl::Table) = in(:datafile, propertynames(tbl)) ? unique(tbl.datafile) : throw(ArgumentError("This table doesn't contain datafile."))
 
 """
-    fill_mz2!(tbl::Table, mz2::Union{<: Vector, <: Tuple})
-    fill_mz2!(tbl::Table, mz2::Dict)
+    fill_polarity!(tbl::Table, polarity::Union{<: AbstractVector, <: Tuple})
+    fill_polarity!(tbl::Table, polarity::Union{<: AbstractDictionary, <: AbstractDict})
+    fill_polarity!(tbl::Table, polarity::Bool)
+
+Fill column `polarity` with `polarity`.
+
+If the input is not a number, it requires that column `datafile` exists and uses the order or values as keys to assign polarity.
+
+When the input is a `Vector` or `Tuple`, the values should represent polarity of each data file in the order as same as `file_order(tbl)`.
+"""
+function fill_polarity!(tbl::Table, polarity)
+    mapping = datafile_mapping(tbl, polarity)
+    tbl.polarity .= getindex.(Ref(mapping), tbl.datafile)
+    tbl
+end
+
+function fill_polarity!(tbl::Table, polarity::Bool)
+    fill!(tbl.polarity, polarity)
+    tbl
+end
+
+"""
+    fill_polarity(tbl::Table, polarity::Union{<: AbstractVector, <: Tuple})
+    fill_polarity(tbl::Table, polarity::Union{<: AbstractDictionary, <: AbstractDict})
+    fill_polarity(tbl::Table, polarity::Bool)
+
+Create a table with column `polarity` and fill it with `polarity`.
+
+See `fill_polarity!`.
+"""
+function fill_polarity(tbl::Table, polarity)
+    mapping = datafile_mapping(tbl, polarity)
+    Table(tbl; polarity = getindex.(Ref(mapping), tbl.datafile))
+end
+
+fill_polarity(tbl::Table, polarity::Bool) = 
+    Table(tbl; polarity = repeat([polarity], length(tbl)))
+
+"""
+    fill_mz2!(tbl::Table, mz2::Union{<: AbstractVector, <: Tuple})
+    fill_mz2!(tbl::Table, mz2::Union{<: AbstractDictionary, <: AbstractDict})
     fill_mz2!(tbl::Table, mz2::Float64)
 
 Fill column `mz2` with `mz2`.
@@ -32,16 +71,9 @@ If the input is not a number, it requires that column `datafile` exists and uses
 
 When the input is a `Vector` or `Tuple`, the values should represent mz2 of each data file in the order as same as `file_order(tbl)`.
 """
-function fill_mz2!(tbl::Table, mz2::Union{<: Vector, <: Tuple})
-    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
-    mapping = Dict(unique(tbl.datafile) .=> mz2)
+function fill_mz2!(tbl::Table, mz2)
+    mapping = datafile_mapping(tbl, mz2)
     tbl.mz2 .= getindex.(Ref(mapping), tbl.datafile)
-    tbl
-end
-
-function fill_mz2!(tbl::Table, mz2::Dict)
-    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
-    tbl.mz2 .= getindex.(Ref(mz2), tbl.datafile)
     tbl
 end
 
@@ -51,32 +83,107 @@ function fill_mz2!(tbl::Table, mz2::Float64)
 end
 
 """
-    fill_ce!(tbl::Table, ce::Union{<: Vector, <: Tuple})
-    fill_ce!(tbl::Table, ce::Dict)
+    fill_mz2(tbl::Table, mz2::Union{<: AbstractVector, <: Tuple})
+    fill_mz2(tbl::Table, mz2::Union{<: AbstractDictionary, <: AbstractDict})
+    fill_mz2(tbl::Table, mz2::Float64)
+    
+Create a table with column `mz2` and fill it with `mz2`.
+
+See `fill_mz2!`.
+"""
+function fill_mz2(tbl::Table, mz2)
+    mapping = datafile_mapping(tbl, mz2)
+    Table(tbl; mz2 = getindex.(Ref(mapping), tbl.datafile))
+end
+
+fill_mz2(tbl::Table, mz2::Float64) = 
+    Table(tbl; mz2 = repeat([mz2], length(tbl)))
+
+"""
+    fill_ce!(tbl::Table, ce::Union{<: AbstractVector, <: Tuple})
+    fill_ce!(tbl::Table, ce::Union{<: AbstractDictionary, <: AbstractDict})
     fill_ce!(tbl::Table, ce::Float64)
 
-Fill column `ce` with `ce`.
+Fill column `collision_energy` with `ce`.
 
 If the input is not a number, it requires that column `datafile` exists and uses the order or values as keys to assign ce.
 
 When the input is a `Vector` or `Tuple`, the values should represent ce of each data file in the order as same as `file_order(tbl)`.
 """
-function fill_ce!(tbl::Table, ce::Union{<: Vector, <: Tuple})
-    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
-    mapping = Dict(unique(tbl.datafile) .=> ce)
+function fill_ce!(tbl::Table, ce)
+    mapping = datafile_mapping(tbl, ce)
     tbl.collision_energy .= getindex.(Ref(mapping), tbl.datafile)
-    tbl
-end
-
-function fill_ce!(tbl::Table, ce::Dict)
-    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
-    tbl.collision_energy .= getindex.(Ref(ce), tbl.datafile)
     tbl
 end
 
 function fill_ce!(tbl::Table, ce::Float64)
     fill!(tbl.collision_energy, ce)
     tbl
+end
+
+"""
+    fill_ce(tbl::Table, ce::Union{<: AbstractVector, <: Tuple})
+    fill_ce(tbl::Table, ce::Union{<: AbstractDictionary, <: AbstractDict})
+    fill_ce(tbl::Table, ce::Float64)
+
+Create a table with column `collision_energy` and fill it with `ce`.
+
+See `fill_ce!`.
+"""
+function fill_ce(tbl::Table, ce)
+    mapping = datafile_mapping(tbl, ce)
+    Table(tbl; collision_energy = getindex.(Ref(mapping), tbl.datafile))
+end
+
+fill_ce(tbl::Table, ce::Float64) = 
+    Table(tbl; collision_energy = repeat([ce], length(tbl)))
+
+"""
+    fill_range!(tbl::Table, mzr::Union{<: AbstractVector, <: Tuple})
+    fill_range!(tbl::Table, mzr::Union{<: AbstractDictionary, <: AbstractDict})
+    fill_range!(tbl::Table, mzr::RealIntervals)
+
+Fill column `mz_range` with `mzr`.
+
+If the input is not a interval, it requires that column `datafile` exists and uses the order or values as keys to assign ce.
+
+When the input is a `Vector` or `Tuple`, the values should represent ce of each data file in the order as same as `file_order(tbl)`.
+"""
+function fill_range!(tbl::Table, mzr)
+    mapping = datafile_mapping(tbl, mzr)
+    tbl.mz_range .= getindex.(Ref(mapping), tbl.datafile)
+    tbl
+end
+
+function fill_range!(tbl::Table, mzr::RealIntervals)
+    fill!(tbl.mz_range, mzr)
+    tbl
+end
+
+"""
+    fill_range(tbl::Table, mzr::Union{<: AbstractVector, <: Tuple})
+    fill_range(tbl::Table, mzr::Union{<: AbstractDictionary, <: AbstractDict})
+    fill_range(tbl::Table, mzr::RealIntervals)
+
+Create a table with column `mz_range` and fill it with `mzr`.
+
+See `fill_range!`.
+"""
+function fill_range(tbl::Table, mzr)
+    mapping = datafile_mapping(tbl, mzr)
+    Table(tbl; mz_range = getindex.(Ref(mapping), tbl.datafile))
+end
+
+fill_range(tbl::Table, mzr::RealIntervals) = 
+    Table(tbl; mz_range = repeat([mzr], length(tbl)))
+
+function datafile_mapping(tbl::Table, data::Union{<: AbstractVector, <: Tuple})
+    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
+    Dictionary(unique(tbl.datafile), data)
+end
+function datafile_mapping(tbl::Table, data::Union{<: AbstractDictionary, <: AbstractDict})
+    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
+    data
 end
 
 """
@@ -94,42 +201,94 @@ re(v) =  - foldl(-, extrema(v)) / mean(v) / 2
 default_error(v) = length(v) > 2 ? rsd(v) : re(v)
 
 """
-    filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5)
+    split_datafile(tbl::Table; name = r"(.*)-r\\d*\\.(?:d|mzML)", rep = r".*-r(\\d*)\\.(?:d|mzML)")
+Split the feature table accoding to data file name. `name` specifies the name pattern, and the resulting name will be the keys of the dictionary. `rep` specifies the repeating pattern, and will be furhter parsed as integer. If `rep` is nothing, the column `:datafile` will be removed; otherwise, the resulting number will be stored in this column.
+"""
+function split_datafile(tbl::Table; name = r"(.*)-r\d*\.(?:d|mzML)", rep = r".*-r(\d*)\.(?:d|mzML)")
+    datafile = (@p tbl.datafile map(match(name, _)[1]))
+    id = findall(!isnothing, datafile)
+    tbl = tbl[id]
+    tbl = Table(tbl; datafile = isnothing(rep) ? nothing : (@p tbl.datafile map(parse(Int, match(rep, _)[1]))))
+    group(datafile[id], tbl)
+end
+
+"""
+    filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err_fn = default_error, err_tol = 0.5)
 
 Filter out duplicated or unstable data.
 
 * `rt_tol`: maximum allowable difference in retention time for two compounds to consider them as the same.
 * `mz_tol`: maximum allowable difference in m/z for two compounds to consider them as the same.
-* `err`: error function. If the length is three or above, the default is `rsd`; otherwise, it is `re`. 
+* `n`: minimal number of detection. The default is 3.
+* `signal`: `:area` or `:height` for concentration estimation. The default is `:area`.
+* `est_fn`: estimation function for calculating estimated value. The default is `mean`.
+* `err_fn`: error function. If the length is three or above, the default is `rsd`; otherwise, it is `re`. 
 * `err_tol`: maximum allowable signal error.
+* `other_fn`: a `Dictionary` specifying functions for calculating other signal information.
 """
-function filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err = default_error, err_tol = 0.5)
-    tbl = Table(tbl; datafile = nothing)
+function filter_duplicate!(tbl::Table; 
+                            raw_id = false,
+                            rt_tol = 0.1, 
+                            mz_tol = 0.35, 
+                            n = 3, 
+                            signal = :area,
+                            est_fn = mean, 
+                            err_fn = default_error, 
+                            err_tol = 0.5,
+                            other_fn = Dictionary{Symbol, Any}([:mz_range, :polarity, :datafile], [splat(union), only ∘ unique, nothing]))
     sort!(tbl, [:mz2, :mz1, :rt])
-    fill!(tbl.id, 0)
-    locs = Vector{Int}[]
-    for (i, ft) in enumerate(tbl)
-        new = true
-        for loc in locs
-            abs(mean(tbl.rt[loc]) - ft.rt) > rt_tol && continue
-            abs(mean(tbl.mz1[loc]) - ft.mz1) > mz_tol && continue
-            abs(mean(tbl.mz2[loc]) - ft.mz2) > mz_tol && continue
-            tbl.collision_energy[loc[1]] == ft.collision_energy || continue
-            push!(loc, i)
-            new = false
-            break
+    calc_signal = isa(signal, Symbol) || false
+    gids = groupfind(x -> round.(getproperty(x, :mz2); digits = -floor(Int, log10(mz_tol))), tbl)
+    locs = mapreduce(∪, collect(gids)) do ids
+        locs = Vector{Int}[]
+        for i in ids
+            rrt = tbl.rt[i]
+            rmz1 = tbl.mz1[i]
+            rmz2 = tbl.mz2[i]
+            rcollision_energy = tbl.collision_energy[i]
+            new = true
+            for loc in locs
+                abs(mean(tbl.rt[loc]) - rrt) > rt_tol && continue
+                abs(mean(tbl.mz1[loc]) - rmz1) > mz_tol && continue
+                abs(mean(tbl.mz2[loc]) - rmz2) > mz_tol && continue
+                tbl.collision_energy[loc[1]] == rcollision_energy || continue
+                push!(loc, i)
+                new = false
+                break
+            end
+            new && push!(locs, [i])
         end
-        new && push!(locs, [i])
+        locs
     end
-    n > 1 && filter!(loc -> (length(loc) >= n && err(tbl.area[loc]) <= err_tol), locs)
+    calc_signal && n > 1 && filter!(loc -> (length(loc) >= n && err_fn(getproperty(tbl, signal)[loc]) <= err_tol), locs)
+    if raw_id
+        ids = map(loc -> tbl.id[loc], locs)
+    end
+    #@p tbl |> DataFrame |> groupby(__, :id) |> combine(__, All() .=> mean, :area => err => :error, renamecols = false) |> Table
+    del = [k for (k, v) in pairs(other_fn) if isnothing(v)]
+    tbl = Table(tbl; (del .=> nothing)...)
+    calc_signal && set!(other_fn, signal, est_fn)
+    get!(other_fn, :id, only ∘ unique)
+    for k in propertynames(tbl)
+        get!(other_fn, k, mean)
+    end
+    fill!(tbl.id, 0)
     for (i, loc) in enumerate(locs)
         tbl.id[loc] .= i
     end
     @p tbl filter!(>(_.id, 0))
-    #@p tbl |> DataFrame |> groupby(__, :id) |> combine(__, All() .=> mean, :area => err => :error, renamecols = false) |> Table
     gtbl = @p tbl groupview(getproperty(:id))
-    errors = @p gtbl map(err(_.area)) collect
-    @p gtbl map(map(mean, columns(Table(_; id = nothing)))) Table(Table(id = unique!(tbl.id)); error = errors)
+    calc_signal && (errors = @p gtbl map(err_fn(getproperty(_, signal))) collect)
+    nt = @p gtbl map(map((k, v) -> k => other_fn[k](v), propertynames(_), columns(_))) map(NamedTuple) 
+    if calc_signal && raw_id
+        Table(nt; error = errors, raw_id = ids)
+    elseif calc_signal
+        Table(nt; error = errors)
+    elseif raw_id
+        Table(nt; raw_id = ids)
+    else
+        Table(nt)
+    end
 end
 
 """

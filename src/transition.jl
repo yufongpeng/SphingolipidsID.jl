@@ -22,8 +22,8 @@ Create a table of MRM transitions.
 * `anion`: `:formate` or `acetate`.
 * `default`: default m/z value.
 """
-mrmtable(project::Project, adduct, product, polarity::Bool; kwargs...) = mrmtable(project.analytes, adduct, product, polarity; kwargs..., anion = project.anion)
-transitiontable(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...) = transitiontable(aquery.result, adduct, product, polarity; kwargs..., anion = aquery.project.anion)
+transitiontable(project::Project, adduct, product, polarity::Bool; kwargs...) = transitiontable(project.analytes, adduct, product, polarity; kwargs..., anion = project.appendix[:anion])
+transitiontable(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...) = transitiontable(aquery.result, adduct, product, polarity; kwargs..., anion = aquery.project.appendix[:anion])
 transitiontable(adduct, product, polarity::Bool, pq::Union{Project, AbstractQuery}; kwargs...) = transitiontable(pq, adduct, product, polarity; kwargs...)
 
 function transitiontable(analytes::AbstractVector{AnalyteSP}, adduct, product, polarity::Bool;

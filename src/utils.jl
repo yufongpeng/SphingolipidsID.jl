@@ -26,11 +26,14 @@ end
     new_project(aquery::AbstractQuery; copy_data = false)
     new_project(project::Project; copy_data = false, analytes = copy_wo_project.(project.analytes))
 
-Create a new project from a query or project with given analytes. `copy_data` determines whether copying the raw data or not.
+Create a new project from a query or project with given analytes. `copy_data` determines whether copying the data or not.
 """
 new_project(aquery::AbstractQuery; copy_data = false) = new_project(aquery.project; copy_data, analytes = aquery.view ? copy_wo_project.(aquery.result) : aquery.result)
 function new_project(project::Project; copy_data = false, analytes = copy_wo_project.(project.analytes))
-    project_new = Project(analytes, copy_data ? deepcopy(project.data) : project.data, project.anion, empty(project.clusters), empty(project.appendix))
+    appendix = empty(project.appendix)
+    insert!(appendix, :anion, project.appendix[:anion])
+    insert!(appendix, :signal, project.appendix[:signal])
+    project_new = Project(analytes, copy_data ? deepcopy(project.data) : project.data, appendix)
     for analyte in project_new
         for cpd in analyte
             cpd.project = project_new
@@ -39,19 +42,68 @@ function new_project(project::Project; copy_data = false, analytes = copy_wo_pro
     project_new
 end
 """
-    between(num::Number, range)
-    between(num::Number; low, up)
-    between(num::Number, value, tol)
+    between(num::Number, range; lop = <=, rop = <=)
+    between(num::Number; low, up, lop = <=, rop = <=)
+    between(num::Number, value, tol; lop = <=, rop = <=)
 
 Determine whether `num` lies in given range. 
 
 The lower bound is `first(range)`, `low`, or `value - tol`; the upper bound is `last(range)`, `up`, or `value + tol`. 
 
-It is inclusive on both sides.
+`lop` and `rop` determine the operators for the lower bound and upper bound respectively.
 """
-between(num::Number, range) = first(range) <= num <= last(range)
-between(num::Number; low, up) = low <= num <= up
-between(num::Number, value, tol) = value - tol <= num <= value + tol
+between(num::Number, range; lop = <=, rop = <=) = lop(first(range), num) && rop(num, last(range))
+between(num::Number; low, up, lop = <=, rop = <=) = lop(low, num) && rop(num, up)
+between(num::Number, value, tol; lop = <=, rop = <=) = lop(value - tol, num) && rop(num, value + tol)
+"""
+    @ri_str -> RealInterval
+
+Create a `RealInterval` by mathematical real interval notation.
+
+# Examples
+```julia
+julia> f = ri"[4, 7)"
+(::SphingolipidsID.RealInterval) (generic function with 1 method)
+
+julia> f(4)
+true
+
+julia> f(7)
+false
+```
+"""
+macro ri_str(expr)
+    lc, lv, rv, rc = match(r" *([\(\[]) *([+-]*[\d∞]*\.*\d*) *, *([+-]*[\d∞]*\.*\d*) *([\)\]]) *", expr)
+    lop = @match lc begin
+        "[" => <=
+        "(" => <
+    end
+    rop = @match rc begin
+        "]" => <=
+        ")" => <
+    end
+    lv = @match lv begin
+        "+∞"    => Inf
+        "∞"     => Inf
+        "-∞"    => -Inf
+        if occursin(".", lv) end   => parse(Float64, lv)
+        _       => parse(Int, lv)
+    end
+    rv = @match rv begin
+        "+∞"    => Inf
+        "∞"     => Inf
+        "-∞"    => -Inf
+        if occursin(".", rv) end   => parse(Float64, rv)
+        _       => parse(Int, rv)
+    end
+    return real_interval(lv, rv, lop, rop)
+end
+function real_interval(lb, ub, lop, rop)
+    lop(lb, ub) || return EmptyInterval()
+    rop(lb, ub) || return EmptyInterval()
+    RealInterval(lb, ub, lop, rop)
+end
+
 """
     intersection(range...)
     intersection(range::AbstractVector)
@@ -65,7 +117,7 @@ intersection(ranges::AbstractVector) = (maximum(first(r) for r in ranges), minim
 
 Calculate retention time.
 """
-calc_rt(analyte::AnalyteSP) = mean(mean(query_raw(cpd.project, fragments.source, fragments.id).rt for fragments in cpd.fragments) for cpd in analyte)
+calc_rt(analyte::AnalyteSP) = mean(mean(query_data(cpd.project, fragments.source, fragments.id).rt for fragments in cpd.fragments) for cpd in analyte)
 """
     states_id
 
@@ -78,6 +130,7 @@ states_id = @λ begin
     :error  => 4
     :isf    => 5
     :total  => 6
+    :manual => 7
 end
 # user interface for query
 """
@@ -220,6 +273,23 @@ isomer_tuple(cls::ClassSP) = hasisomer(cls) ? cls.isomer : (cls, )
 
 # instance api
 """
+    cluster(analyte::AnalyteSP)
+
+Return the cluster `analyte` belongs to. If none, it returns an empty array.
+"""
+function cluster(analyte::AnalyteSP)
+    cls = deisomerized(class(analyte))
+    project = last(analyte).project
+    clusters = project.appendix[:clusters]
+    in(cls, keys(clusters)) && in(findfirst(==(analyte), project), clusters[cls]) ? clusters[cls] : Int[]
+end
+"""
+    incluster(analyte::AnalyteSP)
+
+Whether `analyte` belongs to a cluster or not.
+"""
+incluster(analyte::AnalyteSP) = !isempty(cluster(analyte))
+"""
     class(analyte::AnalyteSP)
     class(cpd::CompoundID)
 
@@ -353,6 +423,13 @@ nox(ion::Ion{ProtonationNLH2O}) = nox(ion.molecule) - 1
 nox(ion::Ion{ProtonationNL2H2O}) = nox(ion.molecule) - 2
 nox(ion::Ion{ProtonationNL3H2O}) = nox(ion.molecule) - 3
 
+for fn in [:ncb, :ndb, :nox, :ndbox]
+    @eval $fn(::Nothing) = nothing
+end
+
+allow_unknown(f::T) where {T <: Function} = FunctionalFunction(allow_unknown, f, x -> isnothing(x) || f(x))
+only_known(f::T) where {T <: Function} = FunctionalFunction(only_known, f, x -> !isnothing(x) && f(x))
+
 # internal
 is4e(sc::LCB) = nox(sc) < 3
 is4e(sc::LCB2) = nox(sc) < 2
@@ -421,7 +498,7 @@ function _merge_nt(old, new, p; tosum = (:n, ), toold = (:id, ), tonew = ())
     elseif p in tonew
         getproperty(new, p)
     else
-        (old.n * getproperty(old, p) + new.n) / (old.n + new.n)
+        (old.n * getproperty(old, p) + new.n * getproperty(new, p)) / (old.n + new.n)
     end
 end
 

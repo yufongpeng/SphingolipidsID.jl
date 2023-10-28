@@ -56,14 +56,14 @@ end
 Create a score function based on analyte.
 
 * `targetobjective`: the target of score.
-    * `:all`: sum up all states except `:total`.
+    * `:all`: sum up all states except `:total` and `:manual`.
     * `target::Symbol`: use the state of `target`.
     * `target::Vector`: sum up selected states. 
     * `anything => objective`: use objective which is a 1-arg function taking analyte as input and returning a number.
 """
 macro score(targetobjective)
     target, objective = @match targetobjective begin
-        :all                                    => (:all, :(x -> sum(x.states[1:end - 1])))
+        :all                                    => (:all, :(x -> sum(x.states[1:end - 2])))
         target::Symbol                          => (target, :(x -> x.states[states_id[target]]))
         target::Vector                          => (target, :(x -> sum(x.states[states_id[i]] for i in target)))
         Expr(:call, :(=>), target, objective)   => (target, objective)

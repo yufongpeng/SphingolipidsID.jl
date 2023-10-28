@@ -80,6 +80,66 @@ reverse!(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = re
 reverse(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reverse!(copy_wo_project(analyte), start, stop)
 reverse!(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reverse!(analyte.compounds, start, stop)
 
+in(x::Number, ri::EmptyInterval) = false
+in(x::Number, ri::RealInterval) = between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator)
+in(x::Number, ui::UnionInterval) = any(ri -> between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator), ui.intervals)
+
+function union(ris::Vararg{<: RealIntervals, N}) where N
+    vri = RealInterval[]
+    for ri in ris
+        @match ri begin
+            ::UnionInterval => union!(vri, ri.intervals)
+            ::RealInterval  => push!(vri, ri)
+            ::EmptyInterval => nothing
+        end
+    end
+    unique!(vri)
+    sort!(vri)
+    nvri = RealInterval[]
+    i = 1
+    push!(nvri, vri[1])
+    while i < length(vri)
+        i += 1
+        if nvri[end].upperbound in vri[i]
+            nvri[end] = RealInterval(nvri[end].lowerbound, vri[i].upperbound, nvri[end].leftoperator, vri[i].rightoperator)
+        elseif vri[i].lowerbound in nvri[end]
+            if nvri[end].upperbound == vri[i].lowerbound
+                nvri[end] = RealInterval(nvri[end].lowerbound, vri[i].upperbound, nvri[end].leftoperator, vri[i].rightoperator)
+            end
+        else
+            push!(nvri, vri[i])
+        end
+    end
+    length(nvri) == 1 ? nvri[1] : UnionInterval(Tuple(nvri))
+end
+
+intersect(ris::Vararg{<: Union{RealInterval, UnionInterval}, N}) where N = reduce(intersect, ris)
+intersect(ri1::EmptyInterval, ri2::RealIntervals) = EmptyInterval()
+intersect(ri1::RealIntervals, ri2::EmptyInterval) = EmptyInterval()
+intersect(ri1::EmptyInterval, ri2::EmptyInterval) = EmptyInterval()
+
+function intersect(ri1::RealInterval, ri2::RealInterval)
+    ri1 === ri2 && return ri1
+    if ri1 > ri2
+        ri1, ri2 = ri2, ri1
+    end
+    if !xor((ri2.rightoperator)(ri1.upperbound, ri2.upperbound), (ri1.rightoperator)(ri2.upperbound, ri1.upperbound))
+        return ri2
+    elseif ri1.upperbound == ri2.upperbound
+        return (ri2.rightoperator)(ri1.upperbound, ri2.upperbound) ? RealInterval(ri2.lowerbound, ri1.upperbound, ri2.leftoperator, ri1.rightoperator) : ri2
+    elseif (ri1.rightoperator)(ri2.upperbound, ri1.upperbound)
+        return ri2
+    elseif (ri2.leftoperator)(ri2.lowerbound, ri1.upperbound) && (ri1.rightoperator)(ri2.lowerbound, ri1.upperbound)
+        return RealInterval(ri2.lowerbound, ri1.upperbound, ri2.leftoperator, ri1.rightoperator)
+    else 
+        return EmptyInterval()
+    end
+end
+
+intersect(ri1::UnionInterval, ri2::RealInterval) = union((intersect(ri, ri2) for ri in ri1)...)
+intersect(ri1::RealInterval, ri2::UnionInterval) = union((intersect(ri1, ri) for ri in ri2)...)
+intersect(ri1::UnionInterval, ri2::UnionInterval) = union((intersect(ria, rib) for ria in ri1, rib in ri2)...)
+    
 function union!(qs::Vararg{Query, N}) where N
     q = qs[1]
     length(qs) <= 1 && return q
@@ -106,8 +166,8 @@ function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::SumChain)
     cpd1 = analyte[id]
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
-    _, i = findmax((cpd1.area[1], cpd2.area[1]))
-    cpd1.area = i ≡ 1 ? cpd1.area : cpd2.area
+    _, i = findmax((cpd1.signal[1], cpd2.signal[1]))
+    cpd1.signal = i ≡ 1 ? cpd1.signal : cpd2.signal
     analyte
 end
 
@@ -131,8 +191,8 @@ function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::ChainSP)
     cpd1 = _union!(analyte, id, chain(analyte[id]), chain(cpd2))
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
-    _, i = findmax((cpd1.area[1], cpd2.area[1]))
-    cpd1.area = i ≡ 1 ? cpd1.area : cpd2.area
+    _, i = findmax((cpd1.signal[1], cpd2.signal[1]))
+    cpd1.signal = i ≡ 1 ? cpd1.signal : cpd2.signal
     @p analyte sort!(; lt = isless_class)
     analyte.rt = calc_rt(analyte)
     analyte
@@ -155,8 +215,8 @@ _union!(cpd1::CompoundID, cpd2::CompoundID, ::ChainSP, sc::ChainSP) =
 function union!(cpd1::CompoundSP, cpd2::CompoundSP)
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
-    _, i = findmax((cpd1.area[1], cpd2.area[1]))
-    cpd1.area = i ≡ 1 ? cpd1.area : cpd2.area
+    _, i = findmax((cpd1.signal[1], cpd2.signal[1]))
+    cpd1.signal = i ≡ 1 ? cpd1.signal : cpd2.signal
     _union!(cpd1, cpd2, cpd1.chain, cpd2.chain)
 end
 
@@ -174,7 +234,7 @@ function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 
     analyte1
 end
 
-getproperty(reuseable::ReUseable, sym::Symbol) = sym ≡ :query ? getfield(reuseable, :query) : getfield(getfield(reuseable, :query), sym)
+getproperty(reusable::ReusableQuery, sym::Symbol) = sym ≡ :query ? getfield(reusable, :query) : getfield(getfield(reusable, :query), sym)
 
 convert(::Type{CompoundSPVanilla}, cpd::CompoundSP) = CompoundSPVanilla(cpd.class, cpd.chain, cpd.fragments)
 convert(::Type{CompoundSP}, cpd::CompoundSPVanilla) = CompoundSP(cpd.class, cpd.chain, cpd.fragments)
@@ -247,8 +307,9 @@ iscompatible(sc1::Acyl, sc2::ACYL) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(sc1::ACYL, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(ion::Ion, cpd::CompoundID) = iscomponent(ion, cpd)
 
-copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, deepcopy(cpd.fragments), cpd.area, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
-copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), analyte.cpdsc, analyte.score, analyte.manual_check)
+copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, deepcopy(cpd.fragments), cpd.signal, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
+copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), analyte.cpdsc, analyte.score)
+copy_wo_project(project::Project) = Project(copy_wo_project.(project.analytes), deepcopy(project.data), deepcopy(project.appendix))
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
 reuse_copy(aquery::Query) = Query(aquery.project, reuse_copy(aquery.result), deepcopy(aquery.query), true)
 reuse_copy(v::Vector) = copy(v)
@@ -302,6 +363,19 @@ isless_ion(a, b) = isless(a, b)
 
 isless_nan_min(a, b) = isnan(a) || !isnan(b) && isless(a, b)
 isless_nan_max(a, b) = isnan(b) || !isnan(a) && isless(a, b)
+
+function isless(x::RealInterval, y::RealInterval)
+    x.lowerbound < y.lowerbound && return true
+    x.lowerbound > y.lowerbound && return false
+    xor((x.leftoperator)(x.lowerbound, y.lowerbound), (y.leftoperator)(x.lowerbound, y.lowerbound)) && return (x.leftoperator)(x.lowerbound, y.lowerbound)
+    x.upperbound < y.upperbound && return true
+    x.upperbound > y.upperbound && return false
+    xor((x.rightoperator)(x.upperbound, y.upperbound), (y.rightoperator)(x.upperbound, y.upperbound)) && return (y.rightoperator)(x.upperbound, y.upperbound)
+    false
+end
+
+isequal(x::RealInterval, y::RealInterval) = 
+    x.lowerbound == y.lowerbound && x.upperbound == y.upperbound && !xor((x.rightoperator)(x.upperbound, y.upperbound), (y.rightoperator)(x.upperbound, y.upperbound))
 
 sort(tbl::Table, i::Symbol; kwargs...) = tbl[sortperm(getproperty(tbl, i); kwargs...)]
 function sort!(tbl::Table, i::Symbol; kwargs...)

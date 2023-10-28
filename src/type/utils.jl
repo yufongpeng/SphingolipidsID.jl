@@ -164,3 +164,73 @@ Taking the negation of attribute `qcmd`.
 struct QueryNot{T} <: QueryCommands
     qcmd::T
 end
+
+abstract type RetentionModelCall end
+"""
+    ModelCall{T} <: RetentionModelCall
+
+Model for retention time prediction. `T` is `true` if `:cluster` is in formula; otherwise `false`. 
+"""
+struct ModelCall{T} <: RetentionModelCall
+    nmterms
+    fnterms
+    fn
+end
+"""
+    CurrentModelCall <: RetentionModelCall
+
+Null struct indicates `project.appendix[:rt_model].fn` or `project.appendix[:clusters_model].fn`.
+"""
+struct CurrentModelCall <: RetentionModelCall end
+(rm::ModelCall)(x) = rm.fn(x)
+"""
+    RetentionModel{P <: RetentionModelCall}
+
+A wrapper for `RetentionModelCall` and fitted model.
+"""
+mutable struct RetentionModel{P <: RetentionModelCall}
+    fn::P
+    model
+    RetentionModel(fn::P) where {P <: RetentionModelCall} = new{P}(fn)
+    RetentionModel(fn::P, model) where {P <: RetentionModelCall} = new{P}(fn, model)
+end
+"""
+    FunctionalFunction{F, G} <: Function
+
+A type for storing original functions for a functional applying to a function.
+* `fl`: a functional.
+* `fn`: a function.
+* `fln`: a function equivalent to `fl(fn)`
+"""
+struct FunctionalFunction{F, G} <: Function
+    fl::F
+    fn::G
+    fln
+end
+(fln::FunctionalFunction)(x...) = fln.fln(x...)
+
+abstract type RealIntervals end
+struct EmptyInterval <: RealIntervals end
+"""
+    RealInterval <: RealIntervals
+
+A type representing a real interval.
+"""
+struct RealInterval <: RealIntervals
+    lowerbound
+    upperbound
+    leftoperator
+    rightoperator
+end
+
+#(ri::RealInterval)(x) = between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator)
+"""
+    UnionInterval{N} <: RealIntervals
+
+A type representing an union of multiple disjoint real intervals.
+"""
+struct UnionInterval{N} <: RealIntervals
+    intervals::NTuple{N, RealInterval}
+end
+
+#(ui::UnionInterval)(x) = any(ri -> between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator), ui.intervals)
