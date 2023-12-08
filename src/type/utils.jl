@@ -222,7 +222,6 @@ struct RealInterval <: RealIntervals
     leftoperator
     rightoperator
 end
-
 #(ri::RealInterval)(x) = between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator)
 """
     UnionInterval{N} <: RealIntervals
@@ -232,5 +231,4 @@ A type representing an union of multiple disjoint real intervals.
 struct UnionInterval{N} <: RealIntervals
     intervals::NTuple{N, RealInterval}
 end
-
 #(ui::UnionInterval)(x) = any(ri -> between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator), ui.intervals)

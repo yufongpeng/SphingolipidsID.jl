@@ -45,7 +45,9 @@ const ADDUCTCODE = read_adduct_code(joinpath(@__DIR__, "..", "config", "ADDUCTCO
 set_db!(:ADDUCTCODE)
 
 repr_adduct(x::Adduct) = SPDB[:ADDUCTCODE].repr[findfirst(==(x), SPDB[:ADDUCTCODE].object)]
+repr_adduct(x::AbstractString) = x
 object_adduct(x::AbstractString) = SPDB[:ADDUCTCODE].object[findfirst(==(x), SPDB[:ADDUCTCODE].repr)]
+object_adduct(x::Adduct) = x
 
 """
     read_class_db(file::String;
@@ -216,6 +218,10 @@ const LIBRARY_POS = reduce(append!, (
     library(GP1, ["[M+2H]2+", "[M+3H]3+"], (34:2:38, 0:4, "O2")),
 ))
 
+push_library!(library::Symbol, cpd::AbstractCompoundID, adduct) = push_library!(SPDB[library], cpd, adduct)
+function push_library!(library::Table, cpd::AbstractCompoundID, adduct)
+    push!(library, (Abbreviation = typeof(class(cpd)), Species = cpd, Formula = compound_formula(cpd), Adduct = repr_adduct(adduct), mz = mz(cpd, adduct)))
+end
 #LIBRARY_NEG
 """
     const FRAGMENT_POS
@@ -226,7 +232,7 @@ const FRAGMENT_POS = let
     frags = [lcb(18, 1, 1), lcb(18, 0, 2),
             lcb(16, 1, 2), lcb(17, 1, 2), lcb(18, 1, 2), lcb(18, 0, 3), lcb(19, 1, 2), lcb(20, 1, 2),
             lcb(16, 2, 2), lcb(18, 2, 2), lcb(18, 1, 3), lcb(20, 2, 2)]
-    ion = map(default_adduct, frags)
+    ion = Ion[default_adduct(f, true) for f in frags]
     append!(ion, [Ion(ProtonationNL2H2O(), NeuAc()),
                     Ion(ProtonationNLH2O(), NeuAc()),
                     HexNAcHex,

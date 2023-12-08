@@ -319,7 +319,7 @@ function apply_clusters!(project::Project; analytes = project.analytes)
 end
 """
     apply_rt!(aquery::AbstractQuery; kwargs...)
-    apply_rt!(project::Project; analytes = project.analytes, atol = 0.5, rtol = 0.05)
+    apply_rt!(project::Project; analytes = project.analytes, atol = 0.25, rtol = 0.05)
 
 Apply rt prediction to each analytes. `analyte.states[states_id(:rt)]` is set as `1` if the prediction error is under certain value; `-1` if the prediction error is too large; `0` if there is no prediction can be made. Prediction is based on `project.appendix[:rt_model]`.
 """
@@ -401,4 +401,34 @@ function abs_err_rt(analytes::AbstractVector{AnalyteSP})
     map(vs) do v
         isnothing(v) ? v : abs(v)
     end
+end
+
+rt_correction(data::Data, quanttable::Table; mz_tol = 0.35, rt_tol = 0.3, wfn = log2, wcol = :area) = rt_correction(quanttable, data; mz_tol, rt_tol, wfn, wcol)
+function rt_correction(quanttable::Table, data::Data; mz_tol = 0.35, rt_tol = 0.3, wfn = log2, wcol = :area)
+    RTCorrection(data, quanttable, map(groupview(x -> class(x.analyte[x.coelution_id]), quanttable)) do tbl
+        rty = [Float64[] for i in eachindex(tbl)]
+        wts = [Float64[] for i in eachindex(tbl)]
+        rtx = tbl.rt
+        for (i, t) in enumerate(tbl)
+            for r in data.table
+                (!between(t.rt, r.rt, rt_tol) || 
+                !between(t.mz1, r.mz1, mz_tol) ||
+                !between(t.mz2, data.mz2[r.mz2_id], mz_tol)) && continue
+                push!(rty[i], r.rt)
+                push!(wts[i], wfn(getproperty(r, wcol)))
+            end
+        end
+        rtx = mapmany(zip(rtx, rty)) do (x, y)
+            repeat([x], length(y))
+        end
+        rty = reduce(vcat, rty)
+        wts = reduce(vcat, wts)
+        sqrtw = diagm(sqrt.(max.(0, wts)))
+        if length(unique(rtx)) > 1
+            m = hcat(ones(Float64, length(rtx)), rtx)
+            (sqrtw * m) \ (sqrtw * rty)
+        else
+            [0, mean(rty, weights(wts)) / first(rtx)]
+        end
+    end)
 end

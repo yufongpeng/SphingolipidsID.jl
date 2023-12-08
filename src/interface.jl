@@ -2,61 +2,67 @@ isempty(::ClassSP) = false
 
 length(project::Project) = length(project.analytes)
 length(aquery::AbstractQuery) = length(aquery.result)
-length(analyte::AnalyteSP) = length(analyte.compounds)
+length(analyte::AbstractAnalyteID) = length(analyte.compounds)
 
 iterate(project::Project) = iterate(project.analytes)
 iterate(project::Project, i) = iterate(project.analytes, i)
 iterate(aquery::AbstractQuery) = iterate(aquery.result)
 iterate(aquery::AbstractQuery, i) = iterate(aquery.result, i)
-iterate(analyte::AnalyteSP) = iterate(analyte.compounds)
-iterate(analyte::AnalyteSP, i) = iterate(analyte.compounds, i)
+iterate(analyte::AbstractAnalyteID) = iterate(analyte.compounds)
+iterate(analyte::AbstractAnalyteID, i) = iterate(analyte.compounds, i)
 
 getindex(project::Project, i) = getindex(project.analytes, i)
 getindex(aquery::AbstractQuery, i) = getindex(aquery.result, i)
-getindex(analyte::AnalyteSP, i) = getindex(analyte.compounds, i)
+getindex(analyte::AbstractAnalyteID, i) = getindex(analyte.compounds, i)
 
 view(project::Project, i) = view(project.analytes, i)
 view(aquery::AbstractQuery, i) = view(aquery.result, i)
-view(analyte::AnalyteSP, i) = view(analyte.compounds, i)
+view(analyte::AbstractAnalyteID, i) = view(analyte.compounds, i)
 
 firstindex(project::Project) = firstindex(project.analytes)
 firstindex(aquery::AbstractQuery) = firstindex(aquery.result)
-firstindex(analyte::AnalyteSP) = firstindex(analyte.compounds)
+firstindex(analyte::AbstractAnalyteID) = firstindex(analyte.compounds)
 
 lastindex(project::Project) = lastindex(project.analytes)
 lastindex(aquery::AbstractQuery) = lastindex(aquery.result)
-lastindex(analyte::AnalyteSP) = lastindex(analyte.compounds)
+lastindex(analyte::AbstractAnalyteID) = lastindex(analyte.compounds)
 
 sort(project::Project; kwargs...) = sort!(deepcopy(project); kwargs...)
 sort!(project::Project; kwargs...) = sort!(project.analytes; kwargs...)
 sort(aquery::AbstractQuery; kwargs...) = sort!(copy_wo_project(aquery); kwargs...)
 sort!(aquery::AbstractQuery; kwargs...) = sort!(aquery.result; kwargs...)
-sort(analyte::AnalyteSP; kwargs...) = sort!(copy_wo_project(analyte); kwargs...)
-sort!(analyte::AnalyteSP; kwargs...) = sort!(analyte.compounds; kwargs...)
+sort(analyte::AbstractAnalyteID; kwargs...) = sort!(copy_wo_project(analyte); kwargs...)
+sort!(analyte::AbstractAnalyteID; kwargs...) = sort!(analyte.compounds; kwargs...)
 
 push!(project::Project, analyte::AnalyteSP) = push!(project.analytes, analyte)
 push!(analyte::AnalyteSP, cpd::CompoundSP) = push!(analyte.compounds, cpd)
+push!(analyte::AnalyteID, cpd::SPID) = push!(analyte.compounds, cpd)
 
 pop!(project::Project) = pop!(project.analytes)
-pop!(analyte::AnalyteSP) = pop!(analyte.compounds)
+pop!(analyte::AbstractAnalyteID) = pop!(analyte.compounds)
 
 popfirst!(project::Project) = popfirst!(project.analytes)
-popfirst!(analyte::AnalyteSP) = popfirst!(analyte.compounds)
+popfirst!(analyte::AbstractAnalyteID) = popfirst!(analyte.compounds)
 
 popat!(project::Project, del::Vector{Int}) = popat!(project.analytes, del)
-popat!(analyte::AnalyteSP, del::Vector{Int}) = popat!(analyte.compounds, del)
+popat!(analyte::AbstractAnalyteID, del::Vector{Int}) = popat!(analyte.compounds, del)
 popat!(project::Project, del::Int) = popat!(project.analytes, del)
-popat!(analyte::AnalyteSP, del::Int) = popat!(analyte.compounds, del)
+popat!(analyte::AbstractAnalyteID, del::Int) = popat!(analyte.compounds, del)
 
 deleteat!(project::Project, del::Vector{Int}) = deleteat!(project.analytes, del)
-deleteat!(analyte::AnalyteSP, del::Vector{Int}) = deleteat!(analyte.compounds, del)
+deleteat!(analyte::AbstractAnalyteID, del::Vector{Int}) = deleteat!(analyte.compounds, del)
 deleteat!(project::Project, del::Int) = deleteat!(project.analytes, del)
-deleteat!(analyte::AnalyteSP, del::Int) = deleteat!(analyte.compounds, del)
+deleteat!(analyte::AbstractAnalyteID, del::Int) = deleteat!(analyte.compounds, del)
 
 deleteat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = deleteat!(parent(analytes), parentindices(analytes)[1][del])
 deleteat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = deleteat!(parent(analytes), parentindices(analytes)[1][del])
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analytes), parentindices(analytes)[1][del])
 popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analytes), parentindices(analytes)[1][del])
+
+deleteat!(analytes::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = deleteat!(parent(analytes), parentindices(analytes)[1][del])
+deleteat!(analytes::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Int) = deleteat!(parent(analytes), parentindices(analytes)[1][del])
+popat!(analytes::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analytes), parentindices(analytes)[1][del])
+popat!(analytes::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analytes), parentindices(analytes)[1][del])
 
 function delete!(aquery::AbstractQuery, target::Symbol)
     delete!(aquery.project, target; analytes = query.result)
@@ -71,14 +77,14 @@ end
 
 keys(project::Project) = LinearIndices(project.analytes)
 keys(aquery::AbstractQuery) = LinearIndices(aquery.result)
-keys(analyte::AnalyteSP) = LinearIndices(analyte.compounds)
+keys(analyte::AbstractAnalyteID) = LinearIndices(analyte.compounds)
 
 reverse(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(deepcopy(project), start, stop)
 reverse!(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(project.analytes, start, stop)
 reverse(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = reverse!(copy_wo_project(aquery), start, stop)
 reverse!(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = reverse!(aquery.result, start, stop)
-reverse(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reverse!(copy_wo_project(analyte), start, stop)
-reverse!(analyte::AnalyteSP, start::Int = 1, stop::Int = length(analyte)) = reverse!(analyte.compounds, start, stop)
+reverse(analyte::AbstractAnalyteID, start::Int = 1, stop::Int = length(analyte)) = reverse!(copy_wo_project(analyte), start, stop)
+reverse!(analyte::AbstractAnalyteID, start::Int = 1, stop::Int = length(analyte)) = reverse!(analyte.compounds, start, stop)
 
 in(x::Number, ri::EmptyInterval) = false
 in(x::Number, ri::RealInterval) = between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator)
@@ -162,7 +168,7 @@ function push_cpd!(analyte::AnalyteSP, cpd::CompoundSP)
 end
 
 union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP) = union!(analyte, id, cpd2, chain(cpd2))
-function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::SumChain)
+function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::Union{SumChain, SumChainIS})
     cpd1 = analyte[id]
     append!(cpd1.fragments, cpd2.fragments)
     unique!(cpd1.fragments)
@@ -171,7 +177,7 @@ function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::SumChain)
     analyte
 end
 
-function _union!(analyte::AnalyteSP, id::Int, ::SumChain, sc::ChainSP)
+function _union!(analyte::AnalyteSP, id::Int, ::Union{SumChain, SumChainIS}, sc::ChainSP)
     push!(last(analyte).project, copy_wo_project(analyte))
     for a in analyte
         a.chain = sc
@@ -206,10 +212,10 @@ function union!(cpd1::CompoundSPVanilla, cpd2::CompoundSPVanilla)
     _union!(cpd1, cpd2, cpd1.chain, cpd2.chain)
 end
 
-_union!(cpd1::CompoundID, cpd2::CompoundID, ::SumChain, ::SumChain) = cpd1
-_union!(cpd1::CompoundID, cpd2::CompoundID, ::ChainSP, ::SumChain) = cpd1
-_union!(cpd1::CompoundID, cpd2::CompoundID, ::SumChain, sc::ChainSP) = (cpd1.chain = sc; cpd1)
-_union!(cpd1::CompoundID, cpd2::CompoundID, ::ChainSP, sc::ChainSP) =
+_union!(cpd1::AbstractCompoundID, cpd2::AbstractCompoundID, ::Union{SumChain, SumChainIS}, ::Union{SumChain, SumChainIS}) = cpd1
+_union!(cpd1::AbstractCompoundID, cpd2::AbstractCompoundID, ::ChainSP, ::Union{SumChain, SumChainIS}) = cpd1
+_union!(cpd1::AbstractCompoundID, cpd2::AbstractCompoundID, ::Union{SumChain, SumChainIS}, sc::ChainSP) = (cpd1.chain = sc; cpd1)
+_union!(cpd1::AbstractCompoundID, cpd2::AbstractCompoundID, ::ChainSP, sc::ChainSP) =
     nox(lcb(cpd1)) > nox(lcb(cpd2)) ? (cpd1.chain = sc; cpd1) : cpd1
 
 function union!(cpd1::CompoundSP, cpd2::CompoundSP)
@@ -242,12 +248,15 @@ convert(::Type{SPID}, cpd::SPID) = cpd
 
 # variant of interface
 # iscomponent: whether ion is a component of cpd
-iscomponent(ion::Ion{<: Adduct, <: ClassSP}, cpd::CompoundID) = iscompatible(ion.molecule, cpd.class)
-iscomponent(ion::Ion{<: Adduct, <: ChainSP}, cpd::CompoundID) = iscomponent(ion, cpd.chain)
+iscomponent(ion::Ion{<: Adduct, <: ClassSP}, cpd::AbstractCompoundID) = iscompatible(ion.molecule, cpd.class)
+iscomponent(ion::Ion{<: Adduct, <: ChainSP}, cpd::AbstractCompoundID) = iscomponent(ion, cpd.chain)
 iscomponent(ion::Ion{<: Adduct, <: ChainSP}, sc::SumChain) =
     ncb(ion) <= ncb(sc) && ndbox(ion) <= ndbox(sc) &&
         any(ox <= nox(sc) && db <= ndb(sc) for (ox, db) in zip(nox(ion):nox(ion.molecule), ndb(ion):-1:ndb(ion.molecule)))
-
+iscomponent(ion::Ion{<: Adduct, <: ChainSP}, sc::SumChainIS) =
+    n13C(ion) <= n13C(sc) && nD(ion) <= nD(sc) && ncb(ion) <= ncb(sc) && ndbox(ion) <= ndbox(sc) &&
+        any(ox <= nox(sc) && db <= ndb(sc) for (ox, db) in zip(nox(ion):nox(ion.molecule), ndb(ion):-1:ndb(ion.molecule)))
+    
 iscomponent(ion::Ion{<: Adduct, <: LCB}, sc::DiChain) = iscomponent(ion, sc.lcb)
 iscomponent(ion::Ion{<: Adduct, <: ACYL}, sc::DiChain) = iscomponent(ion, sc.acyl)
 iscomponent(ion::Ion{<: Adduct, <: LCB}, sc::LCB) =
@@ -255,12 +264,17 @@ iscomponent(ion::Ion{<: Adduct, <: LCB}, sc::LCB) =
         any(ox ≡ nox(sc) && db ≡ ndb(sc) for (ox, db) in zip(nox(ion):nox(ion.molecule), ndb(ion):-1:ndb(ion.molecule)))
 iscomponent(ion::Ion{<: Adduct, <: ACYL}, sc::ACYL) =
     ncb(ion) ≡ ncb(sc) && ndb(ion) ≡ ndb(sc) && nox(ion) ≡ ndb(sc)
+iscomponent(ion::Ion{<: Adduct, <: LCB}, sc::LCBIS) =
+    n13C(ion) ≡ n13C(sc) && nD(ion) ≡ nD(sc) && ncb(ion) ≡ ncb(sc) && ndbox(ion) ≡ ndbox(sc) &&
+        any(ox ≡ nox(sc) && db ≡ ndb(sc) for (ox, db) in zip(nox(ion):nox(ion.molecule), ndb(ion):-1:ndb(ion.molecule)))
+iscomponent(ion::Ion{<: Adduct, <: ACYL}, sc::ACYLIS) =
+    n13C(ion) ≡ n13C(sc) && nD(ion) ≡ nD(sc) && ncb(ion) ≡ ncb(sc) && ndb(ion) ≡ ndb(sc) && nox(ion) ≡ ndb(sc)
 
-iscomponent(::Ion{<: Adduct, NeuAc}, cpd::CompoundID) = isa(cpd.class, CLS.fg.nana)
-iscomponent(::Ion{<: Adduct, Glycan{Tuple{NeuAc, NeuAc}}}, cpd::CompoundID) =
+iscomponent(::Ion{<: Adduct, NeuAc}, cpd::AbstractCompoundID) = isa(cpd.class, CLS.fg.nana)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{NeuAc, NeuAc}}}, cpd::AbstractCompoundID) =
     isa(cpd.class, CLS.series.b) || isa(cpd.class, CLS.series.c) || isa(cpd.class, GT1a) || isa(cpd.class, GT1aα) || isa(cpd.class, GD1c)
-iscomponent(::Ion{<: Adduct, Glycan{Tuple{NeuAc, NeuAc, NeuAc}}}, cpd::CompoundID) = isa(cpd.class, CLS.series.c)
-iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, Hex}}}, cpd::CompoundID) =
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{NeuAc, NeuAc, NeuAc}}}, cpd::AbstractCompoundID) = isa(cpd.class, CLS.series.c)
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, Hex}}}, cpd::AbstractCompoundID) =
     (isa(cpd.class, CLS.series.as) && !isa(cpd.class, Hex2Cer)) ||
     (isa(cpd.class, CLS.series.a) && !isa(cpd.class, GM3)) ||
     (isa(cpd.class, CLS.series.b) && !isa(cpd.class, GD3)) ||
@@ -268,28 +282,28 @@ iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, Hex}}}, cpd::CompoundID) =
     isa(cpd.class, HexNAcHex2Cer) ||
     isa(cpd.class, HexNAcHex3Cer)
 
-iscomponent(::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc}}}, cpd::CompoundID) where {S <: Adduct} =
+iscomponent(::Ion{S, Glycan{Tuple{HexNAc, Hex, NeuAc}}}, cpd::AbstractCompoundID) where {S <: Adduct} =
     isa(cpd.class, CLS.fg.nana) && iscomponent(cpd, Ion(S(), Glycan(HexNAc(), Hex())))
 
-iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, Hex, NeuAc, NeuAc}}}, cpd::CompoundID) =
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, Hex, NeuAc, NeuAc}}}, cpd::AbstractCompoundID) =
     (isa(cpd.class, CLS.series.b) && !isa(cpd.class, GD3)) ||
     (isa(cpd.class, CLS.series.c) && !isa(cpd.class, GT3)) ||
     isa(cpd.class, GT1a) || isa(cpd.class, GT1aα) || isa(cpd.class, GD1c) || isa(cpd.class, GD1α)
 
-iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, NeuAc}}}, cpd::CompoundID) =
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{HexNAc, NeuAc}}}, cpd::AbstractCompoundID) =
     isa(cpd.class, GP1cα) || isa(cpd.class, GQ1bα) || isa(cpd.class, GT1aα) || isa(cpd.class, GD1α)
 
-iscomponent(::Ion{<: Adduct, Glycan{Tuple{Hex, NeuAc}}}, cpd::CompoundID) =
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{Hex, NeuAc}}}, cpd::AbstractCompoundID) =
     isa(cpd.class, CLS.fg.nana)
 
-iscomponent(::Ion{<: Adduct, Glycan{Tuple{Hex, NeuAc, NeuAc}}}, cpd::CompoundID) =
+iscomponent(::Ion{<: Adduct, Glycan{Tuple{Hex, NeuAc, NeuAc}}}, cpd::AbstractCompoundID) =
     isa(cpd.class, CLS.series.b) ||
     isa(cpd.class, CLS.series.c) ||
     isa(cpd.class, GT1a) ||
     isa(cpd.class, GD1c)
 
 # iscompatible: not exact, allow isomer
-iscompatible(cpd1::CompoundID, cpd2::CompoundID) =
+iscompatible(cpd1::AbstractCompoundID, cpd2::AbstractCompoundID) =
     iscompatible(cpd1.class, cpd2.class) && iscompatible(cpd1.chain, cpd2.chain)
 
 iscompatible(cls1::ClassSP, cls2::ClassSP) = cls1 ≡ cls2 ||
@@ -305,11 +319,13 @@ iscompatible(sc1::ACYL, sc2::ACYL) = sc1 ≡ sc2
 iscompatible(sc1::Acyl, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(sc1::Acyl, sc2::ACYL) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(sc1::ACYL, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
-iscompatible(ion::Ion, cpd::CompoundID) = iscomponent(ion, cpd)
+iscompatible(ion::Ion, cpd::AbstractCompoundID) = iscomponent(ion, cpd)
 
 copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, deepcopy(cpd.fragments), cpd.signal, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
+copy_wo_project(cpd::SPID) = SPID(cpd.class, cpd.chain)
 copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), analyte.cpdsc, analyte.score)
-copy_wo_project(project::Project) = Project(copy_wo_project.(project.analytes), deepcopy(project.data), deepcopy(project.appendix))
+copy_wo_project(analyte::AnalyteID) = AnalyteID(copy_wo_project.(analyte.compounds), analyte.rt)
+copy_wo_project(project::Project) = Project(copy_wo_project.(project.analytes), deepcopy(project.data), deepcopy(project.quantification), deepcopy(project.appendix))
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
 reuse_copy(aquery::Query) = Query(aquery.project, reuse_copy(aquery.result), deepcopy(aquery.query), true)
 reuse_copy(v::Vector) = copy(v)
@@ -341,8 +357,8 @@ equivalent_in_ion1(cpd::AbstractCompoundSP, criteria::Tuple) = any(equivalent_in
 equivalent_in_ion1(analyte::AnalyteSP, criteria) = any(equivalent_in_ion1(cpd, criteria) for cpd in analyte)
 
 # order
-isless_class(cpd1::CompoundID) = true
-isless_class(cpd1::CompoundID, cpd2::CompoundID) =
+isless_class(cpd1::AbstractCompoundID) = true
+isless_class(cpd1::AbstractCompoundID, cpd2::AbstractCompoundID) =
     any(connected(cls2, cls1) for (cls1, cls2) in Iterators.product(isomer_tuple(cpd1.class), isomer_tuple(cpd2.class)))
 
 isless_ion(ion1) = true
@@ -382,7 +398,7 @@ function sort!(tbl::Table, i::Symbol; kwargs...)
     tbl[:] = tbl[sortperm(getproperty(tbl, i); kwargs...)]
 end
 sort(tbl::Table, v::Vector{Symbol}; kwargs...) = tbl[sortperm(collect(zip(getproperty.(Ref(tbl), v)...)); kwargs...)]
-sort!(tbl::Table, v::Vector{Symbol}; kwargs...) = (tbl[:] = tbl[sortperm(collect(zip(getproperty.(Ref(tbl), v)...)); kwargs...)])
+sort!(tbl::Table, v::Vector{Symbol}; kwargs...) = (tbl[:] .= tbl[sortperm(collect(zip(getproperty.(Ref(tbl), v)...)); kwargs...)])
 sort(tbl::Table, i::AbstractString; kwargs...) = sort(tbl, Symbol(i); kwargs...)
 sort!(tbl::Table, i::AbstractString; kwargs...) = sort!(tbl, Symbol(i); kwargs...)
 sort(tbl::Table, v::Vector{<: AbstractString}; kwargs...) = sort(tbl, Symbol.(v); kwargs...)

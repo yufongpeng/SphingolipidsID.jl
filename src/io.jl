@@ -131,7 +131,7 @@ function read_featuretable_masshunter_mrm(path;
     txt = ["RT", "Height", "Area", "Symmetry", "FWHM"]
     tbl = CSV.read(str, Table; select = (i, name) -> any(==(text, String(name)) for text in txt), silencewarnings, maxwarnings, debug)
     n = size(tbl, 1)
-    Table(
+    tbl = Table(
         id = collect(1:n),
         mz1 = (@p zip(data.ms1, rep) |> mapmany(repeat([_[1]], _[2]))),
         mz2 = (@p zip(data.ms2, rep) |> mapmany(repeat([_[1]], _[2]))),
@@ -144,6 +144,8 @@ function read_featuretable_masshunter_mrm(path;
         polarity = (@p zip(data.polarity, rep) |> mapmany(repeat([_[1]], _[2]))),
         datafile = (@p zip(data.datafile, rep) |> mapmany(repeat([_[1]], _[2])))
     )
+    tbl = tbl[tbl.symmetry .!= "MM"]
+    Table(tbl, symmetry = parse.(Float64, tbl.symmetry))
 end
 
 """
@@ -174,7 +176,8 @@ function read_transition(path::String, vendor = :agilent;
     tbl = CSV.read(path, Table; silencewarnings, maxwarnings, debug)
     if vendor ≡ :agilent
         Table(
-            compound = [occursin("[", x) ? eval(Meta.parse(x)) : x for x in getproperty(tbl, Symbol("Compound Name"))],
+            id = collect(eachindex(tbl)),
+            analyte = [occursin("|", x) ? split(x, " | ") : x for x in getproperty(tbl, Symbol("Compound Name"))],
             mz1 = getproperty(tbl, Symbol("Precursor Ion")),
             mz2 = getproperty(tbl, Symbol("Product Ion")),
             rt = getproperty(tbl, Symbol("Ret Time (min)")),
@@ -216,38 +219,39 @@ Base.show(io::IO, ion::Ion) = print(io, repr_adduct(ion.adduct), " of ", ion.mol
 Base.show(io::IO, ::T) where {T <: Sugar} = print(io, T)
 Base.show(io::IO, ::Glycan{T}) where {T <: Tuple} = print(io, join(T.parameters, "_"))
 
-repr_ox = @λ begin
-    0 => ""
-    1 => ";O"
-    n => ";O" * string(n)
-end
+repr_ox(sc::Union{Acylα, AcylαIS}) = 
+    @match nox(sc) begin
+        0 => ""
+        1 => ";(2OH)"
+        2 => ";(2OH);O"
+        o => ";(2OH);O" * string(o - 1)
+    end
+repr_ox(sc::Union{Acylβ, AcylβIS}) = 
+    @match nox(sc) begin
+        0 => ""
+        1 => ";(3OH)"
+        2 => ";(3OH);O"
+        o => ";(3OH);O" * string(o - 1)
+    end
+repr_ox(sc) = 
+    @match nox(sc) begin
+        0 => ""
+        1 => ";O"
+        n => ";O" * string(n)
+    end
 
 print_comp(io::IO, x) = print(io, x)
 print_comp(io::IO, x...) = foreach(s -> print_comp(io, s), x)
 Base.show(io::IO, sc::LCB) = (print(io, "SPB "); print_comp(io, sc))
-print_comp(io::IO, sc::LCB) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
+print_comp(io::IO, sc::LCB) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc))
+print_comp(io::IO, sc::LCBIS) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc), repr_is(sc.isotope))
 #Base.show(io::IO, ::MIME"text/plain", sc::LCB) = print(io, "SPB ", sc)
 #Base.show(io::IO, ::MIME"text/plain", sc::ACYL) = print(io, "Acyl ", sc)
 Base.show(io::IO, sc::Acyl) = (print(io, "Acyl "); print_comp(io, sc))
 
 
-print_comp(io::IO, sc::Acyl) = print(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
-print_comp(io::IO, sc::Acylα) = print(io, ncb(sc), ":", ndb(sc),
-                                        @match nox(sc) begin
-                                            0 => ""
-                                            1 => ";(2OH)"
-                                            2 => ";(2OH);O"
-                                            o => ";(2OH);O" * string(o - 1)
-                                        end
-                                    )
-print_comp(io::IO, sc::Acylβ) = print(io, ncb(sc), ":", ndb(sc),
-                                        @match nox(sc) begin
-                                            0 => ""
-                                            1 => ";(3OH)"
-                                            2 => ";(3OH);O"
-                                            o => ";(3OH);O" * string(o - 1)
-                                        end
-                                    )
+print_comp(io::IO, sc::ACYL) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc))
+print_comp(io::IO, sc::ACYLIS) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc), repr_is(sc.isotope))
 
 fragmenttable(cpd) = map(cpd.fragments) do row
     s = query_data(cpd.project, row.source, row.id)
@@ -267,7 +271,14 @@ states_color = @λ begin
 end
 
 Base.show(io::IO, sc::ChainSP) = print_comp(io, sc.lcb, "/", sc.acyl)
-Base.show(io::IO, sc::SumChain) = print_comp(io, ncb(sc), ":", ndb(sc), repr_ox(nox(sc)))
+Base.show(io::IO, sc::SumChain) = print_comp(io, ncb(sc), ":", ndb(sc), repr_ox(sc))
+Base.show(io::IO, sc::SumChainIS) = print_comp(io, ncb(sc), ":", ndb(sc), repr_ox(sc), repr_is(sc.isotope))
+function repr_is(is::NamedTuple)
+    ls = String[]
+    is.n13C > 0 && push!(ls, string("13C", is.n13C))
+    is.nD > 0 && push!(ls, string("D", is.nD))
+    string("(", join(ls, ", "), ")")
+end
 
 function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
     class, chain = states_color.(cpd.states)
@@ -319,6 +330,8 @@ function Base.show(io::IO, analyte::AnalyteSP)
     manual = sc[states_id(:manual)]
     print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " st$(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf)")
 end
+
+Base.show(io::IO, analyte::AnalyteID) = print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4))
 
 function Base.show(io::IO, data::PreIS)
     println(io, "PreIS with $(length(data.mz2)) products: ")

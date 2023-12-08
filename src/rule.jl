@@ -230,16 +230,16 @@ rule_ab(::GP1) = ()
 )
 
 @rule rule_acyl(sc::DiChain) = (Ion(LossCH2O(), sc.acyl), Ion(AddO(), sc.acyl)) |> (
-    DiChain(sc.lcb, Acylα(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl))),
+    DiChain(sc.lcb, alpha_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl))),
     Ion(AddC2H2O(), sc.lcb) |> (
-        DiChain(sc.lcb, Acylβ(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl))),
-        DiChain(sc.lcb, Acyl(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl)))
+        DiChain(sc.lcb, beta_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl))),
+        DiChain(sc.lcb, default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc.acyl), nox(sc.acyl)))
     )
 )
-to_phyto(spb::LCB3) = SPB3(ncb(spb), ndb(spb))
-to_phyto(spb::LCB4) = SPB4(ncb(spb), ndb(spb))
-de_phyto(spb::LCB3) = NotPhyto3(ncb(spb), ndb(spb))
-de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
+to_phyto(spb::LCB3) = default_constructor(spb)(ncb(spb), ndb(spb))
+to_phyto(spb::LCB4) = default_constructor(spb)(ncb(spb), ndb(spb))
+de_phyto(spb::LCB3) = notphyto_constructor(spb)(ncb(spb), ndb(spb))
+de_phyto(spb::LCB4) = notphyto_constructor(spb)(ncb(spb), ndb(spb))
 
 @rule rule_phytoacyl0(sc::DiChain) = (Ion(AddC2H5NO(), sc.acyl), Ion(AddC3H5NO(), sc.acyl), Ion(LossCH8NO(), sc.lcb), Ion(LossC2H8NO(), sc.lcb)) |> (
     DiChain(to_phyto(sc.lcb), sc.acyl),
@@ -249,51 +249,51 @@ de_phyto(spb::LCB4) = NotPhyto4(ncb(spb), ndb(spb))
     rule_acyl(DiChain(to_phyto(sc.lcb), sc.acyl)),
     rule_acyl(DiChain(de_phyto(sc.lcb), sc.acyl))
 )
-@rule rule(sc::DiChain{<: LCB2}) = IonComparison(Ion(ProtonationNL2H2O(), SPB2(ncb(sc.lcb), 0)), Ion(ProtonationNLH2O(), SPB2(ncb(sc.lcb), 0))) |> (
+@rule rule(sc::DiChain{<: LCB2}) = IonComparison(Ion(ProtonationNL2H2O(), default_constructor(sc.lcb)(ncb(sc.lcb), 0)), Ion(ProtonationNLH2O(), default_constructor(sc.lcb)(ncb(sc.lcb), 0))) |> (
     ri"[0.0, 1.5)"  => (
-        CalcOx(SPB2(ncb(sc.lcb), 0)) |> (
-            0 => DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 0)),
-            1 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 1))),
-            2 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 2)))
+        CalcOx(default_constructor(sc.lcb)(ncb(sc.lcb), 0)) |> (
+            0 => DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 0), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc), 0)),
+            1 => rule_acyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 0), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc), 1))),
+            2 => rule_acyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 0), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc), 2)))
         )
     ),
     ri"[1.5, ∞]"    => (
-        CalcOx(SPB2(ncb(sc.lcb), 1)) |> (
-            0 => DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0)),
-            1 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
-            2 => rule_acyl(DiChain(SPB2(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 2)))
+        CalcOx(default_constructor(sc.lcb)(ncb(sc.lcb), 1)) |> (
+            0 => DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 0)),
+            1 => rule_acyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 1))),
+            2 => rule_acyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 2)))
         )
     )
 )
-@rule rule(sc::DiChain{<: LCB3}) = IonComparison(Ion(ProtonationNL3H2O(), SPB3(ncb(sc.lcb), 0)), Ion(ProtonationNL2H2O(), SPB3(ncb(sc.lcb), 0))) |> (
+@rule rule(sc::DiChain{<: LCB3}) = IonComparison(Ion(ProtonationNL3H2O(), default_constructor(sc.lcb)(ncb(sc.lcb), 0)), Ion(ProtonationNL2H2O(), default_constructor(sc.lcb)(ncb(sc.lcb), 0))) |> (
     ri"[0.0, 1.5)"  => (
-        CalcOx(SPB3(ncb(sc.lcb), 0)) |> (
-            0 => rule_phytoacyl0(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 0))),
-            1 => rule_phytoacyl(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 1))),
-            2 => rule_phytoacyl(DiChain(SPB3(ncb(sc.lcb), 0), Acyl(ncb(sc.acyl), ndb(sc), 2)))
+        CalcOx(default_constructor(sc.lcb)(ncb(sc.lcb), 0)) |> (
+            0 => rule_phytoacyl0(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 0), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc), 0))),
+            1 => rule_phytoacyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 0), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc), 1))),
+            2 => rule_phytoacyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 0), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc), 2)))
         )
     ),
     ri"[1.5, ∞]"    => (
-        CalcOx(SPB3(ncb(sc.lcb), 1)) |> (
-            0 => DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0)),
-            1 => rule_acyl(DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
-            2 => rule_acyl(DiChain(SPB3(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 2)))
+        CalcOx(default_constructor(sc.lcb)(ncb(sc.lcb), 1)) |> (
+            0 => DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 0)),
+            1 => rule_acyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 1))),
+            2 => rule_acyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 2)))
         )
     )
 )
-@rule rule(sc::DiChain{<: LCB4}) = IonComparison(Ion(ProtonationNL3H2O(), SPB4(ncb(sc.lcb), 1)), Ion(ProtonationNL2H2O(), SPB4(ncb(sc.lcb), 1))) |> (
+@rule rule(sc::DiChain{<: LCB4}) = IonComparison(Ion(ProtonationNL3H2O(), default_constructor(sc.lcb)(ncb(sc.lcb), 1)), Ion(ProtonationNL2H2O(), default_constructor(sc.lcb)(ncb(sc.lcb), 1))) |> (
     ri"[0.0, 1.5)" => (
-        CalcOx(SPB4(ncb(sc.lcb), 1)) |> (
-            0 => rule_phytoacyl0(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 0))),
-            1 => rule_phytoacyl(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 1))),
-            2 => rule_phytoacyl(DiChain(SPB4(ncb(sc.lcb), 1), Acyl(ncb(sc.acyl), ndb(sc) - 1, 2)))
+        CalcOx(default_constructor(sc.lcb)(ncb(sc.lcb), 1)) |> (
+            0 => rule_phytoacyl0(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 0))),
+            1 => rule_phytoacyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 1))),
+            2 => rule_phytoacyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 1), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 1, 2)))
         )
     ),
     ri"[1.5, ∞]"    => (
-        CalcOx(SPB4(ncb(sc.lcb), 2)) |> (
-            0 => DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 0)),
-            1 => rule_acyl(DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 1))),
-            2 => rule_acyl(DiChain(SPB4(ncb(sc.lcb), 2), Acyl(ncb(sc.acyl), ndb(sc) - 2, 2)))
+        CalcOx(default_constructor(sc.lcb)(ncb(sc.lcb), 2)) |> (
+            0 => DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 2), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 2, 0)),
+            1 => rule_acyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 2), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 2, 1))),
+            2 => rule_acyl(DiChain(default_constructor(sc.lcb)(ncb(sc.lcb), 2), default_constructor(sc.acyl)(ncb(sc.acyl), ndb(sc) - 2, 2)))
         )
     )
 )

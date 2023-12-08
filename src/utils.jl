@@ -33,7 +33,7 @@ function new_project(project::Project; copy_data = false, analytes = copy_wo_pro
     appendix = empty(project.appendix)
     insert!(appendix, :anion, project.appendix[:anion])
     insert!(appendix, :signal, project.appendix[:signal])
-    project_new = Project(analytes, copy_data ? deepcopy(project.data) : project.data, appendix)
+    project_new = Project(analytes, copy_data ? deepcopy(project.data) : project.data, copy_data ? deepcopy(project.quantification) : project.quantification, appendix)
     for analyte in project_new
         for cpd in analyte
             cpd.project = project_new
@@ -167,56 +167,73 @@ qcmd(qcmd) = QueryCmd(qcmd)
 qcmd(query, neg) = neg ? qnot(query) : qcmd(query)
 
 """
-    lcb(c::Int, d::Int, n::Int)
+    lcb(c::Int, d::Int, n::Int; n13C::Int = 0, nD::Int = 0)
 
 Create `LCB` with given carbons(`c`), double bonds(`d`), and addtional oxygens(`n`).
 """
-function lcb(c::Int, d::Int, n::Int)
-    Cons = @match d + n begin
-        2 => SPB2
-        3 => SPB3
-        4 => SPB4
+function lcb(c::Int, d::Int, n::Int; n13C::Int = 0, nD::Int = 0)
+    if n13C == 0 && nD == 0 
+        Cons = @match d + n begin
+            2 => SPB2
+            3 => SPB3
+            4 => SPB4
+        end
+        Cons(c, d)
+    else
+        Cons = @match d + n begin
+            2 => SPB2IS
+            3 => SPB3IS
+            4 => SPB4IS
+        end
+        Cons(c, d, (; n13C, nD))
     end
-    Cons(c, d)
 end
 """
-    acyl(c::Int, d::Int, n::Int)
+    acyl(c::Int, d::Int, n::Int; n13C::Int = 0, nD::Int = 0)
 
 Create `Acyl` with given carbons(`c`), double bonds(`d`), and addtional oxygens(`n`).
 """
-acyl(c::Int, d::Int, n::Int) = Acyl(c, d, n)
+acyl(c::Int, d::Int, n::Int; n13C::Int = 0, nD::Int = 0) = n13C == 0 && nD == 0 ? Acyl(c, d, n) : AcylIS(c, d, n, (; n13C, nD))
 """
-    acylα(c::Int, d::Int, n::Int)
+    acylα(c::Int, d::Int, n::Int; n13C::Int = 0, nD::Int = 0)
 
 Create `Acylα` with given carbons(`c`), double bonds(`d`), and addtional oxygens(`n`).
 """
-acylα(c::Int, d::Int, n::Int) = Acylα(c, d, n)
+acylα(c::Int, d::Int, n::Int; n13C::Int = 0, nD::Int = 0) = n13C == 0 && nD == 0 ? Acylα(c, d, n) : AcylαIS(c, d, n, (; n13C, nD))
 """
-    acylβ(c::Int, d::Int, n::Int)
+    acylβ(c::Int, d::Int, n::Int; n13C::Int = 0, nD::Int = 0)
 
 Create `Acylβ` with given carbons(`c`), double bonds(`d`), and addtional oxygens(`n`).
 """
-acylβ(c::Int, d::Int, n::Int) = Acylβ(c, d, n)
+acylβ(c::Int, d::Int, n::Int; n13C::Int = 0, nD::Int = 0) = n13C == 0 && nD == 0 ? Acylβ(c, d, n) : AcylβIS(c, d, n, (; n13C, nD))
 """
     chain(spb::LCB, nacyl::ACYL)
-    chain(c::Int, n::Int, o::Int)
+    chain(c::Int, n::Int, o::Int; n13C::Int = 0, nD::Int = 0)
 
 Create `ChainSP` with long-chain base and N-acyl or carbons, double bonds, and addtional oxygens.
 """
 chain(spb::LCB, nacyl::ACYL) = DiChain(spb, nacyl)
-chain(c::Int, n::Int, o::Int) = SumChain(c, n, o)
+chain(c::Int, n::Int, o::Int; n13C::Int = 0, nD::Int = 0) = n13C == 0 && nD == 0 ? SumChain(c, n, o) : SumChainIS(c, d, n, (; n13C, nD))
 """
+    spid(cpd::AbstractCompoundID)
     spid(cls::Type{<: ClassSP}, sc::ChainSP)
     spid(cls::Type{<: ClassSP}, spb::LCB, nacyl::ACYL)
-    spid(cls::Type{<: ClassSP}, sum::NTuple{3, Int})
-    spid(cls::Type{<: ClassSP}, c::Int, n::Int, o::Int)
+    spid(cls::Type{<: ClassSP}, sum::NTuple{3, Int}; n13C::Int = 0, nD::Int = 0)
+    spid(cls::Type{<: ClassSP}, c::Int, n::Int, o::Int; n13C::Int = 0, nD::Int = 0)
 
 Create `SPID` with given class and chain information.
 """
+spid(cpd::AbstractCompoundID) = SPID(class(cpd), chain(cpd))
 spid(cls::Type{<: ClassSP}, sc::ChainSP) = SPID(cls(), sc)
 spid(cls::Type{<: ClassSP}, spb::LCB, nacyl::ACYL) = SPID(cls(), DiChain(spb, nacyl))
-spid(cls::Type{<: ClassSP}, sum::NTuple{3, Int}) = SPID(cls(), SumChain(sum...))
-spid(cls::Type{<: ClassSP}, c::Int, n::Int, o::Int) = SPID(cls(), SumChain(c, n, o))
+spid(cls::Type{<: ClassSP}, sum::NTuple{3, Int}; n13C::Int = 0, nD::Int = 0) = SPID(cls(), chain(sum...; n13C, nD))
+spid(cls::Type{<: ClassSP}, c::Int, n::Int, o::Int; n13C::Int = 0, nD::Int = 0) = SPID(cls(), chain(c, n, o; n13C, nD))
+
+analyteid(cpd::AbstractCompoundID, rt::Float64) = AnalyteID([SPID(class(cpd), chain(cpd))], rt)
+analyteid(cls::Type{<: ClassSP}, sc::ChainSP, rt::Float64) = AnalyteID([SPID(cls(), sc)], rt)
+analyteid(cls::Type{<: ClassSP}, spb::LCB, nacyl::ACYL, rt::Float64) = AnalyteID([SPID(cls(), DiChain(spb, nacyl))], rt)
+analyteid(cls::Type{<: ClassSP}, sum::NTuple{3, Int}, rt::Float64; n13C::Int = 0, nD::Int = 0) = AnalyteID([SPID(cls(), chain(sum...; n13C, nD))], rt)
+analyteid(cls::Type{<: ClassSP}, c::Int, n::Int, o::Int, rt::Float64; n13C::Int = 0, nD::Int = 0) = AnalyteID([SPID(cls(), chain(c, n, o; n13C, nD))], rt)
 
 # isomer
 """
@@ -290,44 +307,48 @@ Whether `analyte` belongs to a cluster or not.
 """
 incluster(analyte::AnalyteSP) = !isempty(cluster(analyte))
 """
-    class(analyte::AnalyteSP)
-    class(cpd::CompoundID)
+    class(analyte::AbstractAnalyteID)
+    class(cpd::AbstractCompoundID)
 
 Return the class of an analyte or compound.
 """
-class(analyte::AnalyteSP) = class(last(analyte))
-class(cpd::CompoundID) = cpd.class
+class(analyte::AbstractAnalyteID) = class(last(analyte))
+class(cpd::AbstractCompoundID) = cpd.class
 """
-    chain(analyte::AnalyteSP)
-    chain(cpd::CompoundID)
+    chain(analyte::AbstractAnalyteID)
+    chain(cpd::AbstractCompoundID)
 
 Return the chain of an analyte or compound.
 """
-chain(analyte::AnalyteSP) = chain(last(analyte))
-chain(cpd::CompoundID) = cpd.chain
+chain(analyte::AbstractAnalyteID) = chain(last(analyte))
+chain(cpd::AbstractCompoundID) = cpd.chain
 """
-    sumcomp(analyte::AnalyteSP)
-    sumcomp(cpd::CompoundID)
+    sumcomp(analyte::AbstractAnalyteID)
+    sumcomp(cpd::AbstractCompoundID)
     sumcomp(sc::ChainSP)
 
-Return sumcomposition information, i.e., a `SumChain`.
+Return sumcomposition information, i.e., a `SumChain` or `SumChainIS`.
 """
-sumcomp(analyte::AnalyteSP) = sumcomp(chain(analyte))
-sumcomp(cpd::CompoundID) = sumcomp(chain(cpd))
+sumcomp(analyte::AbstractAnalyteID) = sumcomp(chain(analyte))
+sumcomp(cpd::AbstractCompoundID) = sumcomp(chain(cpd))
 sumcomp(sc::SumChain) = sc
+sumcomp(sc::SumChainIS) = sc
 sumcomp(sc::ChainSP) = SumChain(ncb(sc), ndb(sc), nox(sc))
+sumcomp(sc::ChainSPIS) = SumChainIS(ncb(sc), ndb(sc), nox(sc), (n13C = n13C(sc), nD = nD(sc)))
 """
-    chainconstituent(analyte::AnalyteSP)
-    chainconstituent(cpd::CompoundID)
+    chainconstituent(analyte::AbstractAnalyteID)
+    chainconstituent(cpd::AbstractCompoundID)
     chainconstituent(sc::ChainSP)
 
 Return molecular-level chain composition. If there are only species-level information(sumcomposition), it returns `nothing`.
 """
-chainconstituent(analyte::AnalyteSP) = chainconstituent(chain(analyte))
-chainconstituent(cpd::CompoundID) = chainconstituent(chain(cpd))
+chainconstituent(analyte::AbstractAnalyteID) = chainconstituent(chain(analyte))
+chainconstituent(cpd::AbstractCompoundID) = chainconstituent(chain(cpd))
 chainconstituent(sc::ChainSP) = sc
 chainconstituent(sc::SumChain) = nothing
+chainconstituent(sc::SumChainIS) = nothing
 chainconstituent(sc::ACYL) = nothing
+chainconstituent(sc::ACYLIS) = nothing
 """
     isspceieslevel
 
@@ -335,74 +356,75 @@ Determine whether the object has only species-level information.
 """
 const isspceieslevel = isnothing ∘ chainconstituent
 """
-    lcb(analyte::AnalyteSP)
-    lcb(cpd::CompoundID)
+    lcb(analyte::AbstractAnalyteID)
+    lcb(cpd::AbstractCompoundID)
     lcb(sc::ChainSP)
 
 Return long-chain base. If there is no long-chain base, it returns `nothing`.
 """
-lcb(analyte::AnalyteSP) = lcb(chain(analyte))
-lcb(cpd::CompoundID) = lcb(chain(cpd))
+lcb(analyte::AbstractAnalyteID) = lcb(chain(analyte))
+lcb(cpd::AbstractCompoundID) = lcb(chain(cpd))
 lcb(sc::ChainSP) = nothing
 lcb(sc::DiChain) = sc.lcb
 lcb(sc::LCB) = sc
 """
-    acyl(analyte::AnalyteSP)
-    acyl(cpd::CompoundID)
+    acyl(analyte::AbstractAnalyteID)
+    acyl(cpd::AbstractCompoundID)
     acyl(sc::ChainSP)
 
 Return N-acyl chain. If there is no N-acyl chain, it returns `nothing`.
 """
-acyl(analyte::AnalyteSP) = acyl(chain(analyte))
-acyl(cpd::CompoundID) = acyl(chain(cpd))
+acyl(analyte::AbstractAnalyteID) = acyl(chain(analyte))
+acyl(cpd::AbstractCompoundID) = acyl(chain(cpd))
 acyl(sc::ChainSP) = nothing
 acyl(sc::DiChain) = sc.acyl
 acyl(sc::ACYL) = sc
 """
-    rt(analyte::AnalyteSP)
+    rt(analyte::AbstractAnalyteID)
 
 Return retention time.
 """
-rt(analyte::AnalyteSP) = analyte.rt
+rt(analyte::AbstractAnalyteID) = analyte.rt
+rt(analyte) = analyte.rt
 """
-    ncb(analyte::AnalyteSP)
-    ncb(cpd::CompoundID)
+    ncb(analyte::AbstractAnalyteID)
+    ncb(cpd::AbstractCompoundID)
     ncb(sc::ChainSP)
     ncb(ion::Ion)
 
-Return number of carbons. For ions, adducts are not taken into account.
+Return number of carbons in chains. For ions, adducts are not taken into account.
 """
-ncb(analyte::AnalyteSP) = ncb(chain(analyte))
-ncb(cpd::CompoundID) = ncb(chain(cpd))
+ncb(analyte::AbstractAnalyteID) = ncb(chain(analyte))
+ncb(cpd::AbstractCompoundID) = ncb(chain(cpd))
 ncb(sc::ChainSP) = sc.carbon
 ncb(sc::DiChain) = ncb(sc.lcb) + ncb(sc.acyl)
 """
-    ndb(analyte::AnalyteSP)
-    ndb(cpd::CompoundID)
+    ndb(analyte::AbstractAnalyteID)
+    ndb(cpd::AbstractCompoundID)
     ndb(sc::ChainSP)
     ndb(ion::Ion)
 
-Return number of double bonds. For ions, adducts are not taken into account except in cases of neutral loss of H2O.
+Return number of double bonds in chains. For ions, adducts are not taken into account except in cases of neutral loss of H2O.
 """
-ndb(analyte::AnalyteSP) = ndb(chain(analyte))
-ndb(cpd::CompoundID) = ndb(chain(cpd))
+ndb(analyte::AbstractAnalyteID) = ndb(chain(analyte))
+ndb(cpd::AbstractCompoundID) = ndb(chain(cpd))
 ndb(sc::ChainSP) = sc.doublebond
 ndb(sc::DiChain) = ndb(sc.lcb) + ndb(sc.acyl)
 """
-    nox(analyte::AnalyteSP)
-    nox(cpd::CompoundID)
+    nox(analyte::AbstractAnalyteID)
+    nox(cpd::AbstractCompoundID)
     nox(sc::ChainSP)
     nox(ion::Ion)
 
 Return number of additional oxygens. For ions, adducts are not taken into account except in cases of neutral loss of H2O.
 """
-nox(analyte::AnalyteSP) = nox(chain(analyte))
-nox(cpd::CompoundID) = nox(chain(cpd))
+nox(analyte::AbstractAnalyteID) = nox(chain(analyte))
+nox(cpd::AbstractCompoundID) = nox(chain(cpd))
 nox(sc::ChainSP) = sc.oxygen
 nox(sc::DiChain) = nox(sc.lcb) + nox(sc.acyl)
 nox(sc::LCB) = ndbox(sc) - ndb(sc)
-ndbox(analyte::AnalyteSP) = ndbox(chain(analyte))
-ndbox(cpd::CompoundID) = ndbox(chain(cpd))
+ndbox(analyte::AbstractAnalyteID) = ndbox(chain(analyte))
+ndbox(cpd::AbstractCompoundID) = ndbox(chain(cpd))
 ndbox(sc::SumChain) = sc.doublebond + sc.oxygen
 ndbox(sc::DiChain) = ndbox(sc.lcb) + ndbox(sc.acyl)
 ndbox(::LCB2) = 2
@@ -427,15 +449,48 @@ for fn in [:ncb, :ndb, :nox, :ndbox]
     @eval $fn(::Nothing) = nothing
 end
 
+n13C(x) = 0
+n13C(ion::Ion) = n13C(ion.molecule)
+n13C(analyte::AbstractAnalyteID) = n13C(chain(analyte))
+n13C(cpd::AbstractCompoundID) = n13C(chain(cpd))
+n13C(sumchain::SumChainIS) = sumchain.isotope.n13C
+n13C(dichain::DiChainIS) = n13C(lcb(dichain)) + n13C(acyl(dichain))
+n13C(lcb::LCBIS) = lcb.isotope.n13C
+n13C(acyl::ACYLIS) = acyl.isotope.n13C
+
+nD(x) = 0
+nD(ion::Ion) = nD(ion.molecule)
+nD(analyte::AbstractAnalyteID) = nD(chain(analyte))
+nD(cpd::AbstractCompoundID) = nD(chain(cpd))
+nD(sumchain::SumChainIS) = sumchain.isotope.nD
+nD(dichain::DiChainIS) = nD(lcb(dichain)) + nD(acyl(dichain))
+nD(lcb::LCBIS) = lcb.isotope.nD
+nD(acyl::ACYLIS) = acyl.isotope.nD
+const n2H = nD
+"""
+    allow_unknown(f::Function)
+
+Return a `FunctionalFunction` which returns true if the input `x` is `nothing` or `f(x)` is true.
+"""
 allow_unknown(f::T) where {T <: Function} = FunctionalFunction(allow_unknown, f, x -> isnothing(x) || f(x))
+"""
+    only_known(f::Function)
+
+Return a `FunctionalFunction` which returns true if the input `x` is not `nothing` and `f(x)` is true.
+"""
 only_known(f::T) where {T <: Function} = FunctionalFunction(only_known, f, x -> !isnothing(x) && f(x))
 
 # internal
 is4e(sc::LCB) = nox(sc) < 3
 is4e(sc::LCB2) = nox(sc) < 2
 
-default_adduct(sc::LCB) =
-    is4e(sc) ? Ion(SPDB[:NLH2O][nox(sc) + 1], sc) : Ion(SPDB[:NLH2O][nox(sc)], sc)
+function default_adduct(sc::LCB, polarity::Bool)
+    if polarity 
+        is4e(sc) ? Ion(SPDB[:NLH2O][nox(sc) + 1], sc) : Ion(SPDB[:NLH2O][nox(sc)], sc)
+    else
+        throw(ErrorException("Not yet implement"))
+    end
+end
 
 function hydroxyl_shift(adduct::Adduct, Δ::Int)
     id = findfirst(==(adduct), SPDB[:NLH2O]) + Δ
@@ -443,13 +498,31 @@ function hydroxyl_shift(adduct::Adduct, Δ::Int)
 end
 
 hydroxyl_shift(sc::T, Δ::Int) where {T <: LCB} = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? T(ncb(sc), ndb(sc) - Δ) : nothing
-hydroxyl_shift(sc::NotPhyto3, Δ::Int) = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? SPB3(ncb(sc), ndb(sc) - Δ) : nothing
-hydroxyl_shift(sc::NotPhyto4, Δ::Int) = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? SPB4(ncb(sc), ndb(sc) - Δ) : nothing
+hydroxyl_shift(sc::Union{NotPhyto3, NotPhyto3IS}, Δ::Int) = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? default_constructor(sc)(ncb(sc), ndb(sc) - Δ) : nothing
+hydroxyl_shift(sc::Union{NotPhyto4, NotPhyto4IS}, Δ::Int) = (0 <= ndb(sc) - Δ <= ndbox(sc)) ? default_constructor(sc)(ncb(sc), ndb(sc) - Δ) : nothing
+
+default_constructor(::T) where T = T
+default_constructor(lcb::T) where {T <: LCBIS} = (x...) -> T(x..., lcb.isotope)
+default_constructor(acyl::T) where {T <: ACYLIS} = (x...) -> AcylIS(x..., acyl.isotope)
+alpha_constructor(acyl::T) where {T <: ACYLIS} = (x...) -> AcylαIS(x..., acyl.isotope)
+beta_constructor(acyl::T) where {T <: ACYLIS} = (x...) -> AcylβIS(x..., acyl.isotope)
+default_constructor(::T) where {T <: ACYL} = (x...) -> Acyl(x...)
+alpha_constructor(::T) where {T <: ACYL} = (x...) -> Acylα(x...)
+beta_constructor(::T) where {T <: ACYL} = (x...) -> Acylβ(x...)
+default_constructor(::NotPhyto3) = SPB3
+notphyto_constructor(::LCB3) = NotPhyto3
+default_constructor(::NotPhyto4) = SPB4
+notphyto_constructor(::LCB4) = NotPhyto4
+default_constructor(lcb::NotPhyto3IS) = (x...) -> SPB3IS(x..., lcb.isotope)
+notphyto_constructor(lcb::LCBIS) = lcb isa LCB3 ? (x...) -> NotPhyto3IS(x..., lcb.isotope) : (x...) -> NotPhyto4IS(x..., lcb.isotope)
+default_constructor(lcb::NotPhyto4IS) = (x...) -> SPB4IS(x..., lcb.isotope)
+default_constructor(::Acylα) = Acyl
+default_constructor(::Acylβ) = Acyl
 
 # connection
-find_connected(cpd::CompoundID, analyte::AnalyteSP) = findall(id -> connected(cpd, id), analyte)
+find_connected(cpd::AbstractCompoundID, analyte::AbstractAnalyteID) = findall(id -> connected(cpd, id), analyte)
 
-connected(cpd::CompoundID, id::CompoundID) = iscompatible(chain(cpd), chain(id)) && begin
+connected(cpd::AbstractCompoundID, id::AbstractCompoundID) = iscompatible(chain(cpd), chain(id)) && begin
     class1 = hasisomer(cpd.class) ? cpd.class.isomer : (cpd.class, )
     class2 = hasisomer(id.class) ? id.class.isomer : (id.class, )
     any(connected(cls1, cls2) || connected(cls2, cls1) for (cls1, cls2) in Iterators.product(class1, class2))
@@ -502,17 +575,39 @@ function _merge_nt(old, new, p; tosum = (:n, ), toold = (:id, ), tonew = ())
     end
 end
 
-function mode(ions)
-    dict = Dict{Union{ClassSP, ChainSP}}()
+function mode_ion(ions)
+    dict = Dict{Union{<: ClassSP, <: ChainSP}, Int64}()
     for is in ions
         for i in is
             dict[i] = get(dict, i, 0) + 1
         end
     end
-    maxk, maxi = Union{ClassSP, ChainSP}[], 0
+    maxk, maxi = Union{<: ClassSP, <: ChainSP}[], 0
     for (k, v) in dict
         if maxi < v
             maxk = [k]
+        elseif maxi ≡ v
+            push!(maxk, k)
+        end
+        maxi = max(maxi, v)
+    end
+    maxk
+end
+
+function mode(v::Base.AbstractVecOrTuple{T}) where T
+    X = try
+        T
+    catch _
+        Any
+    end
+    dict = Dict{X, Int64}()
+    for i in v
+        dict[i] = get(dict, i, 0) + 1
+    end
+    maxk, maxi = X[], 0
+    for (k, v) in dict
+        if maxi < v
+            maxk = X[k]
         elseif maxi ≡ v
             push!(maxk, k)
         end

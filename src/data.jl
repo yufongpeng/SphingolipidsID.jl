@@ -213,10 +213,11 @@ function split_datafile(tbl::Table; name = r"(.*)-r\d*\.(?:d|mzML)", rep = r".*-
 end
 
 """
-    filter_duplicate!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err_fn = default_error, err_tol = 0.5)
+    filter_combine_features!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err_fn = default_error, err_tol = 0.5)
 
-Filter out duplicated or unstable data.
+Filter out and combine duplicated or unstable features.
 
+* `raw_id`: a `Bool` determining whether preserving the original `tbl.id` as `tbl.raw_id` for staying connection to the raw featuretable.
 * `rt_tol`: maximum allowable difference in retention time for two compounds to consider them as the same.
 * `mz_tol`: maximum allowable difference in m/z for two compounds to consider them as the same.
 * `n`: minimal number of detection. The default is 3.
@@ -226,7 +227,8 @@ Filter out duplicated or unstable data.
 * `err_tol`: maximum allowable signal error.
 * `other_fn`: a `Dictionary` specifying functions for calculating other signal information.
 """
-function filter_duplicate!(tbl::Table; 
+function filter_combine_features!(tbl::Table; 
+                            use_match_id = false,
                             raw_id = false,
                             rt_tol = 0.1, 
                             mz_tol = 0.35, 
@@ -238,27 +240,31 @@ function filter_duplicate!(tbl::Table;
                             other_fn = Dictionary{Symbol, Any}([:mz_range, :polarity, :datafile], [splat(union), only ∘ unique, nothing]))
     sort!(tbl, [:mz2, :mz1, :rt])
     calc_signal = isa(signal, Symbol) || false
-    gids = groupfind(x -> round.(getproperty(x, :mz2); digits = -floor(Int, log10(mz_tol))), tbl)
-    locs = mapreduce(∪, collect(gids)) do ids
-        locs = Vector{Int}[]
-        for i in ids
-            rrt = tbl.rt[i]
-            rmz1 = tbl.mz1[i]
-            rmz2 = tbl.mz2[i]
-            rcollision_energy = tbl.collision_energy[i]
-            new = true
-            for loc in locs
-                abs(mean(tbl.rt[loc]) - rrt) > rt_tol && continue
-                abs(mean(tbl.mz1[loc]) - rmz1) > mz_tol && continue
-                abs(mean(tbl.mz2[loc]) - rmz2) > mz_tol && continue
-                tbl.collision_energy[loc[1]] == rcollision_energy || continue
-                push!(loc, i)
-                new = false
-                break
+    if use_match_id 
+        locs = collect(groupfind(getproperties((:match_id, :collision_energy)), tbl)) 
+    else
+        gids = groupfind(x -> round.(getproperty(x, :mz2); digits = -floor(Int, log10(mz_tol))), tbl)
+        locs = mapreduce(∪, collect(gids); init = Vector{Int}[]) do ids
+            locs = Vector{Int}[]
+            for i in ids
+                rrt = tbl.rt[i]
+                rmz1 = tbl.mz1[i]
+                rmz2 = tbl.mz2[i]
+                rcollision_energy = tbl.collision_energy[i]
+                new = true
+                for loc in locs
+                    (!between(mean(tbl.rt[loc]), rrt, rt_tol) || 
+                    !between(mean(tbl.mz1[loc]), rmz1, mz_tol) ||
+                    tbl.collision_energy[loc[1]] != rcollision_energy ||
+                    !between(mean(tbl.mz2[loc]), rmz2, mz_tol)) && continue
+                    push!(loc, i)
+                    new = false
+                    break
+                end
+                new && push!(locs, [i])
             end
-            new && push!(locs, [i])
+            locs
         end
-        locs
     end
     calc_signal && n > 1 && filter!(loc -> (length(loc) >= n && err_fn(getproperty(tbl, signal)[loc]) <= err_tol), locs)
     if raw_id
@@ -317,7 +323,7 @@ Infer the structure of side chain and adjust `product` if neccessary.
 
 This function returns `(product, sidechain)` if there are no conflicts; otherwise, it returns `nothing`.
 """
-process_product(product::Ion, cls::ClassSP, sc::SumChain) =
+process_product(product::Ion, cls::ClassSP, sc::Union{SumChain, SumChainIS}) =
     (in(product, NANA) && !hasnana(cls)) ? nothing : (product, sc)
 function process_product(product::Ion{<: Adduct, <: LCB}, cls::ClassSP, sc::SumChain)
     lcb_o = nox(product.molecule)
@@ -351,6 +357,47 @@ function process_product(product::Ion{<: Adduct, <: LCB}, cls::ClassSP, sc::SumC
     product_new, DiChain(lcb_new, Acyl(ncb(sc) - ncb(lcb_new), sum_db - ndb(lcb_new), sum_o - nox(lcb_new)))
 end
 
+function process_product(product::Ion{<: Adduct, <: LCB}, cls::ClassSP, sc::SumChainIS)
+    lcb_o = nox(product.molecule)
+    lcb_db = ndb(product.molecule)
+    lcb_13C = n13C(product.molecule)
+    lcb_D = nD(product.molecule)
+    sum_db = ndb(sc)
+    sum_o = nox(sc)
+    sum_13C = n13C(sc)
+    sum_D = nD(sc)
+    #=
+    1. sum_db + sum_o < lcb_db + lcb_o (total unsaturation deficiency)
+    2. sum_o < lcb_o
+        0 < Δ = lcb_o - sum_o ≤ sum_db - lcb_db
+        lcb_o' = lcb_o - Δ = sum_o => sum_o - lcb_o' = 0
+        lcb_db' = lcb_db + Δ ≤ sum_db
+    3. sum_db < lcb_db
+        0 < Δ = lcb_db - sum_db ≤ sum_o - lcb_o
+        lcb_db' = lcb_db - Δ = sum_db
+        lcb_o' = lcb_o + Δ ≤ sum_o => sum_o - lcb_o' = sum_o - lcb_o - Δ ≥ 0
+    =#
+    (sum_db + sum_o) < (lcb_o + lcb_db) && return nothing
+    sum_13C < lcb_13C && return nothing
+    sum_D < lcb_D && return nothing
+    Δ = sum_o - lcb_o
+    Δ = Δ < 0 ? Δ : max(0, lcb_db - sum_db)
+    product_new = @match Δ begin
+        0 => product
+        _ => begin
+            lcb_new = hydroxyl_shift(product.molecule, Δ)
+            add_new = hydroxyl_shift(product.adduct, Δ)
+            (isnothing(lcb_new) || isnothing(add_new)) && return nothing
+            Ion(add_new, lcb_new)
+        end
+    end
+    lcb_new = product_new.molecule
+    acyl_13C = sum_13C - n13C(lcb_new)
+    acyl_D = sum_D - nD(lcb_new)
+    (product_new, acyl_13C == 0 && acyl_D == 0 ? DiChain(lcb_new, Acyl(ncb(sc) - ncb(lcb_new), sum_db - ndb(lcb_new), sum_o - nox(lcb_new))) : 
+        DiChain(lcb_new, AcylIS(ncb(sc) - ncb(lcb_new), sum_db - ndb(lcb_new), sum_o - nox(lcb_new), (n13C = acyl_13C, nD = acyl_D))))
+end
+
 """
     id_product(ms2::Float64, polarity::Bool; mz_tol = 0.35)
 
@@ -372,7 +419,7 @@ end
 Take the union of two MRM transition tables and create a new `Table`. MRM data will be merged into one data if they are considered close enough.
 
 The tables should containing the following columns:
-* `compound`: `Vector{CompoundSP}`; possible compounds.
+* `analyte`: `Vector{CompoundSP}`; possible analytes.
 * `mz1`: m/z of parent ion.
 * `mz2`: m/z of fragment ion.
 * `rt`: retention time.
@@ -395,9 +442,9 @@ function union_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5
             data1.collision_energy == data2.collision_energy || continue
             rt_l = min(data1.rt - data1.Δrt / 2, data2.rt - data2.Δrt / 2)
             rt_r = max(data1.rt + data1.Δrt / 2, data2.rt + data2.Δrt / 2)
-            n = length(vectorize(data1.compound))
+            n = length(vectorize(data1.analyte))
             tbl1[id1] = (;
-                compound = vectorize(data1.compound),
+                analyte = vectorize(data1.analyte),
                 mz1 = (data1.mz1 * n + data2.mz1) / (n + 1),
                 mz2 = (data1.mz2 * n + data2.mz2) / (n + 1),
                 rt = (rt_l + rt_r) / 2,
@@ -405,10 +452,10 @@ function union_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5
                 collision_energy = data1.collision_energy,
                 polarity = data1.polarity
             )
-            union!(data1.compound, vectorize(data2.compound))
+            union!(data1.analyte, vectorize(data2.analyte))
             pushed = true
         end
-        pushed || push!(tbl1, (compound = data2.compound, mz1 = data2.mz1, mz2 = data2.mz2, rt = data2.rt, Δrt = rt_tol * 2, collision_energy = data2.collision_energy, polarity = data2.polarity))
+        pushed || push!(tbl1, (analyte = data2.analyte, mz1 = data2.mz1, mz2 = data2.mz2, rt = data2.rt, Δrt = rt_tol * 2, collision_energy = data2.collision_energy, polarity = data2.polarity))
     end
     sort!(tbl1, [:mz1, :rt])
 end
@@ -423,7 +470,7 @@ This function return a `NamedTuple`:
 * `new`: data from `tbl1` that do not exist in `tbl2`.
 
 The tables should containing the following columns:
-* `compound`: `Vector{CompoundSP}`; possible compounds.
+* `analyte`: `Vector{CompoundSP}`; possible analytes.
 * `mz1`: m/z of parent ion.
 * `mz2`: m/z of fragment ion.
 * `rt`: retention time.
@@ -448,10 +495,10 @@ function diff_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
             data1.collision_energy == data2.collision_energy || continue
             rt_l = min(data1.rt - data1.Δrt / 2, data2.rt - data2.Δrt / 2)
             rt_r = max(data1.rt + data1.Δrt / 2, data2.rt + data2.Δrt / 2)
-            n = length(vectorize(data1.compound))
-            isempty(setdiff(vectorize(data2.compound), vectorize(data1.compound))) || push!(extended, id1)
+            n = length(vectorize(data1.analyte))
+            isempty(setdiff(vectorize(data2.analyte), vectorize(data1.analyte))) || push!(extended, id1)
             tbl1[id1] = (;
-                compound = vectorize(data1.compound),
+                analyte = vectorize(data1.analyte),
                 mz1 = (data1.mz1 * n + data2.mz1) / (n + 1),
                 mz2 = (data1.mz2 * n + data2.mz2) / (n + 1),
                 rt = (rt_l + rt_r) / 2,
@@ -459,12 +506,12 @@ function diff_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
                 collision_energy = data1.collision_energy,
                 polarity = data1.polarity
             )
-            union!(data1.compound, vectorize(data2.compound))
+            union!(data1.analyte, vectorize(data2.analyte))
             pushed = true
         end
         pushed && continue
         #push!(new, id2)
-        push!(tbl1, (compound = data2.compound, mz1 = data2.mz1, mz2 = data2.mz2, rt = data2.rt, Δrt = rt_tol * 2, collision_energy = data2.collision_energy, polarity = data2.polarity))
+        push!(tbl1, (analyte = data2.analyte, mz1 = data2.mz1, mz2 = data2.mz2, rt = data2.rt, Δrt = rt_tol * 2, collision_energy = data2.collision_energy, polarity = data2.polarity))
     end
     (extended = tbl1[extended], new = size(tbl1, 1) > l ? tbl1[l + 1:end] : nothing)
 end

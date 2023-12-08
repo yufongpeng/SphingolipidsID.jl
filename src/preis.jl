@@ -63,7 +63,7 @@ function PreIS!(featuretable::Table, polarity::Bool;
                 err_tol = 0.5,
                 other_fn = Dictionary{Symbol, Any}([:mz_range, :datafile], [splat(union), nothing])
     )
-    featuretable = filter_duplicate!(featuretable; rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)
+    featuretable = filter_combine_features!(featuretable; rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)
     config = dictionary(pairs((; rt_tol, mz_tol, n, signal, anion, est_fn, err_fn, err_tol, other_fn)))
     #=
     mz2v = Vector{Float64}[]
@@ -91,7 +91,7 @@ end
 
 function Project(preis::PreIS; data_id = -1, kwargs...)
     appendix = Dictionary{Symbol, Any}(kwargs)
-    project = Project(AnalyteSP[], Data[], appendix)
+    project = Project(AnalyteSP[], Data[], Quantification(), appendix)
     preis!(project, preis; data_id)
 end
 
@@ -110,14 +110,14 @@ function preis!(project::Project, preis::PreIS; data_id = -1)
         source = data_id < 0 ? length(data) + 1 + data_id : data_id
         dt = data[source]
         for mz2 in dt.mz2
-            any(x -> isapprox(x, mz2; atol = preis.mz_tol), preis.mz2) && throw(ArgumentError("The data contains mz2 value too close to existing mz2 value.\n current: $(dt.mz2)\n new: $(preis.mz2)"))
+            any(x -> isapprox(x, mz2; atol = preis.config[:mz_tol]), preis.mz2) && throw(ArgumentError("The data contains mz2 value too close to existing mz2 value.\n current: $(dt.mz2)\n new: $(preis.mz2)"))
         end
         idend = maximum(dt.id)
         preis.table.id .+= idend
         preis.table.mz2_id .+= maximum(dt.mz2_id)
         append!(dt.mz2, preis.mz2)
         append!(dt.range, preis.range)
-        append!(dt.tale, preis.table)
+        append!(dt.table, preis.table)
     end
     set!(project.appendix, :anion, preis.config[:anion])
     set!(project.appendix, :signal, preis.config[:signal])
@@ -424,7 +424,7 @@ function preis!(
 
     db = SPDB[polarity ? :LIBRARY_POS : :LIBRARY_NEG]
     # check, update appendix and config
-    featuretable = filter_duplicate!(featuretable; rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)
+    featuretable = filter_combine_features!(featuretable; rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)
     config = dictionay(pairs((; rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)))
     source, ft = preprocess_preis!(project.data, data_id, featuretable, mz_range, polarity, config)
     dt = project.data[source]
@@ -524,6 +524,9 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
             cpd.project = project
         end
     end
+    printstyled("PreIS> ", color = :green, bold = true)
+    println("Sorting analytes")
+    sort!(project; by = x -> (mw(x), rt(x)))
     project
 end
 

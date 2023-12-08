@@ -2,12 +2,12 @@ module SphingolipidsID
 
 using CSV, PrettyTables,
         MLStyle, DataPipes, SplitApplyCombine, TypedTables, Dictionaries,
-        Statistics, Clustering, Plots, GLM, ThreadsX
+        Statistics, StatsBase, Clustering, Plots, GLM, ThreadsX, LinearAlgebra
 using AnovaBase: getterms, anova, @formula
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # config input
-        read_adduct_code, read_class_db, read_ce, class_db_index, set_db!,
+        read_adduct_code, read_class_db, read_ce, class_db_index, set_db!, push_library!,
         # Type Class
         ClassSP, SPB, Cer, CerP, SM, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer,
         HexNAcHex2Cer, HexNAcHex2Cer_, HexNAc_Hex2Cer, HexNAcHex3Cer, HexNAcHex3Cer_, HexNAc_Hex3Cer, Hex_HexNAc_Hex2Cer, ClasswoNANA,
@@ -19,9 +19,12 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         CLS,
         # Type LCB/ACYL
         LCB, LCB2, LCB3, LCB4, SPB2, SPB3, SPB4, NotPhyto, NotPhyto3, NotPhyto4,
+        LCBIS,SPB2IS, SPB3IS, SPB4IS, NotPhyto3IS, NotPhyto4IS, 
         ACYL, Acyl, Acylα, Acylβ,
-        Lcb, Nacyl, Nacylα, Nacylβ, NACYL,
+        ACYLIS, AcylIS, AcylαIS, AcylβIS,
+        #Lcb, Nacyl, Nacylα, Nacylβ, NACYL,
         ChainSP, SumChain, DiChain,
+        ChainSPIS, SumChainIS, DiChainIS,
         # Type Glycan
         Sugar, Glycan, Hex, HexNAc, NeuAc,
         # Type Ion/Adduct
@@ -35,13 +38,13 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # Core Data structures
         CompoundSP, AnalyteSP,
         #IonPlus, IonComparison, RuleMode, RuleUnion, AcylIon,
-        Data, PreIS, MRM, Project, Query,
+        Data, PreIS, MRM, QCData, SerialDilution, Quantification, Project, Query,
         # Create library/rule
         library, rule,
         # Data inputs
         read_featuretable, read_featuretable_mzmine3, sort_data!, sort_data, file_order, 
         fill_polarity!, fill_polarity, fill_mz2!, fill_ce!, fill_range!, fill_mz2, fill_ce, fill_range, 
-        split_datafile, read_featuretable_masshunter_mrm, filter_duplicate!, rsd, re, default_error,
+        split_datafile, read_featuretable_masshunter_mrm, filter_combine_features!, rsd, re, default_error,
         # PreIS
         preis, preis!, finish_profile!,
         # ID
@@ -50,16 +53,19 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         nfrags, @cpdsc, @score, calc_score, apply_score!, calc_threshold, apply_threshold!, w_rank, w_nfrags, w_rank_log, w_rank_exp, 
         normalized_sig_diff, abs_sig_diff,
         # Transition
-        transitiontable, concurrent_transition, write_transition, read_transition, union_transition!, union_transition, diff_transition!, diff_transition,
+        mrmquanttable, transitiontable, concurrent_transition, write_transition, 
+        read_transition, union_transition!, union_transition, diff_transition!, diff_transition,
+        # Quantification
+        quantification_mrm, quantification_mrm!, qcdata_mrm, qcdata_mrm!, serialdilution_mrm, serialdilution_mrm!,
         # Utils/Query
-        q!, qand, qor, qnot, spid, lcb, acyl, acylα, acylβ, reuse,
-        new_project, allow_unknown, only_known, ncb, ndb, nox, ndbox, mw, mz, class, chain, sumcomp, rt, cluster, incluster, @ri_str,
-        assign_parent!, assign_isf_parent!,
+        q!, qand, qor, qnot, spid, analyteid, lcb, acyl, acylα, acylβ, reuse,
+        new_project, allow_unknown, only_known, ncb, ndb, nox, ndbox, compound_formula, mw, mz, class, chain, sumcomp, rt, cluster, incluster, @ri_str,
+        assign_parent!, assign_isf_parent!, mode,
         # RT prediction
         initialize_clusters!, analytes2clusters!, select_clusters!,
         model_clusters!, compare_models, @model, predfn_clusters!,
         expand_clusters!, update_clusters!, replace_clusters!,
-        show_clusters, model_rt!, apply_rt!, predict_rt, err_rt, abs_err_rt,
+        show_clusters, model_rt!, apply_rt!, predict_rt, err_rt, abs_err_rt, rt_correction,
         # Plots
         plot_rt_mw, plotlyjs, gr, histogram_transition
 
@@ -96,33 +102,30 @@ include(joinpath("type", "utils.jl"))
 Abstarct type for projects.
 """
 abstract type AbstractProject end
-
 """
-    AbstractCompoundSP
+    abstract type AbstractCompoundID end
 
 Abstract type for compound identification.
 """
-abstract type AbstractCompoundSP end
+abstract type AbstractCompoundID end
 """
-    SPID{C <: ClassSP, S <: ChainSP}
+    AbstractCompoundSP <: AbstractCompoundID
 
-A `NamedTuple` contains only the minimal information of a compound.
+Abstract type for compound identification with fragments and other information.
+"""
+abstract type AbstractCompoundSP <: AbstractCompoundID end
+"""
+    SPID{C <: ClassSP, S <: ChainSP} <: AbstractCompoundID
+
+A type contains only the minimal information of a compound.
 
 * `class`: `ClassSP`.
 * `chain`: `ChainSP`.
 """
-const SPID{C <: ClassSP, S <: ChainSP} = @NamedTuple begin
+struct SPID{C <: ClassSP, S <: ChainSP} <: AbstractCompoundID
     class::C
     chain::S
 end
-"""
-    SPID(cls::ClassSP, sc::ChainSP)
-    SPID(cpd::AbstractCompoundSP)
-
-Function for creating `SPID`.
-"""
-SPID(cls::ClassSP, sc::ChainSP) = (class = cls, chain = sc)
-SPID(cpd::AbstractCompoundSP) = SPID(class(cpd), chain(cpd))
 """
     CompoundSPVanilla <: AbstractCompoundSP
 
@@ -162,16 +165,15 @@ mutable struct CompoundSP <: AbstractCompoundSP
     CompoundSP(class::ClassSP, chain::ChainSP, fragments, signal, states, results, project) = new(class, chain, fragments, signal, states, results, project)
     CompoundSP(class::ClassSP, chain::ChainSP, fragments = Table(ion1 = Ion[], ion2 = ion2, source = Int[], id = Int[])) = new(class, chain, fragments, (0.0, 0.0), [0, 0], RuleSet[RuleSet(:missing, EmptyRule()), RuleSet(:missing, EmptyRule())])
 end
-"""
-    const CompoundID = Union{<: SPID, <: AbstractCompoundSP}
-
-A Union type for compounds identification.
-"""
-const CompoundID = Union{<: SPID, <: AbstractCompoundSP}
 #CompoundSP(cpd::CompoundSP, chain::ChainSP) = CompoundSP(cpd.class, chain, cpd.fragments, cpd.signal, cpd.states, cpd.results, cpd.project)
-
 """
-    AnalyteSP
+    AbstractAnalyteID
+
+Abstract type for analyte identification.
+"""
+abstract type AbstractAnalyteID end
+"""
+    AnalyteSP <: AbstractAnalyteID
 
 An analyte which has specific structure in sample but it may become several compounds in MS due to in-source fragmentation.
 
@@ -191,7 +193,7 @@ An analyte which has specific structure in sample but it may become several comp
 
 This type is considered as `Vector{CompoundSP}` and it supports iteration and most functions for `Vector`. 
 """
-mutable struct AnalyteSP
+mutable struct AnalyteSP <: AbstractAnalyteID
     compounds::Vector{CompoundSP}
     rt::Float64
     states::Vector{Int}
@@ -199,14 +201,24 @@ mutable struct AnalyteSP
     score::Pair{Int, Float64}
     #manual_check::Int
 end
-# ==()
 """
     AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64) 
 
 Create a `AnalyteSP` with a vector of `CompoundSP` and their retention time.
 """
 AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64) = AnalyteSP(compounds, rt, repeat([0], 7), 0 => 0.0, 0 => 0.0)
+"""
+    AnalyteID <: AbstractAnalyteID
 
+A type contains only the minimal information of an analyte.
+
+* `compounds`: `Vector{SPID}`.
+* `rt`: `Float64`.
+"""
+struct AnalyteID <: AbstractAnalyteID
+    compounds::Vector{SPID}
+    rt::Float64
+end
 ### connect db
 """
     Data
@@ -300,9 +312,23 @@ struct SerialDilution{T} <: Data
 end
 #SerialDilution(raw::T, table::Table, level::Vector, config::Dictionary) where {T <: Data} = SerialDilution{T}(raw, table, level, config)
 
-# Calibration
-# 
+struct Quantification
+    quanttable::Table
+    isdtable::Table
+    config::Dictionary
+    Quantification() = new()
+    Quantification(quanttable::Table, isdtable::Table, config::Dictionary) = new(quanttable, isdtable, config)
+end
 
+struct RTCorrection
+    data::Data
+    quanttable::Table
+    fn::Dictionary
+end
+(fn::RTCorrection)(cls::ClassSP, rt) = [1, rt]'get(fn.fn, cls, [0, 1])
+(fn::RTCorrection)(cls::Vector{<: ClassSP}, rt::Vector) = [repeat([1], length(rt)) rt]'get.(Ref(fn.fn), cls, Ref([0, 1]))
+
+# Calibration
 """
     Project <: AbstractProject
 
@@ -316,9 +342,10 @@ An LC-MS analysis project.
 
 This type is considered as `Vector{AnalyteSP}` and it supports iteration and most functions for `Vector`.
 """
-struct Project <: AbstractProject
+mutable struct Project <: AbstractProject
     analytes::Vector{AnalyteSP}
     data::Vector{Data}
+    quantification::Quantification
     #anion::Symbol
     #clusters::Dictionary
     #alignment::Int
@@ -333,7 +360,7 @@ function Project(; kwargs...)
     appendix = Dictionary{Symbol, Any}(kwargs)
     get!(appendix, :anion, :acetate)
     get!(appendix, :signal, :area)
-    Project(AnalyteSP[], Data[], appendix)
+    Project(AnalyteSP[], Data[], Quantification(), appendix)
 end
 """
     AbstractQuery
@@ -381,6 +408,7 @@ include("ruleID.jl")
 include("score.jl")
 include("query.jl")
 include("transition.jl")
+include("quantification.jl")
 
 # S: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-237.2224
 # DHS: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-239.2224

@@ -138,7 +138,7 @@ function match_rules(analyte::AnalyteSP, prec::Vector, ms1::Vector, mmode, rule:
     end
     ions = @match (rule, done) begin
         (::RuleUnion, _)    => union((), ions...)
-        (_, true)           => mode(ions)
+        (_, true)           => mode_ion(ions)
         (_, false)          => ions
     end
     done || return Result(false, T(ions; exception = rule.exception))

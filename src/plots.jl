@@ -29,28 +29,46 @@ Plot retention time vs molecular weight on specified analytes.
 plot_rt_mw(aquery::AbstractQuery; kwargs...) = plot_rt_mw(aquery.project; analytes = aquery.result, kwargs...)
 function plot_rt_mw(project::Project;
                     analytes = project.analytes,
-                    all = true,
                     clusters = nothing,
                     groupby = deisomerized ∘ class,
                     clusters_model = false,
                     rt_prediction = false,
+                    all = !rt_prediction,
                     xlabel = "Retention Time (min)",
                     ylabel = "Molecular weight",
                     title = "Analytes",
                     kwargs...)
-    ≡(clusters, :possible) && return map(collect(keys(project.appendix[:clusters_possible]))) do cls
-        plot_rt_mw(project, cls; all, xlabel, ylabel, deepcopy(kwargs)...)
-    end
-    gana = isnothing(groupby) ? Dictionary([:Analytes], [analytes]) : groupview(groupby, analytes)
-    if !isnothing(clusters)
-        used_clusters = @match clusters begin
-            :clusters  => project.appendix[:clusters]
-            :candidate => project.appendix[:clusters_candidate]
+    #≡(clusters, :possible) && return map(collect(keys(project.appendix[:clusters_possible]))) do cls
+    #    plot_rt_mw(project, cls; all, xlabel, ylabel, deepcopy(kwargs)...)
+    #end
+    if ≡(clusters, :possible)
+        clusters = project.appendix[:clusters_possible]
+        kys = similar(analytes, String)
+        Threads.@threads for id in eachindex(analytes)
+            oid  = (first ∘ parentindices)(analytes)[id]
+            ky = "Nothing"
+            for (cls, cluster) in pairs(clusters)
+                nid = findfirst(x -> in(oid, x), cluster)
+                isnothing(nid) && continue
+                ky = string(cls, "_", nid)
+                break
+            end
+            kys[id] = ky
         end
-        gana = @p pairs(gana) |>
-                    map(filter(x -> in(x, get(used_clusters, _[1], Int[])), (first ∘ parentindices)(_[2]))) |>
-                    filter(!isempty(_)) |>
-                    map(@view project.analytes[_])
+        gid = group(kys, eachindex(analytes))
+        gana = dictionary(ky => @view analytes[gid[ky]] for ky in unique!(kys))
+    else
+        gana = isnothing(groupby) ? Dictionary([:Analytes], [analytes]) : groupview(groupby, analytes)
+        if !isnothing(clusters)
+            used_clusters = @match clusters begin
+                :clusters  => project.appendix[:clusters]
+                :candidate => project.appendix[:clusters_candidate]
+            end
+            gana = @p pairs(gana) |>
+                        map(filter(x -> in(x, get(used_clusters, _[1], Int[])), (first ∘ parentindices)(_[2]))) |>
+                        filter(!isempty(_)) |>
+                        map(@view project.analytes[_])
+        end
     end
     data = Dictionary{keytype(gana), Table}()
     if rt_prediction
@@ -161,6 +179,9 @@ function histogram_transition(tbl::Table;
     x = (tbl.rt[1:end - 1] .+ tbl.rt[2:end]) ./ 2
     w = tbl.rt[2:end] .- tbl.rt[1:end - 1]
     bar(x, tbl.count[1:end - 1]; xlabel, ylabel, title, color, label, linecolor, bar_width = w, kwargs...)
+end
+
+function plot_rt_rt()
 end
 
 function hover_repr(analytes)
