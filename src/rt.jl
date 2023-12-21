@@ -343,6 +343,9 @@ function find_predictable(model, tbl)
         level = sch[Term(name)].contrasts.levels
         union!(todel, findall(!in(level), getproperty(tbl, name)))
     end
+    for name in setdiff(propertynames(tbl), toval)
+        union!(todel, findall(isnothing, getproperty(tbl, name)))
+    end
     setdiff(eachindex(tbl), todel)
 end
 """
