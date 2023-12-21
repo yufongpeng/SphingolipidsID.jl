@@ -2,7 +2,7 @@
     transitiontable(project::Project, adduct, product, polarity::Bool; kwargs...)
     transitiontable(aquery::AbstractQuery, adduct, product, polarity::Bool; kwargs...)
     transitiontable(adduct, product, polarity::Bool, pq::Union{Project, AbstractQuery}; kwargs...)
-    transitiontable(analytes::AbstractVector{<: AbstractAnalyteID}, adduct, product, polarity::Bool;
+    transitiontable(analyte::AbstractVector{<: AbstractAnalyteID}, adduct, product, polarity::Bool;
                     mz_tol = 0.35, rt_tol = 0.5,
                     db = SPDB[polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
                     anion = :acetate,
@@ -12,7 +12,7 @@
 Create a table of MRM transitions.
 
 # Arguuments
-* `analytes`: analytes to be included.
+* `analyte`: analytes to be included.
 * `adduct`: an adduct or a vector of adducts for parent ions.
 * `product`: `Ion` or `LCB`; product ion. There are default adducts for `LCB`. 
 * `polarity`: `true` for positive ion mode; `false` for negative ion mode.
@@ -22,18 +22,18 @@ Create a table of MRM transitions.
 * `anion`: `:formate` or `acetate`.
 * `default`: default product m/z value.
 """
-transitiontable(project::Project, transitions; kwargs...) = transitiontable(project.analytes, transitions; kwargs..., anion = project.appendix[:anion])
+transitiontable(project::Project, transitions; kwargs...) = transitiontable(project.analyte, transitions; kwargs..., anion = project.appendix[:anion])
 transitiontable(aquery::AbstractQuery, transitions; kwargs...) = transitiontable(aquery.result, transitions; kwargs..., anion = aquery.project.appendix[:anion])
 transitiontable(transitions, pq::Union{Project, AbstractQuery}; kwargs...) = transitiontable(pq, transitions; kwargs...)
 
-function transitiontable(analytes::AbstractVector{<: AbstractAnalyteID}, transitions::Vector;
+function transitiontable(analyte::AbstractVector{<: AbstractAnalyteID}, transitions::Vector;
                         mz_tol = 0.35, rt_tol = 0.5,
                         anion = :acetate,
                         default_mz2 = mz(Ion(ProtonationNL2H2O(), SPB3(18, 1)))
                         )
     polarity, transitions = zip(proc_transition.(transitions)...)
     polarity = all(polarity) ? true : any(polarity) ? throw(ArgumentError("Polairties of adducts must be the same")) : false
-    analyte_list = analytelist(analytes, collect(transitions), polarity, anion)
+    analyte_list = analytelist(analyte, collect(transitions), polarity, anion)
     #filter_analytelist!(analyte_list, last(quantifier))
     mz2_list = calc_mz2(analyte_list, polarity)
     ce_list = celist(analyte_list, polarity)
@@ -69,24 +69,24 @@ function transitiontable(analytes::AbstractVector{<: AbstractAnalyteID}, transit
     Table((; id = collect(eachindex(tbl)), ), tbl; analyte = join.(getproperty.(tbl, :analyte), " | "), polarity = repeat([polarity ? "Positive" : "Negative"], size(tbl, 1)))
 end
 
-mrmquanttable(project::Project, quantifier::Tuple; kwargs...) = mrmquanttable(project.analytes, quantifier; kwargs..., mz_tol = last(project.data).config[:mz_tol], rt_tol = last(project.data).config[:rt_tol], anion = project.appendix[:anion])
-mrmquanttable(aquery::AbstractQuery, quantifier::Tuple; kwargs...) = mrmquanttable(aquery.result, quantifier; kwargs..., mz_tol = last(aquery.project.data).config[:mz_tol], rt_tol = last(aquery.project.data).config[:rt_tol], anion = aquery.project.appendix[:anion])
-mrmquanttable(quantifier::Tuple, pq::Union{Project, AbstractQuery}; kwargs...) = mrmquanttable(pq, quantifier; kwargs...)
+analyte_map_mrm(project::Project, quantifier::Tuple; kwargs...) = analyte_map_mrm(project.analyte, quantifier; kwargs..., mz_tol = last(project.data).config[:mz_tol], rt_tol = last(project.data).config[:rt_tol], anion = project.appendix[:anion])
+analyte_map_mrm(aquery::AbstractQuery, quantifier::Tuple; kwargs...) = analyte_map_mrm(aquery.result, quantifier; kwargs..., mz_tol = last(aquery.project.data).config[:mz_tol], rt_tol = last(aquery.project.data).config[:rt_tol], anion = aquery.project.appendix[:anion])
+analyte_map_mrm(quantifier::Tuple, pq::Union{Project, AbstractQuery}; kwargs...) = analyte_map_mrm(pq, quantifier; kwargs...)
 
-function mrmquanttable(analytes::AbstractVector{<: AbstractAnalyteID}, quantifier::Tuple;
+function analyte_map_mrm(analyte::AbstractVector{<: AbstractAnalyteID}, quantifier::Tuple;
                         qualifier = Tuple[],
                         mz_tol = 0.35, rt_tol = 0.1,
                         anion = :acetate,
                         default_mz2 = mz(Ion(ProtonationNL2H2O(), SPB3(18, 1))),
-                        coelution_fn = x -> lastindex(x.analyte),
+                        coelution_fn = x -> lastindex(x.analytes),
                         isd_fn = x -> 0
                         )
     polarity, transitions = zip(proc_transition.([quantifier, qualifier...])...)
     polarity = all(polarity) ? true : any(polarity) ? throw(ArgumentError("Polairties of adducts must be the same")) : false
-    analyte_list = analytelist(analytes, collect(transitions), polarity, anion)
+    analyte_list = analytelist(analyte, collect(transitions), polarity, anion)
     filter_analytelist!(analyte_list, last(quantifier))
     mz2_list = calc_mz2(analyte_list, polarity)
-    tbl = NamedTuple{(:mz1, :mz2, :rt, :quantifier, :analyte), Tuple{Float64, Float64, Float64, Bool, Any}}[]
+    tbl = NamedTuple{(:mz1, :mz2, :rt, :quantifier, :analytes), Tuple{Float64, Float64, Float64, Bool, Any}}[]
     prev = nothing
     sid = 1
     for (ranalyte, ms2) in zip(analyte_list, mz2_list)
@@ -100,35 +100,36 @@ function mrmquanttable(analytes::AbstractVector{<: AbstractAnalyteID}, quantifie
         ms1 = mz(last(ranalyte.analyte), ranalyte.add)
         test = sid:length(tbl)
         if length(test) == 0 
-            push!(tbl, (mz1 = ms1, mz2 = ms2, rt = ranalyte.rt, quantifier = quant, analyte = [ranalyte.analyte]))
+            push!(tbl, (mz1 = ms1, mz2 = ms2, rt = ranalyte.rt, quantifier = quant, analytes = [ranalyte.analyte]))
             continue
         elseif !between(mean(getproperty.(tbl[test], :mz1)), ms1, mz_tol * 2) 
-            push!(tbl, (mz1 = ms1, mz2 = ms2, rt = ranalyte.rt, quantifier = quant, analyte = [ranalyte.analyte]))
+            push!(tbl, (mz1 = ms1, mz2 = ms2, rt = ranalyte.rt, quantifier = quant, analytes = [ranalyte.analyte]))
             sid = length(tbl)
             continue
         end
         for (id, rtbl) in zip(test, @view tbl[sid:end])
             (quant != rtbl.quantifier || !between(rtbl.mz1, ms1, mz_tol) || !between(rtbl.mz2, ms2, mz_tol) || !between(rtbl.rt, ranalyte.rt, rt_tol)) && continue
             tbl[id] = (;
-                mz1 = (rtbl.mz1 * length(rtbl.analyte) + ms1) / (length(rtbl.analyte) + 1),
-                mz2 = (rtbl.mz2 * length(rtbl.analyte) + ms2) / (length(rtbl.analyte) + 1),
-                rt = (rtbl.rt * length(rtbl.analyte) + ranalyte.rt) / (length(rtbl.analyte) + 1),
+                mz1 = (rtbl.mz1 * length(rtbl.analytes) + ms1) / (length(rtbl.analytes) + 1),
+                mz2 = (rtbl.mz2 * length(rtbl.analytes) + ms2) / (length(rtbl.analytes) + 1),
+                rt = (rtbl.rt * length(rtbl.analytes) + ranalyte.rt) / (length(rtbl.analytes) + 1),
                 quantifier = quant,
-                analyte = vectorize(rtbl.analyte)
+                analytes = vectorize(rtbl.analytes)
             )
-            push!(tbl[id].analyte, ranalyte.analyte)
+            push!(tbl[id].analytes, ranalyte.analyte)
             pushed = true
             break
         end
-        pushed || (push!(tbl, (mz1 = ms1, mz2 = ms2, rt = ranalyte.rt, quantifier = quant, analyte = [ranalyte.analyte])))
+        pushed || (push!(tbl, (mz1 = ms1, mz2 = ms2, rt = ranalyte.rt, quantifier = quant, analytes = [ranalyte.analyte])))
     end
-    tbl = Table((; id = collect(eachindex(tbl)), name = join.(map(analytes -> repr.(last.(analytes)), getproperty.(tbl, :analyte)), " | "),), tbl; 
+    tbl = Table(tbl; 
             polarity = repeat([polarity ? "Positive" : "Negative"], size(tbl, 1)), 
-            coelution_id = coelution_fn.(tbl),
-            analyte = getproperty.(tbl, :analyte)
+            analytes = getproperty.(tbl, :analytes)
         )
-    Table(tbl; isd_id = isd_fn.(tbl))
-end
+    tbl = Table(tbl; coelution = coelution_fn.(tbl))
+    tbl = Table((; id = collect(eachindex(tbl)), analyte = map(x -> transitionid(spid(x.analytes[x.coelution]), x.quantifier), tbl)), tbl)
+    Table((; id = tbl.id, analyte = tbl.analyte, isd = isd_fn.(tbl), calibration = isd_fn.(tbl)), tbl)
+end # analyte_map
 
 proc_transition(transition::Tuple{Symbol, T}) where T = (first(transition) == :default_pos, transition)
 function proc_transition(transition::Tuple{Int, T}) where T
@@ -159,23 +160,23 @@ function analyte_transition_rt(analyte, transition, polarity, anion)
     add = first(transition) isa Symbol ? only(filter_adduct(class_db_index(class(analyte)).default_ion, anion, polarity)) : first(transition)
     (analyte = analyte, add = add, prod = last(transition), rt = analyte.rt)
 end
-analytelist(analytes::AbstractVector{<: AbstractAnalyteID}, transitions::Vector, polarity::Bool, anion) =
-    productview((x, y) -> analyte_transition_rt(y, x, polarity, anion), transitions, analytes) |> splitdimsview |> flatten
+analytelist(analyte::AbstractVector{<: AbstractAnalyteID}, transitions::Vector, polarity::Bool, anion) =
+    productview((x, y) -> analyte_transition_rt(y, x, polarity, anion), transitions, analyte) |> splitdimsview |> flatten
     # Transducers
-    # Iterators.product(adduct, analytes) |> MapSplat(analyte_add_rt) |> collect
+    # Iterators.product(adduct, analyte) |> MapSplat(analyte_add_rt) |> collect
     # DataPipes and BangBang:
-    # @p Iterators.product(adduct, analytes) |> Iterators.map(analyte_add_rt(_...)) |> reduce(push!!; init = [])
+    # @p Iterators.product(adduct, analyte) |> Iterators.map(analyte_add_rt(_...)) |> reduce(push!!; init = [])
     # Much more allocation for 1st
     # SplitApplyCombine
-    # productview(analyte_add_rt, adduct, analytes) |> splitdimsview |> flatten
+    # productview(analyte_add_rt, adduct, analyte) |> splitdimsview |> flatten
     # A little more allocation for 1st, less allocation for 2nd
 
-#analytelist(analytes::AbstractVector{AbstractAnalyteID}, anion) =
-#    @p analytes |> mapmany(analyte_add_rt(_, anion))
+#analytelist(analyte::AbstractVector{AbstractAnalyteID}, anion) =
+#    @p analyte |> mapmany(analyte_add_rt(_, anion))
     # Transducers
-    # analytes |> MapCat(analyte -> analyte_add_rt(analyte, polarity, anion)) |> collect
+    # analyte |> MapCat(analyte -> analyte_add_rt(analyte, polarity, anion)) |> collect
     # DataPipes and BangBang:
-    # @p analytes |> Iterators.map(analyte_add_rt(_, polarity, anion)) |> reduce(vcat)
+    # @p analyte |> Iterators.map(analyte_add_rt(_, polarity, anion)) |> reduce(vcat)
     # Much less allocation for 1st
     # DataPipes and SplitApplyCombine
     # Even less allocation for 1st
@@ -197,7 +198,7 @@ calc_mz2(analyte::NamedTuple, ion::Ion{<: T}, polarity::Bool; db = SPDB[T <: Pos
 celist(analyte_list::Vector, polarity::Bool) = 
     map(x -> celist(x, x.prod, polarity), analyte_list)
 function celist(analyte::NamedTuple, ::Type{LCB}, polarity::Bool)
-    polarity || throw(ArgumentError("Not yet implement this fragments"))
+    polarity || throw(ArgumentError("Not yet implement this fragment"))
     id = findfirst(x -> ≡(class(analyte.analyte), SPDB[:CE].ms1[x]) && ≡(analyte.add, SPDB[:CE].adduct1[x]) && ==(SPDB[:CE].ms2[x], "LCB"), eachindex(SPDB[:CE]))
     isnothing(id) ? 40 : SPDB[:CE].eV[id]
 end

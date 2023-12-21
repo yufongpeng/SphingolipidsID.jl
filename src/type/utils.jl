@@ -179,7 +179,7 @@ end
 """
     CurrentModelCall <: RetentionModelCall
 
-Null struct indicates `project.appendix[:rt_model].fn` or `project.appendix[:clusters_model].fn`.
+Null struct indicates `project.appendix[:rt_model].fn` or `project.appendix[:cluster_model].fn`.
 """
 struct CurrentModelCall <: RetentionModelCall end
 (rm::ModelCall)(x) = rm.fn(x)

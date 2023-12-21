@@ -1,90 +1,90 @@
 isempty(::ClassSP) = false
 
-length(project::Project) = length(project.analytes)
+length(project::Project) = length(project.analyte)
 length(aquery::AbstractQuery) = length(aquery.result)
-length(analyte::AbstractAnalyteID) = length(analyte.compounds)
+length(analyte::AbstractAnalyteID) = length(analyte.compound)
 
-iterate(project::Project) = iterate(project.analytes)
-iterate(project::Project, i) = iterate(project.analytes, i)
+iterate(project::Project) = iterate(project.analyte)
+iterate(project::Project, i) = iterate(project.analyte, i)
 iterate(aquery::AbstractQuery) = iterate(aquery.result)
 iterate(aquery::AbstractQuery, i) = iterate(aquery.result, i)
-iterate(analyte::AbstractAnalyteID) = iterate(analyte.compounds)
-iterate(analyte::AbstractAnalyteID, i) = iterate(analyte.compounds, i)
+iterate(analyte::AbstractAnalyteID) = iterate(analyte.compound)
+iterate(analyte::AbstractAnalyteID, i) = iterate(analyte.compound, i)
 
-getindex(project::Project, i) = getindex(project.analytes, i)
+getindex(project::Project, i) = getindex(project.analyte, i)
 getindex(aquery::AbstractQuery, i) = getindex(aquery.result, i)
-getindex(analyte::AbstractAnalyteID, i) = getindex(analyte.compounds, i)
+getindex(analyte::AbstractAnalyteID, i) = getindex(analyte.compound, i)
 
-view(project::Project, i) = view(project.analytes, i)
+view(project::Project, i) = view(project.analyte, i)
 view(aquery::AbstractQuery, i) = view(aquery.result, i)
-view(analyte::AbstractAnalyteID, i) = view(analyte.compounds, i)
+view(analyte::AbstractAnalyteID, i) = view(analyte.compound, i)
 
-firstindex(project::Project) = firstindex(project.analytes)
+firstindex(project::Project) = firstindex(project.analyte)
 firstindex(aquery::AbstractQuery) = firstindex(aquery.result)
-firstindex(analyte::AbstractAnalyteID) = firstindex(analyte.compounds)
+firstindex(analyte::AbstractAnalyteID) = firstindex(analyte.compound)
 
-lastindex(project::Project) = lastindex(project.analytes)
+lastindex(project::Project) = lastindex(project.analyte)
 lastindex(aquery::AbstractQuery) = lastindex(aquery.result)
-lastindex(analyte::AbstractAnalyteID) = lastindex(analyte.compounds)
+lastindex(analyte::AbstractAnalyteID) = lastindex(analyte.compound)
 
 sort(project::Project; kwargs...) = sort!(deepcopy(project); kwargs...)
-sort!(project::Project; kwargs...) = sort!(project.analytes; kwargs...)
+sort!(project::Project; kwargs...) = sort!(project.analyte; kwargs...)
 sort(aquery::AbstractQuery; kwargs...) = sort!(copy_wo_project(aquery); kwargs...)
 sort!(aquery::AbstractQuery; kwargs...) = sort!(aquery.result; kwargs...)
 sort(analyte::AbstractAnalyteID; kwargs...) = sort!(copy_wo_project(analyte); kwargs...)
-sort!(analyte::AbstractAnalyteID; kwargs...) = sort!(analyte.compounds; kwargs...)
+sort!(analyte::AbstractAnalyteID; kwargs...) = sort!(analyte.compound; kwargs...)
 
-push!(project::Project, analyte::AnalyteSP) = push!(project.analytes, analyte)
-push!(analyte::AnalyteSP, cpd::CompoundSP) = push!(analyte.compounds, cpd)
-push!(analyte::AnalyteID, cpd::SPID) = push!(analyte.compounds, cpd)
+push!(project::Project, analyte::AnalyteSP) = push!(project.analyte, analyte)
+push!(analyte::AnalyteSP, cpd::CompoundSP) = push!(analyte.compound, cpd)
+push!(analyte::AnalyteID, cpd::SPID) = push!(analyte.compound, cpd)
 
-pop!(project::Project) = pop!(project.analytes)
-pop!(analyte::AbstractAnalyteID) = pop!(analyte.compounds)
+pop!(project::Project) = pop!(project.analyte)
+pop!(analyte::AbstractAnalyteID) = pop!(analyte.compound)
 
-popfirst!(project::Project) = popfirst!(project.analytes)
-popfirst!(analyte::AbstractAnalyteID) = popfirst!(analyte.compounds)
+popfirst!(project::Project) = popfirst!(project.analyte)
+popfirst!(analyte::AbstractAnalyteID) = popfirst!(analyte.compound)
 
-popat!(project::Project, del::Vector{Int}) = popat!(project.analytes, del)
-popat!(analyte::AbstractAnalyteID, del::Vector{Int}) = popat!(analyte.compounds, del)
-popat!(project::Project, del::Int) = popat!(project.analytes, del)
-popat!(analyte::AbstractAnalyteID, del::Int) = popat!(analyte.compounds, del)
+popat!(project::Project, del::Vector{Int}) = popat!(project.analyte, del)
+popat!(analyte::AbstractAnalyteID, del::Vector{Int}) = popat!(analyte.compound, del)
+popat!(project::Project, del::Int) = popat!(project.analyte, del)
+popat!(analyte::AbstractAnalyteID, del::Int) = popat!(analyte.compound, del)
 
-deleteat!(project::Project, del::Vector{Int}) = deleteat!(project.analytes, del)
-deleteat!(analyte::AbstractAnalyteID, del::Vector{Int}) = deleteat!(analyte.compounds, del)
-deleteat!(project::Project, del::Int) = deleteat!(project.analytes, del)
-deleteat!(analyte::AbstractAnalyteID, del::Int) = deleteat!(analyte.compounds, del)
+deleteat!(project::Project, del::Vector{Int}) = deleteat!(project.analyte, del)
+deleteat!(analyte::AbstractAnalyteID, del::Vector{Int}) = deleteat!(analyte.compound, del)
+deleteat!(project::Project, del::Int) = deleteat!(project.analyte, del)
+deleteat!(analyte::AbstractAnalyteID, del::Int) = deleteat!(analyte.compound, del)
 
-deleteat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = deleteat!(parent(analytes), parentindices(analytes)[1][del])
-deleteat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = deleteat!(parent(analytes), parentindices(analytes)[1][del])
-popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analytes), parentindices(analytes)[1][del])
-popat!(analytes::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analytes), parentindices(analytes)[1][del])
+deleteat!(analyte::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = deleteat!(parent(analyte), parentindices(analyte)[1][del])
+deleteat!(analyte::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = deleteat!(parent(analyte), parentindices(analyte)[1][del])
+popat!(analyte::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analyte), parentindices(analyte)[1][del])
+popat!(analyte::SubArray{AnalyteSP, 1, Vector{AnalyteSP}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analyte), parentindices(analyte)[1][del])
 
-deleteat!(analytes::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = deleteat!(parent(analytes), parentindices(analytes)[1][del])
-deleteat!(analytes::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Int) = deleteat!(parent(analytes), parentindices(analytes)[1][del])
-popat!(analytes::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analytes), parentindices(analytes)[1][del])
-popat!(analytes::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analytes), parentindices(analytes)[1][del])
+deleteat!(analyte::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = deleteat!(parent(analyte), parentindices(analyte)[1][del])
+deleteat!(analyte::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Int) = deleteat!(parent(analyte), parentindices(analyte)[1][del])
+popat!(analyte::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Vector{Int}) = popat!(parent(analyte), parentindices(analyte)[1][del])
+popat!(analyte::SubArray{AnalyteID, 1, Vector{AnalyteID}, Tuple{Vector{Int64}}, false}, del::Int) = popat!(parent(analyte), parentindices(analyte)[1][del])
 
 function delete!(aquery::AbstractQuery, target::Symbol)
-    delete!(aquery.project, target; analytes = query.result)
+    delete!(aquery.project, target; analyte = query.result)
     aquery.view ? (printstyled("Please re-query to get the correct result\n"; bold = true, color = :red); aquery.project) : aquery
 end
 
-function delete!(project::Project, target::Symbol; analytes = project.analytes)
+function delete!(project::Project, target::Symbol; analyte = project.analyte)
     printstyled("Delete> ", uppercasefirst(string(target)), "\n"; color = :green, bold = true)
-    deleteat!(analytes, findall(analyte -> analyte.states[states_id(target)] < 0, analytes))
+    deleteat!(analyte, findall(ana -> ana.state[state_id(target)] < 0, analyte))
     project
 end
 
-keys(project::Project) = LinearIndices(project.analytes)
+keys(project::Project) = LinearIndices(project.analyte)
 keys(aquery::AbstractQuery) = LinearIndices(aquery.result)
-keys(analyte::AbstractAnalyteID) = LinearIndices(analyte.compounds)
+keys(analyte::AbstractAnalyteID) = LinearIndices(analyte.compound)
 
 reverse(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(deepcopy(project), start, stop)
-reverse!(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(project.analytes, start, stop)
+reverse!(project::Project, start::Int = 1, stop::Int = length(project)) = reverse!(project.analyte, start, stop)
 reverse(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = reverse!(copy_wo_project(aquery), start, stop)
 reverse!(aquery::AbstractQuery, start::Int = 1, stop::Int = length(aquery)) = reverse!(aquery.result, start, stop)
 reverse(analyte::AbstractAnalyteID, start::Int = 1, stop::Int = length(analyte)) = reverse!(copy_wo_project(analyte), start, stop)
-reverse!(analyte::AbstractAnalyteID, start::Int = 1, stop::Int = length(analyte)) = reverse!(analyte.compounds, start, stop)
+reverse!(analyte::AbstractAnalyteID, start::Int = 1, stop::Int = length(analyte)) = reverse!(analyte.compound, start, stop)
 
 in(x::Number, ri::EmptyInterval) = false
 in(x::Number, ri::RealInterval) = between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator)
@@ -170,8 +170,8 @@ end
 union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP) = union!(analyte, id, cpd2, chain(cpd2))
 function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::Union{SumChain, SumChainIS})
     cpd1 = analyte[id]
-    append!(cpd1.fragments, cpd2.fragments)
-    unique!(cpd1.fragments)
+    append!(cpd1.fragment, cpd2.fragment)
+    unique!(cpd1.fragment)
     _, i = findmax((cpd1.signal[1], cpd2.signal[1]))
     cpd1.signal = i ≡ 1 ? cpd1.signal : cpd2.signal
     analyte
@@ -195,8 +195,8 @@ end
 
 function union!(analyte::AnalyteSP, id::Int, cpd2::CompoundSP, ::ChainSP)
     cpd1 = _union!(analyte, id, chain(analyte[id]), chain(cpd2))
-    append!(cpd1.fragments, cpd2.fragments)
-    unique!(cpd1.fragments)
+    append!(cpd1.fragment, cpd2.fragment)
+    unique!(cpd1.fragment)
     _, i = findmax((cpd1.signal[1], cpd2.signal[1]))
     cpd1.signal = i ≡ 1 ? cpd1.signal : cpd2.signal
     @p analyte sort!(; lt = isless_class)
@@ -207,8 +207,8 @@ end
 union(cpd1::CompoundSP, cpd2::CompoundSP) = union!(copy_wo_project(cpd1), cpd2)
 union(cpd1::CompoundSPVanilla, cpd2::CompoundSPVanilla) = union!(deepcopy(cpd1), cpd2)
 function union!(cpd1::CompoundSPVanilla, cpd2::CompoundSPVanilla)
-    append!(cpd1.fragments, cpd2.fragments)
-    unique!(cpd1.fragments)
+    append!(cpd1.fragment, cpd2.fragment)
+    unique!(cpd1.fragment)
     _union!(cpd1, cpd2, cpd1.chain, cpd2.chain)
 end
 
@@ -219,16 +219,16 @@ _union!(cpd1::AbstractCompoundID, cpd2::AbstractCompoundID, ::ChainSP, sc::Chain
     nox(lcb(cpd1)) > nox(lcb(cpd2)) ? (cpd1.chain = sc; cpd1) : cpd1
 
 function union!(cpd1::CompoundSP, cpd2::CompoundSP)
-    append!(cpd1.fragments, cpd2.fragments)
-    unique!(cpd1.fragments)
+    append!(cpd1.fragment, cpd2.fragment)
+    unique!(cpd1.fragment)
     _, i = findmax((cpd1.signal[1], cpd2.signal[1]))
     cpd1.signal = i ≡ 1 ? cpd1.signal : cpd2.signal
     _union!(cpd1, cpd2, cpd1.chain, cpd2.chain)
 end
 
-union(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(copy_wo_project(analyte1), analyte2.compounds, analyte2.states)
+union(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(copy_wo_project(analyte1), analyte2.compound, analyte2.state)
 union(analyte1::AnalyteSP, cpds::Vector{CompoundSP}) = union!(copy_wo_project(analyte1), cpds)
-union!(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(analyte1, analyte2.compounds, analyte2.states)
+union!(analyte1::AnalyteSP, analyte2::AnalyteSP) = union!(analyte1, analyte2.compound, analyte2.state)
 
 function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 0, 0, 0, 0])
     for cpd2 in cpds
@@ -236,14 +236,14 @@ function union!(analyte1::AnalyteSP, cpds::Vector{CompoundSP}, states2 = [0, 0, 
         isnothing(id) ? push!(analyte1, cpd2) : union!(analyte1[id], cpd2)
     end
     sort!(analyte1, lt = isless_class)
-    analyte1.states = min.(analyte1.states, states2)
+    analyte1.state = min.(analyte1.state, states2)
     analyte1
 end
 
 getproperty(reusable::ReusableQuery, sym::Symbol) = sym ≡ :query ? getfield(reusable, :query) : getfield(getfield(reusable, :query), sym)
 
-convert(::Type{CompoundSPVanilla}, cpd::CompoundSP) = CompoundSPVanilla(cpd.class, cpd.chain, cpd.fragments)
-convert(::Type{CompoundSP}, cpd::CompoundSPVanilla) = CompoundSP(cpd.class, cpd.chain, cpd.fragments)
+convert(::Type{CompoundSPVanilla}, cpd::CompoundSP) = CompoundSPVanilla(cpd.class, cpd.chain, cpd.fragment)
+convert(::Type{CompoundSP}, cpd::CompoundSPVanilla) = CompoundSP(cpd.class, cpd.chain, cpd.fragment)
 convert(::Type{SPID}, cpd::SPID) = cpd
 
 # variant of interface
@@ -321,11 +321,11 @@ iscompatible(sc1::Acyl, sc2::ACYL) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(sc1::ACYL, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(ion::Ion, cpd::AbstractCompoundID) = iscomponent(ion, cpd)
 
-copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, deepcopy(cpd.fragments), cpd.signal, deepcopy(cpd.states), deepcopy(cpd.results), cpd.project)
+copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, deepcopy(cpd.fragment), cpd.signal, deepcopy(cpd.state), deepcopy(cpd.result), cpd.project)
 copy_wo_project(cpd::SPID) = SPID(cpd.class, cpd.chain)
-copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compounds), analyte.rt, deepcopy(analyte.states), analyte.cpdsc, analyte.score)
-copy_wo_project(analyte::AnalyteID) = AnalyteID(copy_wo_project.(analyte.compounds), analyte.rt)
-copy_wo_project(project::Project) = Project(copy_wo_project.(project.analytes), deepcopy(project.data), deepcopy(project.quantification), deepcopy(project.appendix))
+copy_wo_project(analyte::AnalyteSP) = AnalyteSP(copy_wo_project.(analyte.compound), analyte.rt, deepcopy(analyte.state), analyte.cpdsc, analyte.score)
+copy_wo_project(analyte::AnalyteID) = AnalyteID(copy_wo_project.(analyte.compound), analyte.rt)
+copy_wo_project(project::Project) = Project(copy_wo_project.(project.analyte), deepcopy(project.data), deepcopy(project.quantification), deepcopy(project.appendix))
 copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.result), deepcopy(aquery.query), false)
 reuse_copy(aquery::Query) = Query(aquery.project, reuse_copy(aquery.result), deepcopy(aquery.query), true)
 reuse_copy(v::Vector) = copy(v)
@@ -342,18 +342,18 @@ equivalent(ion1::AbstractIon, ion2::AbstractIon) = false
 
 function equivalent_in_ion2(cpd::AbstractCompoundSP, criteria, prec)
     eqin = x -> equivalent_in(x.ion1, prec)
-    equivalent_in(criteria, filterview(eqin, cpd.fragments).ion2)
+    equivalent_in(criteria, filterview(eqin, cpd.fragment).ion2)
 end
 
 function equivalent_in_ion2(cpd::AbstractCompoundSP, criteria::Tuple, prec)
     eqin = x -> equivalent_in(x.ion1, prec)
-    any(equivalent_in(frag, criteria) for frag in filterview(eqin, cpd.fragments).ion2)
+    any(equivalent_in(frag, criteria) for frag in filterview(eqin, cpd.fragment).ion2)
 end
 
 equivalent_in_ion2(analyte::AnalyteSP, criteria, prec) = any(equivalent_in_ion2(cpd, criteria, prec) for cpd in analyte)
 
-equivalent_in_ion1(cpd::AbstractCompoundSP, criteria) = equivalent_in(criteria, cpd.fragments.ion1)
-equivalent_in_ion1(cpd::AbstractCompoundSP, criteria::Tuple) = any(equivalent_in(frag, criteria) for frag in cpd.fragments.ion1)
+equivalent_in_ion1(cpd::AbstractCompoundSP, criteria) = equivalent_in(criteria, cpd.fragment.ion1)
+equivalent_in_ion1(cpd::AbstractCompoundSP, criteria::Tuple) = any(equivalent_in(frag, criteria) for frag in cpd.fragment.ion1)
 equivalent_in_ion1(analyte::AnalyteSP, criteria) = any(equivalent_in_ion1(cpd, criteria) for cpd in analyte)
 
 # order

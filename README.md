@@ -11,4 +11,4 @@
 [codecov-img]: https://codecov.io/gh/yufongpeng/SphingolipidsID.jl/branch/main/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/yufongpeng/SphingolipidsID.jl
 
-Automatic identify sphingolipids through Precursor Ion Scans(PreIS) and Multiple Reaction Monitoring(MRM).
+Automatic identify and quantify sphingolipids through Precursor Ion Scans (PreIS) and Multiple Reaction Monitoring (MRM).

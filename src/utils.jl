@@ -2,9 +2,9 @@
 """
     nfrags(cpd::AbstractCompoundSP)
 
-Number of fragments of a compund, i.e., `size(cpd.fragments, 1)`.
+Number of fragments of a compund, i.e., `size(cpd.fragment, 1)`.
 """
-nfrags(cpd::AbstractCompoundSP) = size(cpd.fragments, 1)
+nfrags(cpd::AbstractCompoundSP) = size(cpd.fragment, 1)
 """
     concurrent_transition(tbl::Table; end_time = maximum(tbl.rt .+ tbl.Δrt))
 
@@ -24,16 +24,16 @@ end
 
 """
     new_project(aquery::AbstractQuery; copy_data = false)
-    new_project(project::Project; copy_data = false, analytes = copy_wo_project.(project.analytes))
+    new_project(project::Project; copy_data = false, analyte = copy_wo_project.(project.analyte))
 
-Create a new project from a query or project with given analytes. `copy_data` determines whether copying the data or not.
+Create a new project from a query or project with given analyte. `copy_data` determines whether copying the data or not.
 """
-new_project(aquery::AbstractQuery; copy_data = false) = new_project(aquery.project; copy_data, analytes = aquery.view ? copy_wo_project.(aquery.result) : aquery.result)
-function new_project(project::Project; copy_data = false, analytes = copy_wo_project.(project.analytes))
+new_project(aquery::AbstractQuery; copy_data = false) = new_project(aquery.project; copy_data, analyte = aquery.view ? copy_wo_project.(aquery.result) : aquery.result)
+function new_project(project::Project; copy_data = false, analyte = copy_wo_project.(project.analyte))
     appendix = empty(project.appendix)
     insert!(appendix, :anion, project.appendix[:anion])
     insert!(appendix, :signal, project.appendix[:signal])
-    project_new = Project(analytes, copy_data ? deepcopy(project.data) : project.data, copy_data ? deepcopy(project.quantification) : project.quantification, appendix)
+    project_new = Project(analyte, copy_data ? deepcopy(project.data) : project.data, copy_data ? deepcopy(project.quantification) : project.quantification, appendix)
     for analyte in project_new
         for cpd in analyte
             cpd.project = project_new
@@ -117,13 +117,13 @@ intersection(ranges::AbstractVector) = (maximum(first(r) for r in ranges), minim
 
 Calculate retention time.
 """
-calc_rt(analyte::AnalyteSP) = mean(mean(query_data(cpd.project, fragments.source, fragments.id).rt for fragments in cpd.fragments) for cpd in analyte)
+calc_rt(analyte::AnalyteSP) = mean(mean(query_data(cpd.project, fragment.source, fragment.id).rt for fragment in cpd.fragment) for cpd in analyte)
 """
-    states_id
+    state_id
 
 Return the index for certain evaluation parameters in the states of an analyte.
 """
-states_id = @λ begin
+state_id = @λ begin
     :class  => 1
     :chain  => 2
     :rt     => 3
@@ -215,7 +215,9 @@ Create `ChainSP` with long-chain base and N-acyl or carbons, double bonds, and a
 chain(spb::LCB, nacyl::ACYL) = DiChain(spb, nacyl)
 chain(c::Int, n::Int, o::Int; n13C::Int = 0, nD::Int = 0) = n13C == 0 && nD == 0 ? SumChain(c, n, o) : SumChainIS(c, d, n, (; n13C, nD))
 """
+    spid(cpd::AbstractAnalyteID)
     spid(cpd::AbstractCompoundID)
+    spid(transition::TransitionID) 
     spid(cls::Type{<: ClassSP}, sc::ChainSP)
     spid(cls::Type{<: ClassSP}, spb::LCB, nacyl::ACYL)
     spid(cls::Type{<: ClassSP}, sum::NTuple{3, Int}; n13C::Int = 0, nD::Int = 0)
@@ -223,7 +225,9 @@ chain(c::Int, n::Int, o::Int; n13C::Int = 0, nD::Int = 0) = n13C == 0 && nD == 0
 
 Create `SPID` with given class and chain information.
 """
+spid(cpd::AbstractAnalyteID) = spid(last(cpd))
 spid(cpd::AbstractCompoundID) = SPID(class(cpd), chain(cpd))
+spid(transition::TransitionID) = SPID(class(transition), chain(transition))
 spid(cls::Type{<: ClassSP}, sc::ChainSP) = SPID(cls(), sc)
 spid(cls::Type{<: ClassSP}, spb::LCB, nacyl::ACYL) = SPID(cls(), DiChain(spb, nacyl))
 spid(cls::Type{<: ClassSP}, sum::NTuple{3, Int}; n13C::Int = 0, nD::Int = 0) = SPID(cls(), chain(sum...; n13C, nD))
@@ -235,6 +239,7 @@ analyteid(cls::Type{<: ClassSP}, spb::LCB, nacyl::ACYL, rt::Float64) = AnalyteID
 analyteid(cls::Type{<: ClassSP}, sum::NTuple{3, Int}, rt::Float64; n13C::Int = 0, nD::Int = 0) = AnalyteID([SPID(cls(), chain(sum...; n13C, nD))], rt)
 analyteid(cls::Type{<: ClassSP}, c::Int, n::Int, o::Int, rt::Float64; n13C::Int = 0, nD::Int = 0) = AnalyteID([SPID(cls(), chain(c, n, o; n13C, nD))], rt)
 
+transitionid(cpd::SPID, quantifier::Bool) = TransitionID(cpd, quantifier)
 # isomer
 """
     deisomerized(::ClassSP)
@@ -297,8 +302,8 @@ Return the cluster `analyte` belongs to. If none, it returns an empty array.
 function cluster(analyte::AnalyteSP)
     cls = deisomerized(class(analyte))
     project = last(analyte).project
-    clusters = project.appendix[:clusters]
-    in(cls, keys(clusters)) && in(findfirst(==(analyte), project), clusters[cls]) ? clusters[cls] : Int[]
+    cluster_ = project.appendix[:cluster]
+    in(cls, keys(cluster_)) && in(findfirst(==(analyte), project), cluster_[cls]) ? cluster_[cls] : Int[]
 end
 """
     incluster(analyte::AnalyteSP)
@@ -309,28 +314,34 @@ incluster(analyte::AnalyteSP) = !isempty(cluster(analyte))
 """
     class(analyte::AbstractAnalyteID)
     class(cpd::AbstractCompoundID)
+    class(transition::TransitionID)
 
 Return the class of an analyte or compound.
 """
 class(analyte::AbstractAnalyteID) = class(last(analyte))
 class(cpd::AbstractCompoundID) = cpd.class
+class(transition::TransitionID) = class(transition.compound)
 """
     chain(analyte::AbstractAnalyteID)
     chain(cpd::AbstractCompoundID)
+    chain(transition::TransitionID)
 
 Return the chain of an analyte or compound.
 """
 chain(analyte::AbstractAnalyteID) = chain(last(analyte))
 chain(cpd::AbstractCompoundID) = cpd.chain
+chain(transition::TransitionID) = chain(transition.compound)
 """
     sumcomp(analyte::AbstractAnalyteID)
     sumcomp(cpd::AbstractCompoundID)
+    sumcomp(transition::TransitionID)
     sumcomp(sc::ChainSP)
 
 Return sumcomposition information, i.e., a `SumChain` or `SumChainIS`.
 """
 sumcomp(analyte::AbstractAnalyteID) = sumcomp(chain(analyte))
 sumcomp(cpd::AbstractCompoundID) = sumcomp(chain(cpd))
+sumcomp(transition::TransitionID) = sumcomp(transition.compound)
 sumcomp(sc::SumChain) = sc
 sumcomp(sc::SumChainIS) = sc
 sumcomp(sc::ChainSP) = SumChain(ncb(sc), ndb(sc), nox(sc))
@@ -338,12 +349,14 @@ sumcomp(sc::ChainSPIS) = SumChainIS(ncb(sc), ndb(sc), nox(sc), (n13C = n13C(sc),
 """
     chainconstituent(analyte::AbstractAnalyteID)
     chainconstituent(cpd::AbstractCompoundID)
+    chainconstituent(transition::TransitionID)
     chainconstituent(sc::ChainSP)
 
 Return molecular-level chain composition. If there are only species-level information(sumcomposition), it returns `nothing`.
 """
 chainconstituent(analyte::AbstractAnalyteID) = chainconstituent(chain(analyte))
 chainconstituent(cpd::AbstractCompoundID) = chainconstituent(chain(cpd))
+chainconstituent(transition::TransitionID) = chainconstituent(transition.compound)
 chainconstituent(sc::ChainSP) = sc
 chainconstituent(sc::SumChain) = nothing
 chainconstituent(sc::SumChainIS) = nothing
@@ -358,24 +371,28 @@ const isspceieslevel = isnothing ∘ chainconstituent
 """
     lcb(analyte::AbstractAnalyteID)
     lcb(cpd::AbstractCompoundID)
+    lcb(transition::TransitionID)
     lcb(sc::ChainSP)
 
 Return long-chain base. If there is no long-chain base, it returns `nothing`.
 """
 lcb(analyte::AbstractAnalyteID) = lcb(chain(analyte))
 lcb(cpd::AbstractCompoundID) = lcb(chain(cpd))
+lcb(transition::TransitionID) = lcb(transition.compound)
 lcb(sc::ChainSP) = nothing
 lcb(sc::DiChain) = sc.lcb
 lcb(sc::LCB) = sc
 """
     acyl(analyte::AbstractAnalyteID)
     acyl(cpd::AbstractCompoundID)
+    acyl(transition::TransitionID)
     acyl(sc::ChainSP)
 
 Return N-acyl chain. If there is no N-acyl chain, it returns `nothing`.
 """
 acyl(analyte::AbstractAnalyteID) = acyl(chain(analyte))
 acyl(cpd::AbstractCompoundID) = acyl(chain(cpd))
+acyl(transition::TransitionID) = acyl(transition.compound)
 acyl(sc::ChainSP) = nothing
 acyl(sc::DiChain) = sc.acyl
 acyl(sc::ACYL) = sc
@@ -389,6 +406,7 @@ rt(analyte) = analyte.rt
 """
     ncb(analyte::AbstractAnalyteID)
     ncb(cpd::AbstractCompoundID)
+    ncb(transition::TransitionID)
     ncb(sc::ChainSP)
     ncb(ion::Ion)
 
@@ -396,11 +414,13 @@ Return number of carbons in chains. For ions, adducts are not taken into account
 """
 ncb(analyte::AbstractAnalyteID) = ncb(chain(analyte))
 ncb(cpd::AbstractCompoundID) = ncb(chain(cpd))
+ncb(transition::TransitionID) = ncb(transition.compound)
 ncb(sc::ChainSP) = sc.carbon
 ncb(sc::DiChain) = ncb(sc.lcb) + ncb(sc.acyl)
 """
     ndb(analyte::AbstractAnalyteID)
     ndb(cpd::AbstractCompoundID)
+    ndb(transition::TransitionID)
     ndb(sc::ChainSP)
     ndb(ion::Ion)
 
@@ -408,11 +428,13 @@ Return number of double bonds in chains. For ions, adducts are not taken into ac
 """
 ndb(analyte::AbstractAnalyteID) = ndb(chain(analyte))
 ndb(cpd::AbstractCompoundID) = ndb(chain(cpd))
+ndb(transition::TransitionID) = ndb(transition.compound)
 ndb(sc::ChainSP) = sc.doublebond
 ndb(sc::DiChain) = ndb(sc.lcb) + ndb(sc.acyl)
 """
     nox(analyte::AbstractAnalyteID)
     nox(cpd::AbstractCompoundID)
+    nox(transition::TransitionID)
     nox(sc::ChainSP)
     nox(ion::Ion)
 
@@ -420,11 +442,13 @@ Return number of additional oxygens. For ions, adducts are not taken into accoun
 """
 nox(analyte::AbstractAnalyteID) = nox(chain(analyte))
 nox(cpd::AbstractCompoundID) = nox(chain(cpd))
+nox(transition::TransitionID) = nox(transition.compound)
 nox(sc::ChainSP) = sc.oxygen
 nox(sc::DiChain) = nox(sc.lcb) + nox(sc.acyl)
 nox(sc::LCB) = ndbox(sc) - ndb(sc)
 ndbox(analyte::AbstractAnalyteID) = ndbox(chain(analyte))
 ndbox(cpd::AbstractCompoundID) = ndbox(chain(cpd))
+ndbox(transition::TransitionID) = ndbox(transition.compound)
 ndbox(sc::SumChain) = sc.doublebond + sc.oxygen
 ndbox(sc::DiChain) = ndbox(sc.lcb) + ndbox(sc.acyl)
 ndbox(::LCB2) = 2
@@ -445,28 +469,31 @@ nox(ion::Ion{ProtonationNLH2O}) = nox(ion.molecule) - 1
 nox(ion::Ion{ProtonationNL2H2O}) = nox(ion.molecule) - 2
 nox(ion::Ion{ProtonationNL3H2O}) = nox(ion.molecule) - 3
 
-for fn in [:ncb, :ndb, :nox, :ndbox]
-    @eval $fn(::Nothing) = nothing
-end
-
-n13C(x) = 0
 n13C(ion::Ion) = n13C(ion.molecule)
 n13C(analyte::AbstractAnalyteID) = n13C(chain(analyte))
 n13C(cpd::AbstractCompoundID) = n13C(chain(cpd))
+n13C(transition::TransitionID) = n13C(transition.compound)
 n13C(sumchain::SumChainIS) = sumchain.isotope.n13C
 n13C(dichain::DiChainIS) = n13C(lcb(dichain)) + n13C(acyl(dichain))
 n13C(lcb::LCBIS) = lcb.isotope.n13C
 n13C(acyl::ACYLIS) = acyl.isotope.n13C
+n13C(x) = 0
 
-nD(x) = 0
 nD(ion::Ion) = nD(ion.molecule)
 nD(analyte::AbstractAnalyteID) = nD(chain(analyte))
 nD(cpd::AbstractCompoundID) = nD(chain(cpd))
+nD(transition::TransitionID) = nD(transition.compound)
 nD(sumchain::SumChainIS) = sumchain.isotope.nD
 nD(dichain::DiChainIS) = nD(lcb(dichain)) + nD(acyl(dichain))
 nD(lcb::LCBIS) = lcb.isotope.nD
 nD(acyl::ACYLIS) = acyl.isotope.nD
+nD(x) = 0
 const n2H = nD
+
+for fn in [:ncb, :ndb, :nox, :ndbox, :n13C, :nD]
+    @eval $fn(::Nothing) = nothing
+end
+
 """
     allow_unknown(f::Function)
 

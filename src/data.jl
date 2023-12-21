@@ -193,12 +193,15 @@ Relative standard deviation, i.e., `std(v) / mean(v)`.
 """
 rsd(v) = std(v) / mean(v)
 """
-    re(v)
+    rmae(v)
 
-Relative error, i.e., `(maximum(v) - minimum(v)) / 2 / mean(v)`.
+Relative mean absolute error, i.e., `(maximum(v) - minimum(v)) / 2 / mean(v)`.
 """
-re(v) =  - foldl(-, extrema(v)) / mean(v) / 2
-default_error(v) = length(v) > 2 ? rsd(v) : re(v)
+function rmae(v) 
+    m = mean(v)
+    mean(abs, v .- m) / m
+end
+default_error(v) = length(v) > 2 ? rsd(v) : rmae(v)
 
 """
     split_datafile(tbl::Table; name = r"(.*)-r\\d*\\.(?:d|mzML)", rep = r".*-r(\\d*)\\.(?:d|mzML)")
@@ -213,21 +216,36 @@ function split_datafile(tbl::Table; name = r"(.*)-r\d*\.(?:d|mzML)", rep = r".*-
 end
 
 """
-    filter_combine_features!(tbl::Table; rt_tol = 0.1, mz_tol = 0.35, n = 3, err_fn = default_error, err_tol = 0.5)
+    filter_combine_features!(tbl::Table; 
+                            filter = true,
+                            combine = true,
+                            use_match_id = false,
+                            raw_id = false,
+                            rt_tol = 0.1, 
+                            mz_tol = 0.35, 
+                            n = 3, 
+                            err_fn = default_error, 
+                            err_tol = 0.5,
+                            other_fn = Dictionary{Symbol, Any}([:mz_range, :polarity, :datafile], [splat(union), only ∘ unique, nothing]))
 
 Filter out and combine duplicated or unstable features.
 
+* `filter`: whether filter data based on number of detection and signal errors.
+* `combine`: whether combine data after grouping based on `mz1`, `mz2`, `rt`, and `collision_energy`. `datafile` is ignored.
+* `use_match_id`: whether using `match_id` instead of `mz1`, `mz2`, `rt` to group data.
 * `raw_id`: a `Bool` determining whether preserving the original `tbl.id` as `tbl.raw_id` for staying connection to the raw featuretable.
 * `rt_tol`: maximum allowable difference in retention time for two compounds to consider them as the same.
 * `mz_tol`: maximum allowable difference in m/z for two compounds to consider them as the same.
 * `n`: minimal number of detection. The default is 3.
-* `signal`: `:area` or `:height` for concentration estimation. The default is `:area`.
+* `signal`: `:area` or `:height` for concentration estimation. The default is `:area`. If `nothing` is given, this function will not calculate errors.
 * `est_fn`: estimation function for calculating estimated value. The default is `mean`.
 * `err_fn`: error function. If the length is three or above, the default is `rsd`; otherwise, it is `re`. 
 * `err_tol`: maximum allowable signal error.
 * `other_fn`: a `Dictionary` specifying functions for calculating other signal information.
 """
 function filter_combine_features!(tbl::Table; 
+                            filter = true, 
+                            combine = true,
                             use_match_id = false,
                             raw_id = false,
                             rt_tol = 0.1, 
@@ -239,7 +257,8 @@ function filter_combine_features!(tbl::Table;
                             err_tol = 0.5,
                             other_fn = Dictionary{Symbol, Any}([:mz_range, :polarity, :datafile], [splat(union), only ∘ unique, nothing]))
     sort!(tbl, [:mz2, :mz1, :rt])
-    calc_signal = isa(signal, Symbol) || false
+    calc_signal = !isnothing(signal)
+    filter = calc_signal && filter
     if use_match_id 
         locs = collect(groupfind(getproperties((:match_id, :collision_energy)), tbl)) 
     else
@@ -266,8 +285,8 @@ function filter_combine_features!(tbl::Table;
             locs
         end
     end
-    calc_signal && n > 1 && filter!(loc -> (length(loc) >= n && err_fn(getproperty(tbl, signal)[loc]) <= err_tol), locs)
-    if raw_id
+    filter && n > 1 && filter!(loc -> (length(loc) >= n && err_fn(getproperty(tbl, signal)[loc]) <= err_tol), locs)
+    if raw_id && combine
         ids = map(loc -> tbl.id[loc], locs)
     end
     #@p tbl |> DataFrame |> groupby(__, :id) |> combine(__, All() .=> mean, :area => err => :error, renamecols = false) |> Table
@@ -282,7 +301,8 @@ function filter_combine_features!(tbl::Table;
     for (i, loc) in enumerate(locs)
         tbl.id[loc] .= i
     end
-    @p tbl filter!(>(_.id, 0))
+    filter!(x -> >(x.id, 0), tbl)
+    combine || return tbl
     gtbl = @p tbl groupview(getproperty(:id))
     calc_signal && (errors = @p gtbl map(err_fn(getproperty(_, signal))) collect)
     nt = @p gtbl map(map((k, v) -> k => other_fn[k](v), propertynames(_), columns(_))) map(NamedTuple) 
@@ -419,7 +439,7 @@ end
 Take the union of two MRM transition tables and create a new `Table`. MRM data will be merged into one data if they are considered close enough.
 
 The tables should containing the following columns:
-* `analyte`: `Vector{CompoundSP}`; possible analytes.
+* `analyte`: `String`; possible analyte name separated by "|".
 * `mz1`: m/z of parent ion.
 * `mz2`: m/z of fragment ion.
 * `rt`: retention time.
@@ -442,9 +462,11 @@ function union_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5
             data1.collision_energy == data2.collision_energy || continue
             rt_l = min(data1.rt - data1.Δrt / 2, data2.rt - data2.Δrt / 2)
             rt_r = max(data1.rt + data1.Δrt / 2, data2.rt + data2.Δrt / 2)
-            n = length(vectorize(data1.analyte))
+            analytes1 = split(data1.analyte, "|")
+            analytes2 = split(data2.analyte, "|")
+            n = length(analytes1)
             tbl1[id1] = (;
-                analyte = vectorize(data1.analyte),
+                analyte = join(union!(analytes1, analytes2), "|"),
                 mz1 = (data1.mz1 * n + data2.mz1) / (n + 1),
                 mz2 = (data1.mz2 * n + data2.mz2) / (n + 1),
                 rt = (rt_l + rt_r) / 2,
@@ -452,7 +474,6 @@ function union_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5
                 collision_energy = data1.collision_energy,
                 polarity = data1.polarity
             )
-            union!(data1.analyte, vectorize(data2.analyte))
             pushed = true
         end
         pushed || push!(tbl1, (analyte = data2.analyte, mz1 = data2.mz1, mz2 = data2.mz2, rt = data2.rt, Δrt = rt_tol * 2, collision_energy = data2.collision_energy, polarity = data2.polarity))
@@ -470,7 +491,7 @@ This function return a `NamedTuple`:
 * `new`: data from `tbl1` that do not exist in `tbl2`.
 
 The tables should containing the following columns:
-* `analyte`: `Vector{CompoundSP}`; possible analytes.
+* `analyte`: `String`; possible analyte name separated by "|".
 * `mz1`: m/z of parent ion.
 * `mz2`: m/z of fragment ion.
 * `rt`: retention time.
@@ -495,10 +516,12 @@ function diff_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
             data1.collision_energy == data2.collision_energy || continue
             rt_l = min(data1.rt - data1.Δrt / 2, data2.rt - data2.Δrt / 2)
             rt_r = max(data1.rt + data1.Δrt / 2, data2.rt + data2.Δrt / 2)
-            n = length(vectorize(data1.analyte))
-            isempty(setdiff(vectorize(data2.analyte), vectorize(data1.analyte))) || push!(extended, id1)
+            analytes1 = split(data1.analyte, "|")
+            analytes2 = split(data2.analyte, "|")
+            n = length(analytes1)
+            isempty(setdiff(analytes2, analytes1)) || push!(extended, id1)
             tbl1[id1] = (;
-                analyte = vectorize(data1.analyte),
+                analyte = join(union!(analytes1, analytes2), "|"),
                 mz1 = (data1.mz1 * n + data2.mz1) / (n + 1),
                 mz2 = (data1.mz2 * n + data2.mz2) / (n + 1),
                 rt = (rt_l + rt_r) / 2,
@@ -506,7 +529,6 @@ function diff_transition!(tbl1::Table, tbl2::Table; mz_tol = 0.35, rt_tol = 0.5)
                 collision_energy = data1.collision_energy,
                 polarity = data1.polarity
             )
-            union!(data1.analyte, vectorize(data2.analyte))
             pushed = true
         end
         pushed && continue

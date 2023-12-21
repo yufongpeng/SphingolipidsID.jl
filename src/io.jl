@@ -253,7 +253,7 @@ Base.show(io::IO, sc::Acyl) = (print(io, "Acyl "); print_comp(io, sc))
 print_comp(io::IO, sc::ACYL) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc))
 print_comp(io::IO, sc::ACYLIS) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc), repr_is(sc.isotope))
 
-fragmenttable(cpd) = map(cpd.fragments) do row
+fragmenttable(cpd) = map(cpd.fragment) do row
     s = query_data(cpd.project, row.source, row.id)
     mz2 = cpd.project.data[row.source].mz2[s.mz2_id]
     mode = isa(cpd.project.data[row.source], PreIS) ? "PreIS" : "MRM"
@@ -281,8 +281,8 @@ function repr_is(is::NamedTuple)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", cpd::CompoundSP)
-    class, chain = states_color.(cpd.states)
-    print(io, "Compound with ", size(cpd.fragments, 1), " fragments|$class$chain:")
+    class, chain = states_color.(cpd.state)
+    print(io, "Compound with ", size(cpd.fragment, 1), " fragments|$class$chain:")
     print(io, "\n∘ ID: ")
     show(io, MIME"text/plain"(), cpd.class)
     print(io, " ", cpd.chain)
@@ -296,14 +296,14 @@ end
 Base.show(io::IO, cpd::CompoundSP) = print(io, cpd.class, " ", cpd.chain)
 
 function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
-    sc = states_color.(analyte.states)
-    class = sc[states_id(:class)]
-    chain = sc[states_id(:chain)]
-    rt = sc[states_id(:rt)]
-    diq = sc[states_id(:error)]
-    isf = sc[states_id(:isf)]
-    total = sc[states_id(:total)]
-    manual = sc[states_id(:manual)]
+    sc = states_color.(analyte.state)
+    class = sc[state_id(:class)]
+    chain = sc[state_id(:chain)]
+    rt = sc[state_id(:rt)]
+    diq = sc[state_id(:error)]
+    isf = sc[state_id(:isf)]
+    total = sc[state_id(:total)]
+    manual = sc[state_id(:manual)]
     sc = map([analyte.cpdsc, analyte.score]) do sc
         sc.first > 0 ? *(string(SPDB[:SCORE].param[sc.first].target), " => ", string(sc.second)) : ""
     end
@@ -320,18 +320,19 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
 end
 
 function Base.show(io::IO, analyte::AnalyteSP)
-    sc = states_color.(analyte.states)
-    class = sc[states_id(:class)]
-    chain = sc[states_id(:chain)]
-    rt = sc[states_id(:rt)]
-    diq = sc[states_id(:error)]
-    isf = sc[states_id(:isf)]
-    total = sc[states_id(:total)]
-    manual = sc[states_id(:manual)]
-    print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " st$(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf)")
+    sc = states_color.(analyte.state)
+    class = sc[state_id(:class)]
+    chain = sc[state_id(:chain)]
+    rt = sc[state_id(:rt)]
+    diq = sc[state_id(:error)]
+    isf = sc[state_id(:isf)]
+    total = sc[state_id(:total)]
+    manual = sc[state_id(:manual)]
+    print(io, isempty(analyte.compound) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4), " st$(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf)")
 end
 
-Base.show(io::IO, analyte::AnalyteID) = print(io, isempty(analyte.compounds) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4))
+Base.show(io::IO, analyte::AnalyteID) = print(io, isempty(analyte.compound) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4))
+Base.show(io::IO, transition::TransitionID) = print(io, transition.compound, transition.quantifier ? "" : " (qualifier)")
 
 function Base.show(io::IO, data::PreIS)
     println(io, "PreIS with $(length(data.mz2)) products: ")

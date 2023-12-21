@@ -105,25 +105,25 @@ q!(aquery::Query, qc; view = aquery.view, neg = false) =
 
 function q!(aquery::Query, qc::Symbol; view = aquery.view, neg = false)
     qf = @match qc begin
-        :class  => analyte -> ≡(analyte.states[states_id(:class)], 1)
-        :chain  => analyte -> ≡(analyte.states[states_id(:chain)], 1)
-        :rt     => analyte -> ≡(analyte.states[states_id(:rt)], 1)
-        :error  => analyte -> ≡(analyte.states[states_id(:error)], 1)
-        :isf    => analyte -> ≡(analyte.states[states_id(:isf)], 1)
-        :total  => analyte -> ≡(analyte.states[states_id(:total)], 1)
-        :class_ => analyte -> ≡(analyte.states[states_id(:class)], 0)
-        :chain_ => analyte -> ≡(analyte.states[states_id(:chain)], 0)
-        :rt_    => analyte -> ≡(analyte.states[states_id(:rt)], 0)
-        :error_ => analyte -> ≡(analyte.states[states_id(:error)], 0)
-        :isf_   => analyte -> ≡(analyte.states[states_id(:isf)], 0)
-        :total_ => analyte -> ≡(analyte.states[states_id(:total)], 0)
-        :class! => analyte -> ≡(analyte.states[states_id(:class)], -1)
-        :chain! => analyte -> ≡(analyte.states[states_id(:chain)], -1)
-        :rt!    => analyte -> ≡(analyte.states[states_id(:rt)], -1)
-        :error! => analyte -> ≡(analyte.states[states_id(:error)], -1)
-        :isf!   => analyte -> ≡(analyte.states[states_id(:isf)], -1)
-        :total! => analyte -> ≡(analyte.states[states_id(:total)], -1)
-        #:all    => analyte -> all(==(1), analyte.states)
+        :class  => analyte -> ≡(analyte.state[state_id(:class)], 1)
+        :chain  => analyte -> ≡(analyte.state[state_id(:chain)], 1)
+        :rt     => analyte -> ≡(analyte.state[state_id(:rt)], 1)
+        :error  => analyte -> ≡(analyte.state[state_id(:error)], 1)
+        :isf    => analyte -> ≡(analyte.state[state_id(:isf)], 1)
+        :total  => analyte -> ≡(analyte.state[state_id(:total)], 1)
+        :class_ => analyte -> ≡(analyte.state[state_id(:class)], 0)
+        :chain_ => analyte -> ≡(analyte.state[state_id(:chain)], 0)
+        :rt_    => analyte -> ≡(analyte.state[state_id(:rt)], 0)
+        :error_ => analyte -> ≡(analyte.state[state_id(:error)], 0)
+        :isf_   => analyte -> ≡(analyte.state[state_id(:isf)], 0)
+        :total_ => analyte -> ≡(analyte.state[state_id(:total)], 0)
+        :class! => analyte -> ≡(analyte.state[state_id(:class)], -1)
+        :chain! => analyte -> ≡(analyte.state[state_id(:chain)], -1)
+        :rt!    => analyte -> ≡(analyte.state[state_id(:rt)], -1)
+        :error! => analyte -> ≡(analyte.state[state_id(:error)], -1)
+        :isf!   => analyte -> ≡(analyte.state[state_id(:isf)], -1)
+        :total! => analyte -> ≡(analyte.state[state_id(:total)], -1)
+        #:all    => analyte -> all(==(1), analyte.state)
     end
     finish_query!(aquery, qcmd(qc, neg), qf; view)
 end
@@ -148,10 +148,10 @@ function q!(aquery::Query, mrm::MRM;
     finish_query!(aquery, qcmd(:validated_by => mrm, neg), qf; view, objects = last.(aquery))
 end
 
-function coelution(project::Project; analytes = project.analytes, polarity::Bool = true, mz_tol = 0.35, rt_tol = 0.1)
+function coelution(project::Project; analyte = project.analyte, polarity::Bool = true, mz_tol = 0.35, rt_tol = 0.1)
     result = NamedTuple{(:mz1, :rt, :analytes), Tuple{Vector{Float64}, Vector{Float64}, SubArray{AnalyteSP}}}[]
-    for analyte in analytes
-        frags = last(analyte).fragments
+    for ana in analyte
+        frags = last(ana).fragment
         id = findfirst(i -> isa(frags.mz1[i].adduct, Pos) ≡ polarity, reverse(eachindex(frags)))
         isnothing(id) && continue
         mz = query_data(project, frags.source[id], frags.id[id], :mz1)
@@ -162,11 +162,11 @@ function coelution(project::Project; analytes = project.analytes, polarity::Bool
             abs(mean(group.rt - rt)) > rt_tol && continue
             push!(group.mz1, mz)
             push!(group.rt, rt)
-            push!(group.analytes, analyte)
+            push!(group.analytes, ana)
             pushed = true
             break
         end
-        pushed || push!(result, (mz1 = [mz], rt = [rt], analytes = [analyte]))
+        pushed || push!(result, (mz1 = [mz], rt = [rt], analytes = [ana]))
     end
     result
 end
@@ -190,23 +190,23 @@ abs_sig_diff(Δ) =
 _abs_sig_diff(global_scores, local_scores, prev_score, current_score, Δ) = (prev_score - current_score) < Δ
 
 function query_score(aquery::Query, topN = 0.5; is_wild_card = normalized_sig_diff(0.1))
-    analytes = aquery.result
+    analyte = aquery.result
     # no isomer => has isomer
     id1 = Int[]
     id2 = Int[]
-    for (i, analyte) in enumerate(analytes)
-        (hasisomer(class(analyte)) || hasisomer(chain(analyte))) ? push!(id2, i) : push!(id1, i)
+    for (i, ana) in enumerate(analyte)
+        (hasisomer(class(ana)) || hasisomer(chain(ana))) ? push!(id2, i) : push!(id1, i)
     end
     dict = Dict{SPID, Vector{Tuple{Float64, Int}}}()
-    foreach(id -> push!(get!(dict, SPID(last(analytes[id])), Tuple{Float64, Int}[]), (analytes[id].score.second, id)), id1)
+    foreach(id -> push!(get!(dict, SPID(last(analyte[id])), Tuple{Float64, Int}[]), (analyte[id].score.second, id)), id1)
     for id in id2
-        sc = analytes[id].score.second
+        sc = analyte[id].score.second
         pushed = false
         for (ky, vl) in dict
-            iscompatible(analytes[id], ky) &&
+            iscompatible(analyte[id], ky) &&
                 (pushed = true; push!(vl, (sc, id)))
         end
-        pushed || push!(dict, SPID(last(analytes[id])) => [(sc, id)])
+        pushed || push!(dict, SPID(last(analyte[id])) => [(sc, id)])
     end
     final = Int[]
     len = topN >= 1 ? (vl -> topN) : (vl -> max(1, round(Int, length(vl) * topN * (1 + eps(Float64)))))
@@ -287,4 +287,4 @@ function set_data_if!(project::Project, source::Int, id::Int, col, val, crit)
     crit(getproperty(project.data[source].table, col)[i]) || return
     getproperty(project.data[source].table, col)[i] = val
 end
-mz(fn) = analyte -> any(fn(query_data(last(analyte).project, frag.source, frag.id).mz1) for frag in last(analyte).fragments)
+mz(fn) = analyte -> any(fn(query_data(last(analyte).project, frag.source, frag.id).mz1) for frag in last(analyte).fragment)

@@ -91,7 +91,7 @@ end
 
 function Project(preis::PreIS; data_id = -1, kwargs...)
     appendix = Dictionary{Symbol, Any}(kwargs)
-    project = Project(AnalyteSP[], Data[], Quantification(), appendix)
+    project = Project(AnalyteSP[], AbstractData[], Quantification(), appendix)
     preis!(project, preis; data_id)
 end
 
@@ -141,8 +141,8 @@ function preis!(project::Project, preis::PreIS; data_id = -1)
             cpds = convert.(CompoundSP, cpdsvanilla)
             for cpd in cpds
                 cpd.project = project
-                cpd.fragments.id .= data.id
-                cpd.fragments.source .= source
+                cpd.fragment.id .= data.id
+                cpd.fragment.source .= source
                 cpd.signal = (getproperty(data, project.appendix[:signal]), data.error)
             end
             # Unidentified
@@ -445,8 +445,8 @@ function preis!(
             cpds = convert.(CompoundSP, cpdsvanilla)
             for cpd in cpds
                 cpd.project = project
-                cpd.fragments.id .= data.id
-                cpd.fragments.source .= source
+                cpd.fragment.id .= data.id
+                cpd.fragment.source .= source
                 cpd.signal = (getproperty(data, project.appendix[:signal]), data.error)
             end
             # Unidentified
@@ -474,7 +474,7 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     for analyte in project
         sort!(analyte, lt = isless_class)
         for cpd in analyte
-            sort!(cpd.fragments, :ion1; lt = isless_ion)
+            sort!(cpd.fragment, :ion1; lt = isless_ion)
         end
     end
     printstyled("PreIS> ", color = :green, bold = true)
@@ -503,14 +503,14 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
             last(project).rt = calc_rt(last(project))
             break
         end
-        analyte.states[states_id(:error)] = signal[2] > err_tol ? -1 : 1
-        analyte.states[states_id(:isf)] = any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), last(analyte).fragments.ion1) ? 1 : -1
+        analyte.state[state_id(:error)] = signal[2] > err_tol ? -1 : 1
+        analyte.state[state_id(:isf)] = any(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), last(analyte).fragment.ion1) ? 1 : -1
     end
     unique!(del)
     deleteat!(project, del)
     del = Int[]
     for (i, analyte) in enumerate(project)
-        analyte.states[states_id(:isf)] < 0 || continue
+        analyte.state[state_id(:isf)] < 0 || continue
         todel = any(@view project[setdiff(eachindex(project), i)]) do a
             iscompatible(last(analyte), last(a))
         end
@@ -533,18 +533,18 @@ end
 assign_isf_parent!(project::Project) =
     for analyte in project
         for cpd in @view analyte[1:end - 1]
-            set_data!.(Ref(project), cpd.fragments.source, cpd.fragments.id, :isf, 1)
+            set_data!.(Ref(project), cpd.fragment.source, cpd.fragment.id, :isf, 1)
         end
         cpd = last(analyte)
-        id = findall(ion -> !in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragments.ion1)
-        set_data_if!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, -1, <(1))
-        id = setdiff(eachindex(cpd.fragments), id)
-        set_data!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, 1)
+        id = findall(ion -> !in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragment.ion1)
+        set_data_if!.(Ref(project), cpd.fragment.source[id], cpd.fragment.id[id], :isf, -1, <(1))
+        id = setdiff(eachindex(cpd.fragment), id)
+        set_data!.(Ref(project), cpd.fragment.source[id], cpd.fragment.id[id], :isf, 1)
     end
 
 assign_parent!(project::Project) =
     for analyte in project
         cpd = last(analyte)
-        id = findall(ion -> !in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragments.ion1)
-        set_data!.(Ref(project), cpd.fragments.source[id], cpd.fragments.id[id], :isf, -1)
+        id = findall(ion -> !in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragment.ion1)
+        set_data!.(Ref(project), cpd.fragment.source[id], cpd.fragment.id[id], :isf, -1)
     end
