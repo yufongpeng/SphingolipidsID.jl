@@ -149,7 +149,7 @@ end
     @model(expr)
     @model(expr...)
 
-Create function(s) taking data as input and return a regression model.
+Create function(s) taking data as input and returning a regression model.
     
 # Arguuments
 * `()` or no input represent current model, i.e., `preject.appendix[:model_formula]`.
@@ -321,16 +321,19 @@ end
     apply_rt!(aquery::AbstractQuery; kwargs...)
     apply_rt!(project::Project; analyte = project.analyte, atol = 0.25, rtol = 0.05)
 
-Apply rt prediction to each analyte. `analyte.state[state_id(:rt)]` is set as `1` if the prediction error is under certain value; `-1` if the prediction error is too large; `0` if there is no prediction can be made. Prediction is based on `project.appendix[:rt_model]`.
+Apply rt prediction to each analyte. `analyte.state[state_id(:rt)]` is set as `1` if the prediction error is under certain value; `-1` if the prediction error is too large; `0` if there is no prediction can be made. 
+Prediction is based on `project.appendix[:rt_model]`. `atol` and `rtol` can be a number or a function taking `analyte` as input and returning a number.
 """
 apply_rt!(aquery::AbstractQuery; kwargs...) = (apply_rt!(aquery.project; analyte = aquery.result, kwargs...); aquery)
 function apply_rt!(project::Project; analyte = project.analyte, atol = 0.5, rtol = 0.05)
+    atol_fn = atol isa Number ? (x -> atol) : atol
+    rtol_fn = rtol isa Number ? (x -> rtol) : rtol
     tbl = Table(; (project.appendix[:rt_model].fn.nmterms .=> map(x -> eval(x).(analyte), project.appendix[:rt_model].fn.fnterms))...)
     include_id = find_predictable(project.appendix[:rt_model].model, tbl)
     ŷ = predict(project.appendix[:rt_model].model, tbl[include_id])
     y = @view getproperty(tbl, first(propertynames(tbl)))[include_id]
     for (v, v̂, ana) in zip(y, ŷ, view(analyte, include_id))
-        ana.state[state_id(:rt)] = (abs(v - v̂) < atol || abs(v - v̂) / v < rtol) ? 1 : -1
+        ana.state[state_id(:rt)] = (abs(v - v̂) < atol_fn(ana) || abs(v - v̂) / v < rtol_fn(ana)) ? 1 : -1
     end
     project
 end

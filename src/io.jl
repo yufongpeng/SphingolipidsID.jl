@@ -212,7 +212,6 @@ function Base.show(io::IO, ::MIME"text/plain", class::T) where {T <: ClassSP}
         print(io, repr(class), isempty(str) ? "" : "($str)")
     end : print(io, repr(class))
 end
-
 Base.show(io::IO, ::T) where {T <: ClassSP} = print(io, replace(repr(T), r"_$" => "", "SphingolipidsID." => ""))
 
 Base.show(io::IO, ion::Ion) = print(io, repr_adduct(ion.adduct), " of ", ion.molecule)
@@ -248,8 +247,6 @@ print_comp(io::IO, sc::LCBIS) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc), re
 #Base.show(io::IO, ::MIME"text/plain", sc::LCB) = print(io, "SPB ", sc)
 #Base.show(io::IO, ::MIME"text/plain", sc::ACYL) = print(io, "Acyl ", sc)
 Base.show(io::IO, sc::Acyl) = (print(io, "Acyl "); print_comp(io, sc))
-
-
 print_comp(io::IO, sc::ACYL) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc))
 print_comp(io::IO, sc::ACYLIS) = print(io, ncb(sc), ":", ndb(sc), repr_ox(sc), repr_is(sc.isotope))
 
@@ -334,20 +331,58 @@ end
 Base.show(io::IO, analyte::AnalyteID) = print(io, isempty(analyte.compound) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4))
 Base.show(io::IO, transition::TransitionID) = print(io, transition.compound, transition.quantifier ? "" : " (qualifier)")
 
-function Base.show(io::IO, data::PreIS)
-    println(io, "PreIS with $(length(data.mz2)) products: ")
+Base.show(io::IO, data::PreIS) = print(io, "PreIS in ", data.polarity ? "positive" : "negative", " ion mode with $(length(data.mz2)) products")
+function Base.show(io::IO, ::MIME"text/plain", data::PreIS)
+    print(io, data, ":\n")
     for dt in zip(data.range, data.mz2)
         println(io, " ", dt[1], " -> ", round(dt[2]; digits = 4))
     end
 end
 
-function Base.show(io::IO, pj::Project)
-    println(io, "Project with ", length(pj), " analytes:")
+Base.show(io::IO, data::MRM) = print(io, "MRM in ", data.polarity ? "positive" : "negative", " ion mode with $(length(data.mz2)) products")
+function Base.show(io::IO, ::MIME"text/plain", data::MRM)
+    print(io, data, ":\n")
+    for (i, m) in enumerate(data.mz2)
+        v = @view data.table.mz1[data.table.mz2_id == i]
+        v = length(v) > 10 ? string(join(round.(v[1:5]; digits = 4), ", "), ", ..., ", join(round.(v[end - 4:end]; digits = 4))) : join(round.(v; digits = 4), ", ")
+        println(io, " ", v, " -> ", round(m; digits = 4))
+    end
+end
+
+Base.show(io::IO, data::QuantData{T}) where T = print(io, "QuantData{$T} ", data.raw)
+function Base.show(io::IO, ::MIME"text/plain", data::QuantData{T}) where T 
+    print(io, data, ":\n")
+    show(io, MIME"text/plain"(), data.table)
+end
+Base.show(io::IO, data::QCData{T}) where T = print(io, "QCData{$T} ", data.raw)
+function Base.show(io::IO, ::MIME"text/plain", data::QCData{T}) where T 
+    print(io, data, ":\n")
+    show(io, MIME"text/plain"(), qualitytable(data))
+end
+Base.show(io::IO, data::SerialDilution{T}) where T = print(io, "SerialDilution{$T} ", data.raw)
+function Base.show(io::IO, ::MIME"text/plain", data::SerialDilution{T}) where T 
+    print(io, data, ":\n")
+    show(io, MIME"text/plain"(), qualitytable(data))
+end
+Base.show(io::IO, qt::Quantification) = print(io, "Quantification")
+function Base.show(io::IO, ::MIME"text/plain", qt::Quantification)
+    print(io, qt, ":\n")
+    show(io, MIME"text/plain"(), qt.batch)
+end
+Base.show(io::IO, rtcor::RTCorrection) = print(io, "RTCorrection")
+function Base.show(io::IO, ::MIME"text/plain", rtcor::RTCorrection)
+    print(io, rtcor, ":\n")
+    show(io, MIME"text/plain"(), rtcor.fn)
+end
+
+Base.show(io::IO, pj::Project) = print(io, "Project with ", length(pj), " analytes")
+function Base.show(io::IO, ::MIME"text/plain", pj::Project)
+    print(io, pj, ":\n")
     println(io, "∘ Salt: ", get(pj.appendix, :anion, "unknown"))
     println(io, "∘ Signal: ", get(pj.appendix, :signal, "unknown"))
     println(io, "∘ Data: ")
     for data in pj.data
-        show(io, data)
+        show(io, MIME"text/plain"(), data)
     end
     print(io, "∘ Analytes: ")
     if length(pj) > 10
