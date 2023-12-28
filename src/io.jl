@@ -145,7 +145,7 @@ function read_featuretable_masshunter_mrm(path;
         datafile = (@p zip(data.datafile, rep) |> mapmany(repeat([_[1]], _[2])))
     )
     tbl = tbl[tbl.symmetry .!= "MM"]
-    Table(tbl, symmetry = parse.(Float64, tbl.symmetry))
+    Table(tbl, symmetry = parse.(Float64, string.(tbl.symmetry)))
 end
 
 """
