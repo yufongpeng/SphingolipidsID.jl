@@ -17,57 +17,57 @@ function quantification_mrm(analyte::AbstractVector{<: AbstractAnalyteID}, quant
                             default_mz2 = mz(Ion(ProtonationNL2H2O(), SPB3(18, 1))),
                             coelution_fn = x -> lastindex(x.analytes),
                             isd_fn = x -> 0)
-    analyte_map = analyte_map_mrm(analyte, quantifier; qualifier, mz_tol, rt_tol, anion, default_mz2, isd_fn)
+    analytetable = analytetable_mrm(analyte, quantifier; qualifier, mz_tol, rt_tol, anion, default_mz2, isd_fn)
     isnothing(isd) && throw(ArgumentError("Keyword argument isd can not be nothing; external calibration has not been implemented."))
     if isa(isd, NamedTuple)
-        isd_map = analyte_map_mrm(isd.analyte, 
+        isdtable = analytetable_mrm(isd.analyte, 
                         :quantifier in propertynames(isd) ? getproperty(isd, :quantifier) : quantifier;
                         qualifier = :qualifier in propertynames(isd) ? getproperty(isd, :qualifier) : qualifier,
                         coelution_fn = x -> lastindex(x.analytes),
                         isd_fn = x -> -1,
                         mz_tol, rt_tol, anion, default_mz2
                         )
-        conctable = ColumnDataTable(isd_map.analyte, :Level, Table(; Level = [1], (Symbol.(isd_map.analyte) .=> vectorize.(isd.concentration))...))
+        conctable = ColumnDataTable(isdtable.analyte, :Level, Table(; Level = [1], (Symbol.(isdtable.analyte) .=> vectorize.(isd.concentration))...))
     else
-        isd_map = analyte_map_mrm(isd, quantifier; qualifier, mz_tol, rt_tol, anion, default_mz2, coelution_fn = x -> lastindex(x.analytes), isd_fn = x -> -1)
-        conctable = ColumnDataTable(isd_map.analyte, :Level, Table(; Level = [1], (Symbol.(isd_map.analyte) .=> vectorize.(ones(Float64, length(isd_map.analyte))))...))
+        isdtable = analytetable_mrm(isd, quantifier; qualifier, mz_tol, rt_tol, anion, default_mz2, coelution_fn = x -> lastindex(x.analytes), isd_fn = x -> -1)
+        conctable = ColumnDataTable(isdtable.analyte, :Level, Table(; Level = [1], (Symbol.(isdtable.analyte) .=> vectorize.(ones(Float64, length(isdtable.analyte))))...))
     end
-    analyte_map.id .+= length(isd_map)
-    Quantification(Batch(MethodTable{Table}(vcat(isd_map, analyte_map), signal, Int[], conctable, nothing)), dictionary(pairs((; rt_tol, mz_tol, quantifier, qualifier, default_mz2, isd_fn, coelution_fn))))
+    analytetable.id .+= length(isdtable)
+    Quantification(Batch(MethodTable{Table}(vcat(isdtable, analytetable), signal, Int[], conctable, nothing)), dictionary(pairs((; signal, anion, rt_tol, mz_tol, quantifier, qualifier, default_mz2, isd_fn, coelution_fn))))
 end
 
 function transition_matching!(data::MRM, project = nothing; rt_tol = 0.1, mz_tol = 0.35, rt_correction = nothing)
-    method = isnothing(project) ? nothing : project.quantification.batch.method
     rawdata = data.table
-    isnothing(method) && (rawdata.match_id .= rawdata.id; return rawdata)
+    isnothing(project) && (rawdata.match_id .= rawdata.id; return rawdata)
+    method =  project.quantification.batch.method
     if !isnothing(rt_correction) 
-        method = MethodTable{Table}(Table(method.analyte_map; rt = map(method.analyte_map) do q
+        method = MethodTable{Table}(Table(method.analytetable; rt = map(method.analytetable) do q
         rt_correction(class(q.analyte), rt(q))
-    end), method.signal, method.level_map, method.conctable, method.signaltable)
+    end), method.signal, method.pointlevel, method.conctable, method.signaltable)
     end
     rawdata.match_id .= 
         mapmany(groupview(getproperty(:id), rawdata)) do raw
             mz1 = mean(getproperty.(raw, :mz1))
             mz2 = data.mz2[first(raw).mz2_id]
             rt = mean(getproperty.(raw, :rt))
-            id = findfirst(i -> between(mz1, i.mz1, mz_tol) && between(mz2, i.mz2, mz_tol) && between(rt, i.rt, rt_tol), method.analyte_map)
+            id = findfirst(i -> between(mz1, i.mz1, mz_tol) && between(mz2, i.mz2, mz_tol) && between(rt, i.rt, rt_tol), method.analytetable)
             isnothing(id) && return repeat([0.0], length(raw))
-            repeat([method.analyte_map.id[id]], length(raw))
+            repeat([method.analytetable.id[id]], length(raw))
         end
     filter!(x -> x.match_id > 0, rawdata)
 end
 
-function analysistable(rawdata::Table, project = nothing; data = isnothing(project) ? :area : project.appendix[:signal], default = 0.0)
+function analysistable(rawdata::Table, project = nothing; data = isnothing(project) ? :area : project.appendix[:signal], default = 0.0, maxncol = 300)
     method = isnothing(project) ? nothing : project.quantification.batch.method
     grawdata = groupview(getproperty(:match_id), rawdata)
     datafile = unique(rawdata.datafile)
     et = eltype(getproperty(rawdata, data))
     if !isa(default, et)
-        et = Union{et, typeof(default)}
+        et = promote_type(et, typeof(default))
     end
     nt = Vector{Pair{Symbol, Vector{et}}}(undef, length(grawdata))
     if isnothing(method)
-        analyte = Vector{Int}(undef, length(grawdata))
+        analyte = Vector{Symbol}(undef, length(grawdata))
         for (i, (match_id, raw)) in zip(eachindex(nt), pairs(grawdata))
             dt = getproperty(raw, data)
             nt[i] = Symbol(match_id) => map(datafile) do file
@@ -75,21 +75,21 @@ function analysistable(rawdata::Table, project = nothing; data = isnothing(proje
                 isnothing(id) && return default
                 dt[id]
             end
-            analyte[i] = match_id
+            analyte[i] = Symbol(match_id)
         end 
     else
-        analyte = Vector{TransitionID}(undef, length(grawdata))
+        analyte = Vector{eltype(method.analytetable.analyte)}(undef, length(grawdata))
         for (i, (match_id, raw)) in enumerate(pairs(grawdata))
             dt = getproperty(raw, data)
-            nt[i] = Symbol(method.analyte_map.analyte[match_id]) => map(datafile) do file
+            nt[i] = Symbol(method.analytetable.analyte[match_id]) => map(datafile) do file
                 id = findfirst(==(file), raw.datafile)
                 isnothing(id) && return default
                 dt[id]
             end
-            analyte[i] = method.analyte_map.analyte[match_id]
+            analyte[i] = method.analytetable.analyte[match_id]
         end
     end
-    if length(nt) > 300 && length(last(first(nt))) < length(nt)
+    if length(nt) > maxncol && length(last(first(nt))) < length(nt)
         datafile = Symbol.(datafile)
         AnalysisTable([data], [
             RowDataTable(analyte, :analyte, datafile, Table(; analyte, (datafile .=> map(eachindex(datafile)) do i
@@ -139,9 +139,11 @@ function qcdata_mrm!(featuretable::Table, project = nothing;
     n = length(unique(rawdata.datafile))
     mrm = MRM!(Table(rawdata; match_id = zeros(Int, length(rawdata))); combine = false, rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
     rawdata = transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
-    #featuretable = filter_combine_features!(isnothing(project) ? deepcopy(rawdata) : filter(r -> r.match_id > 0, rawdata); use_match_id = !isnothing(project), raw_id = true, rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)
     at = analysistable(mrm.table, project)
-    isnothing(project) || (signal = :estimated_concentration; set_quantification!(at, project.quantification.batch; estimated_concentration = signal))
+    if !isnothing(project)
+        signal = :estimated_concentration
+        set_quantification!(at, project.quantification.batch; estimated_concentration = signal)
+    end
     config = dictionary(pairs((; rt_correction, rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)))
     QCData(mrm, at, config)
 end
@@ -152,7 +154,7 @@ function qualitytable(data::QCData, signal::Symbol = data.config[:signal])
 end
 
 function set_serialdilution_mrm!(project::Project, featuretable::Table, concentration::Vector; 
-                    level_map = nothing, 
+                    pointlevel = nothing, 
                     rt_correction = nothing,  
                     name = r"cal.*_(\d*)-r(\d*).*",
                     r2_threshold = 0.8,
@@ -164,7 +166,7 @@ function set_serialdilution_mrm!(project::Project, featuretable::Table, concentr
                     err_fn = rsd, 
                     err_tol = 0.5,
                     other_fn = Dictionary{Symbol, Any}())
-    push!(project.data, serialdilution_mrm!(featuretable, concentration, project; level_map, rt_correction, name, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
+    push!(project.data, serialdilution_mrm!(featuretable, concentration, project; pointlevel, rt_correction, name, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
     set!(project.quantification.config, :serialdilution, last(project.data))
     last(project.data)
 end
@@ -173,7 +175,7 @@ serialdilution_mrm(project::Project, featuretable::Table, concentration::Vector;
 serialdilution_mrm(featuretable::Table, concentration::Vector, project = nothing; kwargs...) = serialdilution_mrm!(deepcopy(featuretable), concentration, project; kwargs...)
 serialdilution_mrm!(project::Project, featuretable::Table, concentration::Vector; kwargs...) = serialdilution_mrm!(featuretable, concentration, project; kwargs...)
 function serialdilution_mrm!(featuretable::Table, concentration::Vector, project = nothing; 
-                level_map = nothing, 
+                pointlevel = nothing, 
                 rt_correction = nothing, 
                 name = r"cal.*_(\d*)-r\d*.*",
                 r2_threshold = 0.8,
@@ -196,10 +198,9 @@ function serialdilution_mrm!(featuretable::Table, concentration::Vector, project
     mrm = MRM!(Table(rawdata; match_id = zeros(Int, length(rawdata))); combine = false, rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
     rawdata = transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
     config = dictionary(pairs((; concentration, rt_correction, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn)))
-    # r2, model, data_id
     at = analysistable(rawdata, project)
     signaltable = getproperty(at, signal)
-    level_map = isnothing(level_map) ? map(x -> parse(Int, first(match(name, string(x)))), signaltable.sample) : level_map
+    pointlevel = isnothing(pointlevel) ? map(x -> parse(Int, first(match(name, string(x)))), signaltable.sample) : pointlevel
     if signaltable isa ColumnDataTable
         conctable = ColumnDataTable(signaltable.analyte, :Level, Table(; Level = collect(eachindex(concentration)), (signaltable.analytename .=> repeat([concentration], length(signaltable.analyte)))...))
     else
@@ -208,7 +209,7 @@ function serialdilution_mrm!(featuretable::Table, concentration::Vector, project
             repeat([concentration[i]], length(signaltable.analyte))
         end)...))
     end
-    method = MethodTable{Table}(conctable, signaltable, signal, level_map)
+    method = MethodTable{Table}(conctable, signaltable, signal, pointlevel)
     batch = Batch(method)
     Threads.@threads for cal in batch.calibration
         _, id, _ = rec_r2(collect(eachindex(cal.table.x)), cal.table.x, cal.table.y, nlevel, r2_threshold, 0)
@@ -279,13 +280,13 @@ function set_quantdata_mrm!(project::Project, featuretable::Table;
                     err_tol = 0.5,
                     other_fn = Dictionary{Symbol, Any}())
     push!(project.data, quantdata_mrm!(featuretable, project; rt_correction, name, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
-    set!(project.quantification.config, :data, last(project.data))
+    set!(project.quantification.config, :quantdata, last(project.data))
     last(project.data)
 end
 
 quantdata_mrm(project::Project, featuretable::Table; kwargs...) = quantdata_mrm!(project, deepcopy(featuretable); kwargs...)
 quantdata_mrm(featuretable::Table, project = nothing; kwargs...) = quantdata_mrm!(deepcopy(featuretable), project; kwargs...)
-quantdata_mrm(project::Project, featuretable::Table; kwargs...) = quantdata_mrm!(featuretable, project; kwargs...)
+quantdata_mrm!(project::Project, featuretable::Table; kwargs...) = quantdata_mrm!(featuretable, project; kwargs...)
 function quantdata_mrm!(featuretable::Table, project = nothing;
                 rt_correction = nothing,  
                 name = r"S\d*.*",
@@ -307,7 +308,6 @@ function quantdata_mrm!(featuretable::Table, project = nothing;
     n = length(unique(rawdata.datafile))
     mrm = MRM!(Table(rawdata; match_id = zeros(Int, length(rawdata))); combine = false, rt_tol, mz_tol, n = 1, signal = false, est_fn, err_fn, err_tol, other_fn)
     rawdata = transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
-    #featuretable = filter_combine_features!(isnothing(project) ? deepcopy(rawdata) : filter(r -> r.match_id > 0, rawdata); use_match_id = !isnothing(project), raw_id = true, rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)
     at = analysistable(mrm.table, project)
     if !isnothing(project)
         signal = :estimated_concentration

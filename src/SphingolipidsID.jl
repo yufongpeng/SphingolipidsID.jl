@@ -51,7 +51,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         nfrags, @cpdsc, @score, calc_score, apply_score!, calc_threshold, apply_threshold!, w_rank, w_nfrags, w_rank_log, w_rank_exp, 
         normalized_sig_diff, abs_sig_diff,
         # Transition
-        analyte_map_mrm, transitiontable, concurrent_transition, write_transition, 
+        analytetable_mrm, transitiontable, concurrent_transition, write_transition, 
         read_transition, union_transition!, union_transition, diff_transition!, diff_transition,
         # Quantification
         quantification_mrm, set_quantification_mrm!, set_qcdata_mrm!, qcdata_mrm, qcdata_mrm!, 
@@ -221,11 +221,11 @@ struct AnalyteID <: AbstractAnalyteID
     rt::Float64
 end
 """
-    TransitionID <: AbstractAnalyteID
+    TransitionID
 
 A type represents a transition of an analyte and whether it is a quantifier. 
 """
-struct TransitionID <: AbstractAnalyteID
+struct TransitionID
     compound::SPID
     quantifier::Bool
 end
@@ -290,7 +290,9 @@ Multiple reaction monitoring data.
     * `area`: peak area.
     * `FWHM`: Full width at half maximum.
     * `symmetry`: peak symmetry.
-    * `error`: signal error.
+    * `error`: signal error, optinal.
+    * `raw_id`: `id` of original table, optional.
+    * `match_id`: `id` of matched transition from `project.quantification`.
 * `mz2`: `Vector{Float64}`, m/z of fragments.
 * `polarity`: `Bool`; `true` for positive ion mode; `false` for negative ion mode.
 * `config`: `Dictionary` containing config information.
@@ -304,7 +306,7 @@ Multiple reaction monitoring data.
     * `:other_fn`: `Dictionary`. Stores functions for calculating other signal information.
 """
 struct MRM <: AbstractRawData
-    table::Table # id, mz1, mz2_id, height, area, collision_energy, FWHM, symmetry, error
+    table::Table
     mz2::Vector{Float64}
     polarity::Bool
     config::Dictionary
@@ -312,10 +314,16 @@ end
 
 """
     QuantData{T} <: AbstractQuantData{T}
+
+Type containing raw data and tables related to quantification. 
+
+* `raw`: raw data.
+* `table`: `AnalysisTable`, data for quantification (`table.area` or `table.height`), and quantification result (`table.estimated_concentration`).
+* `config`: `Dictionary` containing config information.
 """
 struct QuantData{T} <: AbstractQuantData{T}
     raw::T
-    table::AnalysisTable # id, analyte, FWHM, symmetry, estimate, error, raw_id
+    table::AnalysisTable
     config::Dictionary
 end
 
@@ -330,6 +338,12 @@ propertynames(dt::QuantData) = Tuple(unique((:raw, :table, :config, propertyname
 
 """
     QCData{T} <: AbstractQuantData{T}
+
+Type for QC samples containing raw data and tables related to quantification. 
+
+* `raw`: raw data.
+* `table`: `AnalysisTable`, data for quantification (`table.area` or `table.height`), and quantification result (`table.estimated_concentration`).
+* `config`: `Dictionary` containing config information.
 """
 struct QCData{T} <: AbstractQuantData{T}
     raw::T
@@ -348,10 +362,16 @@ propertynames(qc::QCData) = Tuple(unique((:raw, :table, :config, propertynames(g
 #QCData(raw::T, table::Table, config::Dictionary) where {T <: Data} = QCData{T}(raw, table, config)
 """
     SerialDilution{T} <: AbstractQuantData{T}
+
+Type for serial dilution samples containing raw data and calibration data. 
+
+* `raw`: raw data.
+* `batch`: `Batch` containg analyte settings and calibration curves.
+* `config`: `Dictionary` containing config information.
 """
 struct SerialDilution{T} <: AbstractQuantData{T}
-    raw::T # id, mz1, mz2, height, area, collision_energy, FWHM, symmetry, level
-    batch::Batch # id, analyte, raw_id, r2, model, data_id
+    raw::T
+    batch::Batch
     config::Dictionary
 end
 
@@ -367,6 +387,11 @@ propertynames(sd::SerialDilution) = Tuple(unique((:raw, :batch, :config, propert
 
 """
     Quantification
+
+Type containg information of analyte settings, calibration data, qc data, serial dilution data, and sample data.
+
+* `batch`: `Batch` containg analyte settings, calibration data, and sample data.
+* `config`: `Dictionary` containing config information. `config[:qcdata]` stores a `QCData`, `config[:serialdilution]` stores a `SerialDilution`, and `config[:quantdata]` stores a `QuantData` (sample data).
 """
 struct Quantification
     batch::Batch
@@ -386,6 +411,14 @@ propertynames(quant::Quantification) = (:batch, :config, propertynames(getfield(
 
 """
     RTCorrection
+
+Type holding rt data and regression line for correcting rt from old batch (data for identification) to new batch (data for quantification).
+
+* `data`: raw data from new batch.
+* `table`: old transition table generated from `project.analye` and function `analytetable_mrm`.
+* `fn`: `Dictionary` containg regression coefficents for each class.
+
+This is a callable object taking a class and rt or vector of class and a vector of rt as input, and returning new rt or a vector of new rt. If the class is not in `fn`, it will return the original rt. 
 """
 struct RTCorrection
     data::AbstractRawData
@@ -420,21 +453,32 @@ mutable struct Project <: AbstractProject
     analyte::Vector{AnalyteSP}
     data::Vector{AbstractData}
     quantification::Quantification
-    #anion::Symbol
-    #cluster::Dictionary
-    #alignment::Int
     appendix::Dictionary
 end
 """
     Project(; kwargs...)
 
-Create an empty `Project`. All keyword arguments will be put into `project.appendix`. By default, `project.appendix[:anion]` will be `:acetate`; `project.appendix[:signal]` will be `:area`
+Create an empty `Project`. All keyword arguments will be put into `project.appendix`. By default, `project.appendix[:anion]` will be `:acetate`; `project.appendix[:signal]` will be `:area`.
 """
 function Project(; kwargs...)
     appendix = Dictionary{Symbol, Any}(kwargs)
     get!(appendix, :anion, :acetate)
     get!(appendix, :signal, :area)
     Project(AnalyteSP[], AbstractData[], Quantification(), appendix)
+end
+"""
+    Project(qt::Quantification; kwargs...)
+
+Create a `Project` from `Quantification`. All keyword arguments will be put into `project.appendix`. By default, `project.appendix[:anion]` will be `:acetate`; `project.appendix[:signal]` will be `:area`.
+"""
+function Project(qt::Quantification; kwargs...)
+    appendix = Dictionary{Symbol, Any}(kwargs)
+    get!(appendix, :anion, get(qt.appendix, :anion, :acetate))
+    get!(appendix, :signal, get(qt.appendix, :signal, :area))
+    analyte = isa(qt.analyte, Vector{AnalyteSP}) ? qt.analyte : map(qt.analyte, qt.batch.analytetable.rt) do ana, rt
+        isa(ana, AnalyteSP) ? ana : AnalyteSP([CompoundSP(class(ana), chain(ana))], rt)
+    end
+    Project(analyte, AbstractData[], qt, appendix)
 end
 """
     AbstractQuery

@@ -409,9 +409,9 @@ function abs_err_rt(analyte::AbstractVector{AnalyteSP})
     end
 end
 
-rt_correction(data::AbstractRawData, analyte_map::Table; mz_tol = 0.35, rt_tol = 0.3, wfn = log2, wcol = :area) = rt_correction(analyte_map, data; mz_tol, rt_tol, wfn, wcol)
-function rt_correction(analyte_map::Table, data::AbstractRawData; mz_tol = 0.35, rt_tol = 0.3, wfn = log2, wcol = :area)
-    RTCorrection(data, analyte_map, map(groupview(x -> class(x.analyte), analyte_map)) do tbl
+rt_correction(data::AbstractRawData, analytetable::Table; mz_tol = 0.35, rt_tol = 0.3, wfn = log2, wcol = :area) = rt_correction(analytetable, data; mz_tol, rt_tol, wfn, wcol)
+function rt_correction(analytetable::Table, data::AbstractRawData; mz_tol = 0.35, rt_tol = 0.3, wfn = log2, wcol = :area)
+    RTCorrection(data, analytetable, map(groupview(x -> class(x.analyte), analytetable)) do tbl
         rty = [Float64[] for i in eachindex(tbl)]
         wts = [Float64[] for i in eachindex(tbl)]
         rtx = tbl.rt

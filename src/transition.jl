@@ -69,11 +69,11 @@ function transitiontable(analyte::AbstractVector{<: AbstractAnalyteID}, transiti
     Table((; id = collect(eachindex(tbl)), ), tbl; analyte = join.(getproperty.(tbl, :analyte), " | "), polarity = repeat([polarity ? "Positive" : "Negative"], size(tbl, 1)))
 end
 
-analyte_map_mrm(project::Project, quantifier::Tuple; kwargs...) = analyte_map_mrm(project.analyte, quantifier; kwargs..., mz_tol = last(project.data).config[:mz_tol], rt_tol = last(project.data).config[:rt_tol], anion = project.appendix[:anion])
-analyte_map_mrm(aquery::AbstractQuery, quantifier::Tuple; kwargs...) = analyte_map_mrm(aquery.result, quantifier; kwargs..., mz_tol = last(aquery.project.data).config[:mz_tol], rt_tol = last(aquery.project.data).config[:rt_tol], anion = aquery.project.appendix[:anion])
-analyte_map_mrm(quantifier::Tuple, pq::Union{Project, AbstractQuery}; kwargs...) = analyte_map_mrm(pq, quantifier; kwargs...)
+analytetable_mrm(project::Project, quantifier::Tuple; kwargs...) = analytetable_mrm(project.analyte, quantifier; kwargs..., mz_tol = last(project.data).config[:mz_tol], rt_tol = last(project.data).config[:rt_tol], anion = project.appendix[:anion])
+analytetable_mrm(aquery::AbstractQuery, quantifier::Tuple; kwargs...) = analytetable_mrm(aquery.result, quantifier; kwargs..., mz_tol = last(aquery.project.data).config[:mz_tol], rt_tol = last(aquery.project.data).config[:rt_tol], anion = aquery.project.appendix[:anion])
+analytetable_mrm(quantifier::Tuple, pq::Union{Project, AbstractQuery}; kwargs...) = analytetable_mrm(pq, quantifier; kwargs...)
 
-function analyte_map_mrm(analyte::AbstractVector{<: AbstractAnalyteID}, quantifier::Tuple;
+function analytetable_mrm(analyte::AbstractVector{<: AbstractAnalyteID}, quantifier::Tuple;
                         qualifier = Tuple[],
                         mz_tol = 0.35, rt_tol = 0.1,
                         anion = :acetate,
@@ -129,7 +129,7 @@ function analyte_map_mrm(analyte::AbstractVector{<: AbstractAnalyteID}, quantifi
     tbl = Table(tbl; coelution = coelution_fn.(tbl))
     tbl = Table((; id = collect(eachindex(tbl)), analyte = map(x -> transitionid(spid(x.analytes[x.coelution]), x.quantifier), tbl)), tbl)
     Table((; id = tbl.id, analyte = tbl.analyte, isd = isd_fn.(tbl), calibration = isd_fn.(tbl)), tbl)
-end # analyte_map
+end # analytetable
 
 proc_transition(transition::Tuple{Symbol, T}) where T = (first(transition) == :default_pos, transition)
 function proc_transition(transition::Tuple{Int, T}) where T

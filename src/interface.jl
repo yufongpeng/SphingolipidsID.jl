@@ -242,9 +242,20 @@ end
 
 getproperty(reusable::ReusableQuery, sym::Symbol) = sym ≡ :query ? getfield(reusable, :query) : getfield(getfield(reusable, :query), sym)
 
+convert(::Type{CompoundSP}, cpd::CompoundSP) = cpd
+convert(::Type{CompoundSPVanilla}, cpd::CompoundSPVanilla) = cpd
+convert(::Type{SPID}, cpd::SPID) = cpd
 convert(::Type{CompoundSPVanilla}, cpd::CompoundSP) = CompoundSPVanilla(cpd.class, cpd.chain, cpd.fragment)
 convert(::Type{CompoundSP}, cpd::CompoundSPVanilla) = CompoundSP(cpd.class, cpd.chain, cpd.fragment)
-convert(::Type{SPID}, cpd::SPID) = cpd
+convert(::Type{SPID}, cpd::CompoundSP) = SPID(cpd.calss, cpd.chain)
+convert(::Type{CompoundSP}, cpd::SPID) = CompoundSP(cpd.calss, cpd.chain)
+convert(::Type{SPID}, cpd::CompoundSPVanilla) = SPID(cpd.calss, cpd.chain)
+convert(::Type{CompoundSPVanilla}, cpd::SPID) = CompoundSPVanilla(cpd.calss, cpd.chain)
+convert(::Type{AnalyteSP}, analyte::AnalyteSP) = analyte
+convert(::Type{AnalyteID}, analyte::AnalyteID) = analyte
+convert(::Type{TransitionID}, analyte::TransitionID) = analyte
+convert(::Type{AnalyteSP}, analyte::AnalyteID) = AnalyteSP(analyte.compound, analyte.rt)
+convert(::Type{AnalyteID}, analyte::AnalyteSP) = AnalyteID(analyte.compound, analyte.rt)
 
 # variant of interface
 # iscomponent: whether ion is a component of cpd
