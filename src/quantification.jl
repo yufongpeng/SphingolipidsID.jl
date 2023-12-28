@@ -38,6 +38,7 @@ end
 
 function transition_matching!(data::MRM, project = nothing; rt_tol = 0.1, mz_tol = 0.35, rt_correction = nothing)
     rawdata = data.table
+    sort!(rawdata, [:id, :datafile])
     isnothing(project) && (rawdata.match_id .= rawdata.id; return rawdata)
     method =  project.quantification.batch.method
     if !isnothing(rt_correction) 
