@@ -433,6 +433,8 @@ function rt_correction(analytetable::Table, data::AbstractRawData; mz_tol = 0.35
         if length(unique(rtx)) > 1
             m = hcat(ones(Float64, length(rtx)), rtx)
             (sqrtw * m) \ (sqrtw * rty)
+        elseif isempty(rtx)
+            [0, 1]
         else
             [0, mean(rty, weights(wts)) / first(rtx)]
         end
