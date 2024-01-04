@@ -50,13 +50,12 @@ function transition_matching!(data::MRM, project = nothing; rt_tol = 0.1, mz_tol
         id = findfirst(i -> between(mz1, i.mz1, mz_tol) && between(mz2, i.mz2, mz_tol) && between(mean(rt_correction(class(i.analyte), Table(ft; rtx = repeat([i.rt], length(ft)))) .- ft.rt), 0, rt_tol), method.analytetable)
         featuretable.match_id[i + 1:i + length(ft)] .= isnothing(id) ? repeat([0.0], length(ft)) : repeat([method.analytetable.id[id]], length(ft))
         featuretable.match_score[i + 1:i + length(ft)] .= isnothing(id) ? repeat([0.0], length(ft)) : 
-            repeat(
-                [
-                    ((method.analytetable.mz1[id] - mz1) / mz1) ^ 2 + 
-                    ((method.analytetable.mz2[id] - mz2) / mz2) ^ 2 + 
-                    (mean(rt_correction(class(method.analytetable.analyte[id]), Table(ft; rtx = repeat([method.analytetable.rt[id]], length(ft)))) .- ft.rt) / mean(ft.rt)) ^ 2
-                ], length(ft)
-                )
+        begin
+            mz1 = method.analytetable.mz1[id]
+            mz2 = method.analytetable.mz2[id]
+            rty = rt_correction(class(method.analytetable.analyte[id]), Table(ft; rtx = repeat([method.analytetable.rt[id]], length(ft))))
+            @. (ft.mz1 / mz1 - 1) ^ 2 + (ft.mz2 / mz2 - 1) ^ 2 + (ft.rt / rty - 1) ^ 2
+        end
         i += length(ft)
     end
     filter!(x -> x.match_id > 0, featuretable)
