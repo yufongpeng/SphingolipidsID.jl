@@ -83,11 +83,27 @@ function analysistable(featuretable::Table; data = :area, method = nothing, defa
     else
         analyte = Vector{eltype(method.analytetable.analyte)}(undef, length(gft))
         for (i, (match_id, ft)) in enumerate(pairs(gft))
-            dt = getproperty(ft, data)
-            nt[i] = Symbol(method.analytetable.analyte[match_id]) => map(datafile) do file
-                id = findfirst(==(file), ft.datafile)
-                isnothing(id) ? default : dt[id]
+            if length(unique(ft.id)) > 1
+                dts = map(unique(ft.id)) do idx
+                    subft = ft[ft.id .== idx]
+                    gdf = groupview(getproperty(:datafile), subft)
+                    map(datafile) do file
+                        num = get(gdf, file, nothing)
+                        isnothing(num) ? default : first(getproperty(num, data))
+                    end
+                end
+                _, idx = findmax(dts) do dt
+                    mean(dt)
+                end
+                dt = dts[idx]
+            else
+                gdf = groupview(getproperty(:datafile), ft)
+                dt = map(datafile) do file
+                    num = get(gdf, file, nothing)
+                    isnothing(num) ? default : first(getproperty(num, data))
+                end
             end
+            nt[i] = Symbol(method.analytetable.analyte[match_id]) => dt
             analyte[i] = method.analytetable.analyte[match_id]
         end
     end
