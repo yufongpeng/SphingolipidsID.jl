@@ -413,7 +413,7 @@ rt_correction(modelcall::RetentionModelCall, data::AbstractRawData, analytetable
 function rt_correction(modelcall::RetentionModelCall, analytetable::Table, data::AbstractRawData; mz_tol = 0.35, rt_tol = 0.3)
     RTCorrection(data, analytetable, map(groupview(x -> class(x.analyte), analytetable)) do tbl
         rt_correction_modeling(modelcall, tbl, data; rt_tol, mz_tol)
-    end)
+    end, Dictionary([:rt_tol, :mz_tol], [rt_tol, mz_tol]))
 end
 
 function rt_correction_modeling(modelcall, tbl, data; rt_tol, mz_tol)
@@ -439,7 +439,7 @@ function rt_correction_modeling(modelcall, tbl, data; rt_tol, mz_tol)
 end
 
 function update_rt_correction!(rc::RTCorrection, modelcall::RetentionModelCall, cls::ClassSP)
-    set!(rc.model, cls, @views rt_correction_modeling(modelcall, rc.table[class.(rc.table.analyte) .== cls], rc.data))
+    set!(rc.model, cls, @views rt_correction_modeling(modelcall, rc.table[class.(rc.table.analyte) .== cls], rc.data; rt_tol = rc.config[:rt_tol], mz_tol = rc.config[:mz_tol]))
     rc
 end
 

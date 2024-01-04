@@ -412,12 +412,12 @@ propertynames(quant::Quantification) = (:batch, :config, propertynames(getfield(
 """
     RTCorrection
 
-Type holding rt data and regression line for correcting rt from old batch (data for identification) to new batch (data for quantification).
+Type holding rt data and regression line for correcting rt from new batch (data for quantification) to old batch (data for identification).
 
-* `formula`: formula of regression line.
 * `data`: raw data from new batch.
 * `table`: old transition table generated from `project.analyte` and function `analytetable_mrm`.
-* `fn`: `Dictionary` containg regression coefficents for each class.
+* `model`: `Dictionary` containg regression coefficents for each class.
+* `config`: `Dictionary` containgin configuration.
 
 This is a callable object taking a class and rt or vector of class and a vector of rt as input, and returning new rt or a vector of new rt. If the class is not in `fn`, it will return the original rt. 
 """
@@ -425,6 +425,7 @@ struct RTCorrection
     data::AbstractRawData
     table::Table
     model::Dictionary
+    config::Dictionary
 end
 (fn::RTCorrection)(cls::ClassSP, dt) = model_predict(get(fn.model, cls, nothing), dt)
 (fn::RTCorrection)(cls::Vector{<: ClassSP}, dt) = mapreduce(vcat, cls, dt) do c, d

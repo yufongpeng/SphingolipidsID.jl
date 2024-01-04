@@ -121,13 +121,14 @@ end
 function set_qcdata_mrm!(project::Project, featuretable::Table; 
                     rt_correction = nothing,
                     rt_tol = last(project.data).config[:rt_tol], 
+                    raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
                     mz_tol = last(project.data).config[:mz_tol], 
                     signal = project.appendix[:signal],
                     est_fn = mean, 
                     err_fn = rsd, 
                     err_tol = 0.5,
                     other_fn = Dictionary{Symbol, Any}())
-    push!(project.data, qcdata_mrm!(featuretable, project; rt_correction, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
+    push!(project.data, qcdata_mrm!(featuretable, project; rt_correction, rt_tol, raw_rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
     set!(project.quantification.config, :qcdata, last(project.data))
     last(project.data)
 end
@@ -138,6 +139,7 @@ qcdata_mrm!(project::Project, featuretable::Table; kwargs...) = qcdata_mrm!(feat
 function qcdata_mrm!(featuretable::Table, project = nothing;
                 rt_correction = nothing,  
                 rt_tol = isnothing(project) ? 0.1 : last(project.data).config[:rt_tol], 
+                raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
                 mz_tol = isnothing(project) ? 0.35 : last(project.data).config[:mz_tol], 
                 signal = isnothing(project) ? :area : project.appendix[:signal],
                 est_fn = mean, 
@@ -152,7 +154,7 @@ function qcdata_mrm!(featuretable::Table, project = nothing;
     end
     other_fn = default_other_fn
     n = length(unique(featuretable.datafile))
-    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
+    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol = raw_rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
     transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
     at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
     if !isnothing(project)
@@ -174,13 +176,14 @@ function set_serialdilution_mrm!(project::Project, featuretable::Table, concentr
                     r2_threshold = 0.8,
                     nlevel = 5,
                     rt_tol = last(project.data).config[:rt_tol], 
+                    raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
                     mz_tol = last(project.data).config[:mz_tol], 
                     signal = project.appendix[:signal],
                     est_fn = mean, 
                     err_fn = rsd, 
                     err_tol = 0.5,
                     other_fn = Dictionary{Symbol, Any}())
-    push!(project.data, serialdilution_mrm!(featuretable, concentration, project; pointlevel, rt_correction, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
+    push!(project.data, serialdilution_mrm!(featuretable, concentration, project; pointlevel, rt_correction, r2_threshold, nlevel, rt_tol, raw_rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
     set!(project.quantification.config, :serialdilution, last(project.data))
     last(project.data)
 end
@@ -195,6 +198,7 @@ function serialdilution_mrm!(featuretable::Table, concentration::Vector, project
                 r2_threshold = 0.8,
                 nlevel = 5,
                 rt_tol = isnothing(project) ? 0.1 : last(project.data).config[:rt_tol], 
+                raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
                 mz_tol = isnothing(project) ? 0.35 : last(project.data).config[:mz_tol], 
                 signal = isnothing(project) ? :area : project.appendix[:signal],
                 est_fn = mean, 
@@ -208,7 +212,7 @@ function serialdilution_mrm!(featuretable::Table, concentration::Vector, project
         end
     end
     other_fn = default_other_fn
-    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
+    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol = raw_rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
     transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
     config = dictionary(pairs((; concentration, rt_correction, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn)))
     at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
@@ -286,13 +290,14 @@ function set_quantdata_mrm!(project::Project, featuretable::Table;
                     rt_correction = nothing,
                     name = r"S\d*.*",
                     rt_tol = last(project.data).config[:rt_tol], 
+                    raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
                     mz_tol = last(project.data).config[:mz_tol], 
                     signal = project.appendix[:signal],
                     est_fn = mean, 
                     err_fn = rsd, 
                     err_tol = 0.5,
                     other_fn = Dictionary{Symbol, Any}())
-    push!(project.data, quantdata_mrm!(featuretable, project; rt_correction, name, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
+    push!(project.data, quantdata_mrm!(featuretable, project; rt_correction, name, rt_tol, raw_rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
     set!(project.quantification.config, :quantdata, last(project.data))
     last(project.data)
 end
@@ -303,6 +308,7 @@ quantdata_mrm!(project::Project, featuretable::Table; kwargs...) = quantdata_mrm
 function quantdata_mrm!(featuretable::Table, project = nothing;
                 rt_correction = nothing,  
                 rt_tol = isnothing(project) ? 0.1 : last(project.data).config[:rt_tol], 
+                raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
                 mz_tol = isnothing(project) ? 0.35 : last(project.data).config[:mz_tol], 
                 signal = isnothing(project) ? :area : project.appendix[:signal],
                 est_fn = mean, 
@@ -317,7 +323,7 @@ function quantdata_mrm!(featuretable::Table, project = nothing;
     end
     other_fn = default_other_fn
     n = length(unique(featuretable.datafile))
-    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol, mz_tol, n = 1, signal = false, est_fn, err_fn, err_tol, other_fn)
+    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol = raw_rt_tol, mz_tol, n = 1, signal = false, est_fn, err_fn, err_tol, other_fn)
     transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
     at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
     if !isnothing(project)
