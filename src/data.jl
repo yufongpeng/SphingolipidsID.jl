@@ -1,25 +1,27 @@
 """
     sort_data(tbl::Table)
 
-Create a new `Table` and sort it by `:datafile`.
+Create a new `Table` and sort it by `:injection_order`.
 """
 sort_data(tbl::Table) = sort_data!(deepcopy(tbl))
 """
     sort_data!(tbl::Table)
 
-Sort the table by `:datafile` in place.
+Sort the table by `:injection_order` in place.
 """
 function sort_data!(tbl::Table)
-    sort!(tbl, :datafile)
+    sort!(tbl, :injection_order)
     tbl
 end
 
 """
     file_order(tbl::Table)
 
-Return unique `tbl.datafile` for filling CE, mz2 or m/z range by the order.
+Return unique `tbl.datafile` for filling CE, mz2 or m/z range by the `injection_order`.
 """
-file_order(tbl::Table) = in(:datafile, propertynames(tbl)) ? unique(tbl.datafile) : throw(ArgumentError("This table doesn't contain datafile."))
+file_order(tbl::Table) = !in(:datafile, propertynames(tbl)) ? throw(ArgumentError("This table doesn't contain `datafile`.")) : 
+    !in(:datafile, propertynames(tbl)) ? throw(ArgumentError("This table doesn't contain `injection_order`.")) : 
+    map(x -> tbl.datafile[findfirst(==(x), tbl.injection_order)], sort!(unique(tbl.injection_order)))
 
 """
     fill_polarity!(tbl::Table, polarity::Union{<: AbstractVector, <: Tuple})
@@ -28,13 +30,12 @@ file_order(tbl::Table) = in(:datafile, propertynames(tbl)) ? unique(tbl.datafile
 
 Fill column `polarity` with `polarity`.
 
-If the input is not a number, it requires that column `datafile` exists and uses the order or values as keys to assign polarity.
-
-When the input is a `Vector` or `Tuple`, the values should represent polarity of each data file in the order as same as `file_order(tbl)`.
+When the input is a number, it fills all values with the number.
+When the input is a `Vector` or `Tuple`, the values should represent polarity of each `tbl.injection_order`.
+When the input is a Dictionary, the keys should contain each `tbl.datafile`.
 """
 function fill_polarity!(tbl::Table, polarity)
-    mapping = datafile_mapping(tbl, polarity)
-    tbl.polarity .= getindex.(Ref(mapping), tbl.datafile)
+    tbl.polarity .= fill_data(tbl, polarity)
     tbl
 end
 
@@ -52,13 +53,7 @@ Create a table with column `polarity` and fill it with `polarity`.
 
 See `fill_polarity!`.
 """
-function fill_polarity(tbl::Table, polarity)
-    mapping = datafile_mapping(tbl, polarity)
-    Table(tbl; polarity = getindex.(Ref(mapping), tbl.datafile))
-end
-
-fill_polarity(tbl::Table, polarity::Bool) = 
-    Table(tbl; polarity = repeat([polarity], length(tbl)))
+fill_polarity(tbl::Table, polarity) = Table(tbl; polarity = fill_data(tbl, polarity))
 
 """
     fill_mz2!(tbl::Table, mz2::Union{<: AbstractVector, <: Tuple})
@@ -67,13 +62,12 @@ fill_polarity(tbl::Table, polarity::Bool) =
 
 Fill column `mz2` with `mz2`.
 
-If the input is not a number, it requires that column `datafile` exists and uses the order or values as keys to assign mz2.
-
-When the input is a `Vector` or `Tuple`, the values should represent mz2 of each data file in the order as same as `file_order(tbl)`.
+When the input is a number, it fills all values with the number.
+When the input is a `Vector` or `Tuple`, the values should represent mz2 of each `tbl.injection_order`.
+When the input is a Dictionary, the keys should contain each `tbl.datafile`.
 """
 function fill_mz2!(tbl::Table, mz2)
-    mapping = datafile_mapping(tbl, mz2)
-    tbl.mz2 .= getindex.(Ref(mapping), tbl.datafile)
+    tbl.mz2 .= fill_data(tbl, mz2)
     tbl
 end
 
@@ -91,13 +85,7 @@ Create a table with column `mz2` and fill it with `mz2`.
 
 See `fill_mz2!`.
 """
-function fill_mz2(tbl::Table, mz2)
-    mapping = datafile_mapping(tbl, mz2)
-    Table(tbl; mz2 = getindex.(Ref(mapping), tbl.datafile))
-end
-
-fill_mz2(tbl::Table, mz2::Float64) = 
-    Table(tbl; mz2 = repeat([mz2], length(tbl)))
+fill_mz2(tbl::Table, mz2) = Table(tbl; mz2 = fill_data(tbl, mz2))
 
 """
     fill_ce!(tbl::Table, ce::Union{<: AbstractVector, <: Tuple})
@@ -106,13 +94,12 @@ fill_mz2(tbl::Table, mz2::Float64) =
 
 Fill column `collision_energy` with `ce`.
 
-If the input is not a number, it requires that column `datafile` exists and uses the order or values as keys to assign ce.
-
-When the input is a `Vector` or `Tuple`, the values should represent ce of each data file in the order as same as `file_order(tbl)`.
+When the input is a number, it fills all values with the number.
+When the input is a `Vector` or `Tuple`, the values should represent collision energy of each `tbl.injection_order`.
+When the input is a Dictionary, the keys should contain each `tbl.datafile`.
 """
 function fill_ce!(tbl::Table, ce)
-    mapping = datafile_mapping(tbl, ce)
-    tbl.collision_energy .= getindex.(Ref(mapping), tbl.datafile)
+    tbl.collision_energy .= fill_data(tbl, ce)
     tbl
 end
 
@@ -130,13 +117,7 @@ Create a table with column `collision_energy` and fill it with `ce`.
 
 See `fill_ce!`.
 """
-function fill_ce(tbl::Table, ce)
-    mapping = datafile_mapping(tbl, ce)
-    Table(tbl; collision_energy = getindex.(Ref(mapping), tbl.datafile))
-end
-
-fill_ce(tbl::Table, ce::Float64) = 
-    Table(tbl; collision_energy = repeat([ce], length(tbl)))
+fill_ce(tbl::Table, ce) = Table(tbl; collision_energy = fill_data(tbl, ce))
 
 """
     fill_range!(tbl::Table, mzr::Union{<: AbstractVector, <: Tuple})
@@ -145,13 +126,12 @@ fill_ce(tbl::Table, ce::Float64) =
 
 Fill column `mz_range` with `mzr`.
 
-If the input is not a interval, it requires that column `datafile` exists and uses the order or values as keys to assign ce.
-
-When the input is a `Vector` or `Tuple`, the values should represent ce of each data file in the order as same as `file_order(tbl)`.
+When the input is a interval, it fills all values with the interval.
+When the input is a `Vector` or `Tuple`, the values should represent m/z range of each `tbl.injection_order`.
+When the input is a Dictionary, the keys should contain each `tbl.datafile`.
 """
 function fill_range!(tbl::Table, mzr)
-    mapping = datafile_mapping(tbl, mzr)
-    tbl.mz_range .= getindex.(Ref(mapping), tbl.datafile)
+    tbl.mz_range .= fill_data(tbl, mzr)
     tbl
 end
 
@@ -169,22 +149,11 @@ Create a table with column `mz_range` and fill it with `mzr`.
 
 See `fill_range!`.
 """
-function fill_range(tbl::Table, mzr)
-    mapping = datafile_mapping(tbl, mzr)
-    Table(tbl; mz_range = getindex.(Ref(mapping), tbl.datafile))
-end
+fill_range(tbl::Table, mzr) = Table(tbl; mz_range = fill_data(tbl, mzr))
 
-fill_range(tbl::Table, mzr::RealIntervals) = 
-    Table(tbl; mz_range = repeat([mzr], length(tbl)))
-
-function datafile_mapping(tbl::Table, data::Union{<: AbstractVector, <: Tuple})
-    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
-    Dictionary(unique(tbl.datafile), data)
-end
-function datafile_mapping(tbl::Table, data::Union{<: AbstractDictionary, <: AbstractDict})
-    in(:datafile, propertynames(tbl)) || throw(ArgumentError("Column `datafile` is not in the table"))
-    data
-end
+fill_data(tbl::Table, data::Union{<: AbstractVector, <: Tuple}) = getindex.(Ref(data), tbl.injection_order)
+fill_data(tbl::Table, data::Union{<: AbstractDictionary, <: AbstractDict}) = getindex.(Ref(data), tbl.datafile)
+fill_data(tbl::Table, data) = repeat([data], length(tbl))
 
 """
     rsd(v)
@@ -195,7 +164,7 @@ rsd(v) = std(v) / mean(v)
 """
     rmae(v)
 
-Relative mean absolute error, i.e., `(maximum(v) - minimum(v)) / 2 / mean(v)`.
+Relative mean absolute error.
 """
 function rmae(v) 
     m = mean(v)
@@ -226,22 +195,23 @@ end
                             n = 3, 
                             err_fn = default_error, 
                             err_tol = 0.5,
-                            other_fn = Dictionary{Symbol, Any}([:mz_range, :polarity, :datafile], [splat(union), only ∘ unique, nothing]))
+                            other_fn = Dictionary{Symbol, Any}([:mz_range, :polarity, :datafile, :injection_order], [splat(union), only ∘ unique, nothing, nothing]))
 
-Filter out and combine duplicated or unstable features.
+Filter out and combine duplicated or unstable features. Each `tbl.id` will map to a unique feature.
 
-* `filter`: whether filter data based on number of detection and signal errors.
-* `combine`: whether combine data after grouping based on `mz1`, `mz2`, `rt`, and `collision_energy`. `datafile` is ignored.
+* `filter`: whether filter data based on number of detection and signal errors. Only works when `signal` is not `nothing`.
+* `combine`: whether combine data after grouping based on `mz1`, `mz2`, `rt`, and `collision_energy`.
 * `use_match_id`: whether using `match_id` instead of `mz1`, `mz2`, `rt` to group data.
-* `raw_id`: a `Bool` determining whether preserving the original `tbl.id` as `tbl.raw_id` for staying connection to the raw featuretable.
+* `raw_id`: a `Bool` determining whether preserving the original `tbl.id` as `tbl.raw_id` for staying connection to the raw featuretable. Only works when `combine` is true.
 * `rt_tol`: maximum allowable difference in retention time for two compounds to consider them as the same.
 * `mz_tol`: maximum allowable difference in m/z for two compounds to consider them as the same.
 * `n`: minimal number of detection. The default is 3.
 * `signal`: `:area` or `:height` for concentration estimation. The default is `:area`. If `nothing` is given, this function will not calculate errors.
 * `est_fn`: estimation function for calculating estimated value. The default is `mean`.
-* `err_fn`: error function. If the length is three or above, the default is `rsd`; otherwise, it is `re`. 
+* `err_fn`: error function. If the length is three or above, the default is `rsd`; otherwise, it is `rmae`. 
 * `err_tol`: maximum allowable signal error.
-* `other_fn`: a `Dictionary` specifying functions for calculating other signal information.
+* `other_fn`: a `Dictionary` specifying functions for combining other signal information. The keys are column names, and the values are functions. If the value is `nothing`, the column will be removed.
+For columns not mentioned, `est_fn` will be used for numeric value, and `first` will be used for other types. 
 """
 function filter_combine_features!(tbl::Table; 
                             filter = true, 
@@ -255,7 +225,7 @@ function filter_combine_features!(tbl::Table;
                             est_fn = mean, 
                             err_fn = default_error, 
                             err_tol = 0.5,
-                            other_fn = Dictionary{Symbol, Any}([:mz_range, :polarity, :datafile], [splat(union), only ∘ unique, nothing]))
+                            other_fn = Dictionary{Symbol, Any}([:mz_range, :polarity, :datafile, :injection_order], [splat(union), only ∘ unique, nothing, nothing]))
     sort!(tbl, [:mz2, :mz1, :rt])
     calc_signal = !isnothing(signal)
     filter = calc_signal && filter
@@ -289,20 +259,20 @@ function filter_combine_features!(tbl::Table;
     if raw_id && combine
         ids = map(loc -> tbl.id[loc], locs)
     end
-    #@p tbl |> DataFrame |> groupby(__, :id) |> combine(__, All() .=> mean, :area => err => :error, renamecols = false) |> Table
-    del = [k for (k, v) in pairs(other_fn) if isnothing(v)]
-    tbl = Table(tbl; (del .=> nothing)...)
-    calc_signal && set!(other_fn, signal, est_fn)
-    get!(other_fn, :id, only ∘ unique)
-    for k in propertynames(tbl)
-        get!(other_fn, k, mean)
-    end
     fill!(tbl.id, 0)
     for (i, loc) in enumerate(locs)
         tbl.id[loc] .= i
     end
     filter!(x -> >(x.id, 0), tbl)
+    sort!(tbl, :id)
     combine || return tbl
+    del = [k for (k, v) in pairs(other_fn) if isnothing(v)]
+    tbl = Table(tbl; (del .=> nothing)...)
+    calc_signal && set!(other_fn, signal, est_fn)
+    get!(other_fn, :id, only ∘ unique)
+    for k in propertynames(tbl)
+        eltype(getproperty(tbl, k)) isa Number ? get!(other_fn, k, est_fn) : get!(other_fn, k, first)
+    end
     gtbl = @p tbl groupview(getproperty(:id))
     calc_signal && (errors = @p gtbl map(err_fn(getproperty(_, signal))) collect)
     nt = @p gtbl map(map((k, v) -> k => other_fn[k](v), propertynames(_), columns(_))) map(NamedTuple) 

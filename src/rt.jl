@@ -387,7 +387,7 @@ function err_rt(analyte::AnalyteSP)
     isnothing(prt) ? prt : prt[1] - analyte.rt
 end
 function err_rt(analyte::AbstractVector{AnalyteSP})
-    ŷs = predict_rt(analyte::AbstractVector{AnalyteSP})
+    ŷs = predict_rt(analyte)
     map(analyte, ŷs) do ana, ŷ
         isnothing(ŷ) ? nothing : ŷ - ana.rt
     end
@@ -409,34 +409,45 @@ function abs_err_rt(analyte::AbstractVector{AnalyteSP})
     end
 end
 
-rt_correction(data::AbstractRawData, analytetable::Table; mz_tol = 0.35, rt_tol = 0.3, wfn = log2, wcol = :area) = rt_correction(analytetable, data; mz_tol, rt_tol, wfn, wcol)
-function rt_correction(analytetable::Table, data::AbstractRawData; mz_tol = 0.35, rt_tol = 0.3, wfn = log2, wcol = :area)
+rt_correction(modelcall::RetentionModelCall, data::AbstractRawData, analytetable::Table; mz_tol = 0.35, rt_tol = 0.3) = rt_correction(modelcall, analytetable, data; mz_tol, rt_tol)
+function rt_correction(modelcall::RetentionModelCall, analytetable::Table, data::AbstractRawData; mz_tol = 0.35, rt_tol = 0.3)
     RTCorrection(data, analytetable, map(groupview(x -> class(x.analyte), analytetable)) do tbl
-        rty = [Float64[] for i in eachindex(tbl)]
-        wts = [Float64[] for i in eachindex(tbl)]
-        rtx = tbl.rt
-        for (i, t) in enumerate(tbl)
-            for r in data.table
-                (!between(t.rt, r.rt, rt_tol) || 
-                !between(t.mz1, r.mz1, mz_tol) ||
-                !between(t.mz2, data.mz2[r.mz2_id], mz_tol)) && continue
-                push!(rty[i], r.rt)
-                push!(wts[i], wfn(getproperty(r, wcol)))
-            end
-        end
-        rtx = mapmany(zip(rtx, rty)) do (x, y)
-            repeat([x], length(y))
-        end
-        rty = reduce(vcat, rty)
-        wts = reduce(vcat, wts)
-        sqrtw = diagm(sqrt.(max.(0, wts)))
-        if length(unique(rtx)) > 1
-            m = hcat(ones(Float64, length(rtx)), rtx)
-            (sqrtw * m) \ (sqrtw * rty)
-        elseif isempty(rtx)
-            [0, 1]
-        else
-            [0, mean(rty, weights(wts)) / first(rtx)]
-        end
+        rt_correction_modeling(modelcall, tbl, data; rt_tol, mz_tol)
     end)
 end
+
+function rt_correction_modeling(modelcall, tbl, data; rt_tol, mz_tol)
+    m = [NamedTuple[] for i in eachindex(tbl)]
+    rtx = tbl.rt
+    for (i, t) in enumerate(tbl)
+        for r in data.table
+            (!between(t.rt, r.rt, rt_tol) || 
+            !between(t.mz1, r.mz1, mz_tol) ||
+            !between(t.mz2, data.mz2[r.mz2_id], mz_tol)) && continue
+            push!(m[i], r)
+        end
+    end
+    rtx = mapmany(zip(rtx, m)) do (y, d)
+        repeat([y], length(d))
+    end
+    if isempty(rtx)
+        nothing
+    else
+        m = Table(vcat(m...); rtx)
+        RetentionModel(modelcall, modelcall(m))
+    end
+end
+
+function update_rt_correction!(rc::RTCorrection, modelcall::RetentionModelCall, cls::ClassSP)
+    set!(rc.model, cls, @views rt_correction_modeling(modelcall, rc.table[class.(rc.table.analyte) .== cls], rc.data))
+    rc
+end
+
+function update_rt_correction!(rc::RTCorrection, modelcall::RetentionModelCall, cls::Vector{<: ClassSP})
+    for c in cls
+        update_art_correction!(rc, modelcall, c)
+    end
+end
+
+model_predict(model::RetentionModel, dt) = predict(model.model, dt)
+model_predict(::Nothing, dt) = dt.rt

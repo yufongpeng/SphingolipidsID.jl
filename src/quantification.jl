@@ -37,55 +37,57 @@ function quantification_mrm(analyte::AbstractVector{<: AbstractAnalyteID}, quant
 end
 
 function transition_matching!(data::MRM, project = nothing; rt_tol = 0.1, mz_tol = 0.35, rt_correction = nothing)
-    rawdata = data.table
-    sort!(rawdata, [:id, :datafile])
-    isnothing(project) && (rawdata.match_id .= rawdata.id; return rawdata)
-    method =  project.quantification.batch.method
-    if !isnothing(rt_correction) 
-        method = MethodTable{Table}(Table(method.analytetable; rt = map(method.analytetable) do q
-        rt_correction(class(q.analyte), rt(q))
-    end), method.signal, method.pointlevel, method.conctable, method.signaltable)
+    featuretable = data.table
+    sort!(featuretable, [:id, :datafile])
+    set!(data.config, :method, nothing)
+    isnothing(project) && (featuretable.match_id .= featuretable.id; return sort!(featuretable, [:match_id, :match_score]))
+    method = project.quantification.batch.method
+    data.config[:method] = method
+    i = 0
+    for ft in groupview(getproperty(:id), featuretable)
+        mz1 = mean(getproperty.(ft, :mz1))
+        mz2 = data.mz2[first(ft).mz2_id]
+        id = findfirst(i -> between(mz1, i.mz1, mz_tol) && between(mz2, i.mz2, mz_tol) && between(mean(rt_correction(class(i.analyte), Table(ft; rtx = repeat([i.rt], length(ft)))) .- ft.rt), 0, rt_tol), method.analytetable)
+        featuretable.match_id[i + 1:i + length(ft)] .= isnothing(id) ? repeat([0.0], length(ft)) : repeat([method.analytetable.id[id]], length(ft))
+        featuretable.match_score[i + 1:i + length(ft)] .= isnothing(id) ? repeat([0.0], length(ft)) : 
+            repeat(
+                [
+                    ((method.analytetable.mz1[id] - mz1) / mz1) ^ 2 + 
+                    ((method.analytetable.mz2[id] - mz2) / mz2) ^ 2 + 
+                    (mean(rt_correction(class(method.analytetable.analyte[id]), Table(ft; rtx = repeat([method.analytetable.rt[id]], length(ft)))) .- ft.rt) / mean(ft.rt)) ^ 2
+                ], length(ft)
+                )
+        i += length(ft)
     end
-    rawdata.match_id .= 
-        mapmany(groupview(getproperty(:id), rawdata)) do raw
-            mz1 = mean(getproperty.(raw, :mz1))
-            mz2 = data.mz2[first(raw).mz2_id]
-            rt = mean(getproperty.(raw, :rt))
-            id = findfirst(i -> between(mz1, i.mz1, mz_tol) && between(mz2, i.mz2, mz_tol) && between(rt, i.rt, rt_tol), method.analytetable)
-            isnothing(id) && return repeat([0.0], length(raw))
-            repeat([method.analytetable.id[id]], length(raw))
-        end
-    filter!(x -> x.match_id > 0, rawdata)
+    filter!(x -> x.match_id > 0, featuretable)
+    sort!(featuretable, [:match_id, :match_score])
 end
 
-function analysistable(rawdata::Table, project = nothing; data = isnothing(project) ? :area : project.appendix[:signal], default = 0.0, maxncol = 300)
-    method = isnothing(project) ? nothing : project.quantification.batch.method
-    grawdata = groupview(getproperty(:match_id), rawdata)
-    datafile = unique(rawdata.datafile)
-    et = eltype(getproperty(rawdata, data))
+function analysistable(featuretable::Table; data = :area, method = nothing, default = 0.0, maxncol = 300)
+    gft = groupview(getproperty(:match_id), featuretable)
+    datafile = unique(featuretable.datafile)
+    et = eltype(getproperty(featuretable, data))
     if !isa(default, et)
         et = promote_type(et, typeof(default))
     end
-    nt = Vector{Pair{Symbol, Vector{et}}}(undef, length(grawdata))
+    nt = Vector{Pair{Symbol, Vector{et}}}(undef, length(gft))
     if isnothing(method)
-        analyte = Vector{Symbol}(undef, length(grawdata))
-        for (i, (match_id, raw)) in zip(eachindex(nt), pairs(grawdata))
-            dt = getproperty(raw, data)
+        analyte = Vector{Symbol}(undef, length(gft))
+        for (i, (match_id, ft)) in zip(eachindex(nt), pairs(gft))
+            dt = getproperty(ft, data)
             nt[i] = Symbol(match_id) => map(datafile) do file
-                id = findfirst(==(file), raw.datafile)
-                isnothing(id) && return default
-                dt[id]
+                id = findfirst(==(file), ft.datafile)
+                isnothing(id) ? default : dt[id]
             end
             analyte[i] = Symbol(match_id)
         end 
     else
-        analyte = Vector{eltype(method.analytetable.analyte)}(undef, length(grawdata))
-        for (i, (match_id, raw)) in enumerate(pairs(grawdata))
-            dt = getproperty(raw, data)
+        analyte = Vector{eltype(method.analytetable.analyte)}(undef, length(gft))
+        for (i, (match_id, ft)) in enumerate(pairs(gft))
+            dt = getproperty(ft, data)
             nt[i] = Symbol(method.analytetable.analyte[match_id]) => map(datafile) do file
-                id = findfirst(==(file), raw.datafile)
-                isnothing(id) && return default
-                dt[id]
+                id = findfirst(==(file), ft.datafile)
+                isnothing(id) ? default : dt[id]
             end
             analyte[i] = method.analytetable.analyte[match_id]
         end
@@ -103,7 +105,6 @@ end
 
 function set_qcdata_mrm!(project::Project, featuretable::Table; 
                     rt_correction = nothing,
-                    name = r"pooledqc.*_\d*.*",
                     rt_tol = last(project.data).config[:rt_tol], 
                     mz_tol = last(project.data).config[:mz_tol], 
                     signal = project.appendix[:signal],
@@ -111,7 +112,7 @@ function set_qcdata_mrm!(project::Project, featuretable::Table;
                     err_fn = rsd, 
                     err_tol = 0.5,
                     other_fn = Dictionary{Symbol, Any}())
-    push!(project.data, qcdata_mrm!(featuretable, project; rt_correction, name, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
+    push!(project.data, qcdata_mrm!(featuretable, project; rt_correction, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
     set!(project.quantification.config, :qcdata, last(project.data))
     last(project.data)
 end
@@ -121,7 +122,6 @@ qcdata_mrm(featuretable::Table, project = nothing; kwargs...) = qcdata_mrm!(deep
 qcdata_mrm!(project::Project, featuretable::Table; kwargs...) = qcdata_mrm!(featuretable, project; kwargs...)
 function qcdata_mrm!(featuretable::Table, project = nothing;
                 rt_correction = nothing,  
-                name = r"pooledqc.*_\d*.*",
                 rt_tol = isnothing(project) ? 0.1 : last(project.data).config[:rt_tol], 
                 mz_tol = isnothing(project) ? 0.35 : last(project.data).config[:mz_tol], 
                 signal = isnothing(project) ? :area : project.appendix[:signal],
@@ -129,18 +129,17 @@ function qcdata_mrm!(featuretable::Table, project = nothing;
                 err_fn = rsd, 
                 err_tol = 0.5,
                 other_fn = Dictionary{Symbol, Any}())
-    default_other_fn = Dictionary{Symbol, Any}([:datafile, :match_id], [only ∘ unique, only ∘ unique])
+    default_other_fn = Dictionary{Symbol, Any}([:datafile, :injection_order, :match_id], [only ∘ unique, only ∘ unique, only ∘ unique])
     if !isempty(other_fn)
         for (k, v) in pairs(other_fn)
             set!(default_other_fn, k, v)
         end
     end
     other_fn = default_other_fn
-    rawdata = filter!(x -> occursin(name, x.datafile), featuretable)
-    n = length(unique(rawdata.datafile))
-    mrm = MRM!(Table(rawdata; match_id = zeros(Int, length(rawdata))); combine = false, rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
-    rawdata = transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
-    at = analysistable(mrm.table, project)
+    n = length(unique(featuretable.datafile))
+    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
+    transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
+    at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
     if !isnothing(project)
         signal = :estimated_concentration
         set_quantification!(at, project.quantification.batch; estimated_concentration = signal)
@@ -157,7 +156,6 @@ end
 function set_serialdilution_mrm!(project::Project, featuretable::Table, concentration::Vector; 
                     pointlevel = nothing, 
                     rt_correction = nothing,  
-                    name = r"cal.*_(\d*)-r(\d*).*",
                     r2_threshold = 0.8,
                     nlevel = 5,
                     rt_tol = last(project.data).config[:rt_tol], 
@@ -167,7 +165,7 @@ function set_serialdilution_mrm!(project::Project, featuretable::Table, concentr
                     err_fn = rsd, 
                     err_tol = 0.5,
                     other_fn = Dictionary{Symbol, Any}())
-    push!(project.data, serialdilution_mrm!(featuretable, concentration, project; pointlevel, rt_correction, name, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
+    push!(project.data, serialdilution_mrm!(featuretable, concentration, project; pointlevel, rt_correction, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
     set!(project.quantification.config, :serialdilution, last(project.data))
     last(project.data)
 end
@@ -177,8 +175,8 @@ serialdilution_mrm(featuretable::Table, concentration::Vector, project = nothing
 serialdilution_mrm!(project::Project, featuretable::Table, concentration::Vector; kwargs...) = serialdilution_mrm!(featuretable, concentration, project; kwargs...)
 function serialdilution_mrm!(featuretable::Table, concentration::Vector, project = nothing; 
                 pointlevel = nothing, 
-                rt_correction = nothing, 
                 name = r"cal.*_(\d*)-r\d*.*",
+                rt_correction = nothing,
                 r2_threshold = 0.8,
                 nlevel = 5,
                 rt_tol = isnothing(project) ? 0.1 : last(project.data).config[:rt_tol], 
@@ -188,18 +186,17 @@ function serialdilution_mrm!(featuretable::Table, concentration::Vector, project
                 err_fn = std, 
                 err_tol = 0.5,
                 other_fn = Dictionary{Symbol, Any}())
-    default_other_fn = Dictionary{Symbol, Any}([:datafile, :match_id], [only ∘ unique, only ∘ unique])
+    default_other_fn = Dictionary{Symbol, Any}([:datafile, :injection_order, :match_id], [only ∘ unique, only ∘ unique, only ∘ unique])
     if !isempty(other_fn)
         for (k, v) in pairs(other_fn)
             set!(default_other_fn, k, v)
         end
     end
     other_fn = default_other_fn
-    rawdata = filter!(x -> occursin(name, x.datafile), featuretable)
-    mrm = MRM!(Table(rawdata; match_id = zeros(Int, length(rawdata))); combine = false, rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
-    rawdata = transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
+    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
+    transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
     config = dictionary(pairs((; concentration, rt_correction, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn)))
-    at = analysistable(rawdata, project)
+    at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
     signaltable = getproperty(at, signal)
     pointlevel = isnothing(pointlevel) ? map(x -> parse(Int, first(match(name, string(x)))), signaltable.sample) : pointlevel
     if signaltable isa ColumnDataTable
@@ -290,7 +287,6 @@ quantdata_mrm(featuretable::Table, project = nothing; kwargs...) = quantdata_mrm
 quantdata_mrm!(project::Project, featuretable::Table; kwargs...) = quantdata_mrm!(featuretable, project; kwargs...)
 function quantdata_mrm!(featuretable::Table, project = nothing;
                 rt_correction = nothing,  
-                name = r"S\d*.*",
                 rt_tol = isnothing(project) ? 0.1 : last(project.data).config[:rt_tol], 
                 mz_tol = isnothing(project) ? 0.35 : last(project.data).config[:mz_tol], 
                 signal = isnothing(project) ? :area : project.appendix[:signal],
@@ -298,18 +294,17 @@ function quantdata_mrm!(featuretable::Table, project = nothing;
                 err_fn = rsd, 
                 err_tol = 0.5,
                 other_fn = Dictionary{Symbol, Any}())
-    default_other_fn = Dictionary{Symbol, Any}([:datafile, :match_id], [only ∘ unique, only ∘ unique])
+    default_other_fn = Dictionary{Symbol, Any}([:datafile, :injection_order, :match_id], [only ∘ unique, only ∘ unique, only ∘ unique])
     if !isempty(other_fn)
         for (k, v) in pairs(other_fn)
             set!(default_other_fn, k, v)
         end
     end
     other_fn = default_other_fn
-    rawdata = filter!(x -> occursin(name, x.datafile), featuretable)
-    n = length(unique(rawdata.datafile))
-    mrm = MRM!(Table(rawdata; match_id = zeros(Int, length(rawdata))); combine = false, rt_tol, mz_tol, n = 1, signal = false, est_fn, err_fn, err_tol, other_fn)
-    rawdata = transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
-    at = analysistable(mrm.table, project)
+    n = length(unique(featuretable.datafile))
+    mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol, mz_tol, n = 1, signal = false, est_fn, err_fn, err_tol, other_fn)
+    transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
+    at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
     if !isnothing(project)
         signal = :estimated_concentration
         update_quantification!(project.quantification.batch, at; estimated_concentration = signal)

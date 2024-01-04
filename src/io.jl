@@ -55,6 +55,7 @@ function read_featuretable_mzmine3(path;
     sym = CSV.read(path, Table; select = idsym, silencewarnings, maxwarnings, debug)
     datafile = Dict(propertynames(fwhm) .=> map(col -> match(r".*:(.*):.*", string(col))[1], propertynames(fwhm)))
     id = findfirst.(!ismissing, fwhm)
+    uid = unique(id)
     tbl = Table(
         id = collect(1:n),
         mz1 = tbl.mz,
@@ -67,7 +68,8 @@ function read_featuretable_mzmine3(path;
         FWHM = getindex.(fwhm, id),
         symmetry = get.(sym, replace!(findfirst.(!ismissing, sym), nothing => :_symmetry), 1.0),
         polarity = trues(n),
-        datafile = getindex.(Ref(datafile), id)
+        datafile = getindex.(Ref(datafile), id),
+        injection_order = map(x -> findfirst(==(x), uid), id)
     )
     tbl
 end
@@ -145,7 +147,8 @@ function read_featuretable_masshunter_mrm(path;
         datafile = (@p zip(data.datafile, rep) |> mapmany(repeat([_[1]], _[2])))
     )
     tbl = tbl[tbl.symmetry .!= "MM"]
-    Table(tbl, symmetry = parse.(Float64, string.(tbl.symmetry)))
+    udf = unique(tbl.datafile)
+    Table(tbl; symmetry = parse.(Float64, string.(tbl.symmetry)), injection_order = map(x -> findfirst(==(x), udf), tbl.datafile))
 end
 
 """
@@ -331,7 +334,7 @@ end
 Base.show(io::IO, analyte::AnalyteID) = print(io, isempty(analyte.compound) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4))
 Base.show(io::IO, transition::TransitionID) = print(io, transition.compound, transition.quantifier ? "" : " (qualifier)")
 
-Base.show(io::IO, data::PreIS) = print(io, "PreIS in ", data.polarity ? "positive" : "negative", " ion mode with $(length(data.mz2)) products")
+Base.show(io::IO, data::PreIS) = print(io, "PreIS in ", data.polarity ? "positive" : "negative", " ion mode with ", length(data.table), " features")
 function Base.show(io::IO, ::MIME"text/plain", data::PreIS)
     print(io, data, ":\n")
     for dt in zip(data.range, data.mz2)
@@ -339,40 +342,40 @@ function Base.show(io::IO, ::MIME"text/plain", data::PreIS)
     end
 end
 
-Base.show(io::IO, data::MRM) = print(io, "MRM in ", data.polarity ? "positive" : "negative", " ion mode with $(length(data.mz2)) products")
+Base.show(io::IO, data::MRM) = print(io, "MRM in ", data.polarity ? "positive" : "negative", " ion mode with ", length(data.table), " features")
 function Base.show(io::IO, ::MIME"text/plain", data::MRM)
     print(io, data, ":\n")
     for (i, m) in enumerate(data.mz2)
-        v = @view data.table.mz1[data.table.mz2_id == i]
+        v = @view data.table.mz1[data.table.mz2_id .== i]
         v = length(v) > 10 ? string(join(round.(v[1:5]; digits = 4), ", "), ", ..., ", join(round.(v[end - 4:end]; digits = 4))) : join(round.(v; digits = 4), ", ")
         println(io, " ", v, " -> ", round(m; digits = 4))
     end
 end
 
-Base.show(io::IO, data::QuantData{T}) where T = print(io, "QuantData{$T} ", data.raw)
+Base.show(io::IO, data::QuantData{T}) where T = print(io, "QuantData{$T} in ", data.raw.polarity ? "positive" : "negative", " ion mode with ", length(data.analyte), " analytes")
 function Base.show(io::IO, ::MIME"text/plain", data::QuantData{T}) where T 
     print(io, data, ":\n")
     show(io, MIME"text/plain"(), data.table)
 end
-Base.show(io::IO, data::QCData{T}) where T = print(io, "QCData{$T} ", data.raw)
+Base.show(io::IO, data::QCData{T}) where T = print(io, "QCData{$T} in ", data.raw.polarity ? "positive" : "negative", " ion mode with ", length(data.analyte), " analytes")
 function Base.show(io::IO, ::MIME"text/plain", data::QCData{T}) where T 
     print(io, data, ":\n")
     show(io, MIME"text/plain"(), qualitytable(data))
 end
-Base.show(io::IO, data::SerialDilution{T}) where T = print(io, "SerialDilution{$T} ", data.raw)
+Base.show(io::IO, data::SerialDilution{T}) where T = print(io, "SerialDilution{$T} in ", data.raw.polarity ? "positive" : "negative", " ion mode with ", length(data.analyte), " analytes")
 function Base.show(io::IO, ::MIME"text/plain", data::SerialDilution{T}) where T 
     print(io, data, ":\n")
     show(io, MIME"text/plain"(), qualitytable(data))
 end
-Base.show(io::IO, qt::Quantification) = print(io, "Quantification")
+Base.show(io::IO, qt::Quantification) = print(io, "Quantification with ", length(qt.analyte), " analytes")
 function Base.show(io::IO, ::MIME"text/plain", qt::Quantification)
     print(io, qt, ":\n")
     show(io, MIME"text/plain"(), qt.batch)
 end
-Base.show(io::IO, rtcor::RTCorrection) = print(io, "RTCorrection")
+Base.show(io::IO, rtcor::RTCorrection) = print(io, "RTCorrection with ", length(rtcor.model), " correction functions")
 function Base.show(io::IO, ::MIME"text/plain", rtcor::RTCorrection)
     print(io, rtcor, ":\n")
-    show(io, MIME"text/plain"(), rtcor.fn)
+    show(io, MIME"text/plain"(), rtcor.model)
 end
 
 Base.show(io::IO, pj::Project) = print(io, "Project with ", length(pj), " analytes")

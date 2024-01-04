@@ -66,7 +66,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         initialize_cluster!, analyte2cluster!, select_cluster!,
         model_cluster!, compare_models, @model, predfn_cluster!,
         expand_cluster!, update_cluster!, replace_cluster!,
-        show_cluster, model_rt!, apply_rt!, predict_rt, err_rt, abs_err_rt, rt_correction,
+        show_cluster, model_rt!, apply_rt!, predict_rt, err_rt, abs_err_rt, rt_correction, update_rt_correction!, 
         # Plots
         plot_rt_mw, plotlyjs, gr, histogram_transition
 
@@ -414,8 +414,9 @@ propertynames(quant::Quantification) = (:batch, :config, propertynames(getfield(
 
 Type holding rt data and regression line for correcting rt from old batch (data for identification) to new batch (data for quantification).
 
+* `formula`: formula of regression line.
 * `data`: raw data from new batch.
-* `table`: old transition table generated from `project.analye` and function `analytetable_mrm`.
+* `table`: old transition table generated from `project.analyte` and function `analytetable_mrm`.
 * `fn`: `Dictionary` containg regression coefficents for each class.
 
 This is a callable object taking a class and rt or vector of class and a vector of rt as input, and returning new rt or a vector of new rt. If the class is not in `fn`, it will return the original rt. 
@@ -423,10 +424,12 @@ This is a callable object taking a class and rt or vector of class and a vector 
 struct RTCorrection
     data::AbstractRawData
     table::Table
-    fn::Dictionary
+    model::Dictionary
 end
-(fn::RTCorrection)(cls::ClassSP, rt) = [1, rt]'get(fn.fn, cls, [0, 1])
-(fn::RTCorrection)(cls::Vector{<: ClassSP}, rt::Vector) = [repeat([1], length(rt)) rt]'get.(Ref(fn.fn), cls, Ref([0, 1]))
+(fn::RTCorrection)(cls::ClassSP, dt) = model_predict(get(fn.model, cls, nothing), dt)
+(fn::RTCorrection)(cls::Vector{<: ClassSP}, dt) = mapreduce(vcat, cls, dt) do c, d
+    model_predict(get(fn.model, c, nothing), Table([d]))
+end
 function getproperty(rtcor::RTCorrection, p::Symbol)
     if !in(p, fieldnames(RTCorrection)) && in(p, propertynames(getfield(rtcor, :table))) 
         getproperty(getfield(rtcor, :table), p)
@@ -434,7 +437,7 @@ function getproperty(rtcor::RTCorrection, p::Symbol)
         getfield(rtcor, p)
     end
 end
-propertynames(rtcor::RTCorrection) = Tuple(unique((:data, :table, :fn, propertynames(getfield(rtcor, :table))...)))
+propertynames(rtcor::RTCorrection) = Tuple(unique((:data, :table, :model, propertynames(getfield(rtcor, :table))...)))
 
 """
     Project <: AbstractProject
