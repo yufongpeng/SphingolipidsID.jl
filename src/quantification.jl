@@ -288,7 +288,6 @@ end
 
 function set_quantdata_mrm!(project::Project, featuretable::Table; 
                     rt_correction = nothing,
-                    name = r"S\d*.*",
                     rt_tol = last(project.data).config[:rt_tol], 
                     raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
                     mz_tol = last(project.data).config[:mz_tol], 
@@ -297,7 +296,7 @@ function set_quantdata_mrm!(project::Project, featuretable::Table;
                     err_fn = rsd, 
                     err_tol = 0.5,
                     other_fn = Dictionary{Symbol, Any}())
-    push!(project.data, quantdata_mrm!(featuretable, project; rt_correction, name, rt_tol, raw_rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
+    push!(project.data, quantdata_mrm!(featuretable, project; rt_correction, rt_tol, raw_rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn))
     set!(project.quantification.config, :quantdata, last(project.data))
     last(project.data)
 end
