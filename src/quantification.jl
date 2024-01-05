@@ -38,9 +38,9 @@ end
 
 function transition_matching!(data::MRM, project = nothing; rt_tol = 0.1, mz_tol = 0.35, rt_correction = nothing)
     featuretable = data.table
-    sort!(featuretable, [:id, :datafile])
+    sort!(featuretable, [:id, :injection_order])
     set!(data.config, :method, nothing)
-    isnothing(project) && (featuretable.match_id .= featuretable.id; return sort!(featuretable, [:match_id, :match_score]))
+    isnothing(project) && (featuretable.match_id .= featuretable.id; return sort!(featuretable, [:match_id, :id, :injection_order, :match_score]))
     method = project.quantification.batch.method
     data.config[:method] = method
     i = 0
@@ -59,7 +59,7 @@ function transition_matching!(data::MRM, project = nothing; rt_tol = 0.1, mz_tol
         i += length(ft)
     end
     filter!(x -> x.match_id > 0, featuretable)
-    sort!(featuretable, [:match_id, :match_score])
+    sort!(featuretable, [:match_id, :id, :injection_order, :match_score])
 end
 
 function analysistable(featuretable::Table; data = :area, method = nothing, default = 0.0, maxncol = 300)
@@ -73,10 +73,10 @@ function analysistable(featuretable::Table; data = :area, method = nothing, defa
     if isnothing(method)
         analyte = Vector{Symbol}(undef, length(gft))
         for (i, (match_id, ft)) in zip(eachindex(nt), pairs(gft))
-            dt = getproperty(ft, data)
+            gdf = groupview(getproperty(:datafile), ft)
             nt[i] = Symbol(match_id) => map(datafile) do file
-                id = findfirst(==(file), ft.datafile)
-                isnothing(id) ? default : dt[id]
+                num = get(gdf, file, nothing)
+                isnothing(num) ? default : first(getproperty(num, data))
             end
             analyte[i] = Symbol(match_id)
         end 
