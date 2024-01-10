@@ -207,7 +207,7 @@ Write MRM transition table into csv file.
 * `tbl`: transition table.
 * `vendor`: desired vendor for transition table. `:agilent` for Agilent. 
 """
-function write_transition(file, tbl::Table, vendor = :agilent)
+function write_transition(file, tbl::Table, vendor = :agilent; delim = ',', kwargs...)
     if vendor ≡ :agilent
         CSV.write(file, tbl;
             header = ["Compound Name", "Precursor Ion", "Product Ion", "Ret Time (min)", "Delta Ret Time", "Collision Energy", "Polarity"], delim, kwargs...)
