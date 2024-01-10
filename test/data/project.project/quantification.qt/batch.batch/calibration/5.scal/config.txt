@@ -1,5 +1,0 @@
-[analyte]
-Hex2Cer 18:1;O2(D7)/15:0
-
-[conc]
-1.0

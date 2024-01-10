@@ -216,8 +216,8 @@ end
 
 function write(file::String, qt::Quantification{A}; delim = '\t') where A
     mkpath(file)
-    ChemistryQuantitativeAnalysis.write(joinpath(file, "batch.batch"), qt.batch; delim)
-    JLD2.save_object(joinpath(file, "config.jld2"), set!(copy(qt.config), :analytetype, A))
+    isdefined(qt, :batch) && ChemistryQuantitativeAnalysis.write(joinpath(file, "batch.batch"), qt.batch; delim)
+    isdefined(qt, :config) && JLD2.save_object(joinpath(file, "config.jld2"), set!(copy(qt.config), :analytetype, A))
 end
 
 data_extension(::PreIS, files::Vararg{String}) = string(joinpath(files...), ".preis")
@@ -334,7 +334,7 @@ end
 
 function read_quantification(file::String)
     endswith(file, ".qt") || throw(ArgumentError("The file is not a valid Quantification directory"))
-    config = JLD2.load_object(joinpath(file, "config.jld2"))
+    config = in("config.jld2", readdir(file)) ? JLD2.load_object(joinpath(file, "config.jld2")) : return Quantification()
     batch = ChemistryQuantitativeAnalysis.read(joinpath(file, "batch.batch"), Table; analytetype = config[:analytetype])
     Quantification(batch, delete!(config, :analytetype))
 end
