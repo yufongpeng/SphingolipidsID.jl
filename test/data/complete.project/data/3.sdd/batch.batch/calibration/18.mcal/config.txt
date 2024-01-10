@@ -1,0 +1,17 @@
+[analyte]
+Cer 17:1;O2/18:0
+
+[isd]
+nothing
+
+[type]
+true
+
+[zero]
+false
+
+[weight]
+0.0
+
+[delim]
+\t

@@ -2,7 +2,7 @@ module SphingolipidsID
 
 using CSV, PrettyTables,
         MLStyle, DataPipes, SplitApplyCombine, TypedTables, Dictionaries,
-        Statistics, StatsBase, Clustering, Plots, GLM, ThreadsX, LinearAlgebra, ChemistryQuantitativeAnalysis
+        Statistics, StatsBase, Clustering, Plots, GLM, ThreadsX, LinearAlgebra, ChemistryQuantitativeAnalysis, JLD2
 using AnovaBase: getterms, anova, @formula
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
@@ -386,18 +386,18 @@ propertynames(sd::SerialDilution) = Tuple(unique((:raw, :batch, :config, propert
 #SerialDilution(raw::T, table::Table, level::Vector, config::Dictionary) where {T <: Data} = SerialDilution{T}(raw, table, level, config)
 
 """
-    Quantification
+    Quantification{A}
 
 Type containg information of analyte settings, calibration data, qc data, serial dilution data, and sample data.
 
 * `batch`: `Batch` containg analyte settings, calibration data, and sample data.
 * `config`: `Dictionary` containing config information. `config[:qcdata]` stores a `QCData`, `config[:serialdilution]` stores a `SerialDilution`, and `config[:quantdata]` stores a `QuantData` (sample data).
 """
-struct Quantification
-    batch::Batch
+struct Quantification{A}
+    batch::Batch{A}
     config::Dictionary
-    Quantification() = new()
-    Quantification(batch::Batch, config::Dictionary) = new(batch, config)
+    Quantification() = new{Any}()
+    Quantification(batch::Batch{A}, config::Dictionary) where A = new{A}(batch, config)
 end # Wrap MethodTable
 
 function getproperty(quant::Quantification, p::Symbol)

@@ -1,0 +1,7 @@
+[signal]
+area
+
+[delim]
+\t
+
+[pointlevel]

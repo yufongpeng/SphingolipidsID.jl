@@ -4,4 +4,5 @@
 /Manifest.toml
 /notebook
 /SPID
-/test/manualtest.jl
+/test/manualtest_id.jl
+/test/manualtest_qt.jl

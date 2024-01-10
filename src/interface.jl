@@ -341,6 +341,8 @@ copy_wo_project(aquery::Query) = Query(aquery.project, copy_wo_project.(aquery.r
 reuse_copy(aquery::Query) = Query(aquery.project, reuse_copy(aquery.result), deepcopy(aquery.query), true)
 reuse_copy(v::Vector) = copy(v)
 reuse_copy(v::T) where {T <: SubArray} = T(parent(v), v.indices, v.offset1, v.stride1)
+copy(analyte::AnalyteSP) = AnalyteSP(analyte.compound, analyte.rt, analyte.state, analyte.cpdsc, analyte.score)
+copy(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, cpd.fragment, cpd.signal, cpd.state, cpd.result, cpd.project)
 
 # equivalent: ion1 and ion2 are the same
 equivalent_in(ion, collection) = any(equivalent(ion, x) for x in collection)

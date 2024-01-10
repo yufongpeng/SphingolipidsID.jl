@@ -73,7 +73,10 @@ false
 ```
 """
 macro ri_str(expr)
-    lc, lv, rv, rc = match(r" *([\(\[]) *([+-]*[\d∞]*\.*\d*) *, *([+-]*[\d∞]*\.*\d*) *([\)\]]) *", expr)
+    return real_interval(expr)
+end
+function real_interval(expr)
+    lc, lv, rv, rc = match(r" *([\(\[]) *([+-]*[\d∞Inf]*\.*\d*) *, *([+-]*[\d∞Inf]*\.*\d*) *([\)\]]) *", expr)
     lop = @match lc begin
         "[" => <=
         "(" => <
@@ -84,19 +87,25 @@ macro ri_str(expr)
     end
     lv = @match lv begin
         "+∞"    => Inf
+        "+Inf"  => Inf
         "∞"     => Inf
+        "Inf"   => Inf
         "-∞"    => -Inf
+        "-Inf"  => -Inf
         if occursin(".", lv) end   => parse(Float64, lv)
         _       => parse(Int, lv)
     end
     rv = @match rv begin
         "+∞"    => Inf
+        "+Inf"  => Inf
         "∞"     => Inf
+        "Inf"   => Inf
         "-∞"    => -Inf
+        "-Inf"  => -Inf
         if occursin(".", rv) end   => parse(Float64, rv)
         _       => parse(Int, rv)
     end
-    return real_interval(lv, rv, lop, rop)
+    real_interval(lv, rv, lop, rop)
 end
 function real_interval(lb, ub, lop, rop)
     lop(lb, ub) || return EmptyInterval()

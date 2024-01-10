@@ -36,13 +36,10 @@ function quantification_mrm(analyte::AbstractVector{<: AbstractAnalyteID}, quant
     Quantification(Batch(MethodTable{Table}(vcat(isdtable, analytetable), signal, Int[], conctable, nothing)), dictionary(pairs((; signal, anion, rt_tol, mz_tol, quantifier, qualifier, default_mz2, isd_fn, coelution_fn))))
 end
 
-function transition_matching!(data::MRM, project = nothing; rt_tol = 0.1, mz_tol = 0.35, rt_correction = nothing)
+function transition_matching!(data::MRM, method = nothing; rt_tol = 0.1, mz_tol = 0.35, rt_correction = nothing)
     featuretable = data.table
     sort!(featuretable, [:id, :injection_order])
-    set!(data.config, :method, nothing)
-    isnothing(project) && (featuretable.match_id .= featuretable.id; return sort!(featuretable, [:match_id, :id, :injection_order, :match_score]))
-    method = project.quantification.batch.method
-    data.config[:method] = method
+    isnothing(method) && (featuretable.match_id .= featuretable.id; return sort!(featuretable, [:match_id, :id, :injection_order, :match_score]))
     i = 0
     for ft in groupview(getproperty(:id), featuretable)
         mz1 = mean(ft.mz1)
@@ -137,6 +134,7 @@ qcdata_mrm(project::Project, featuretable::Table; kwargs...) = qcdata_mrm!(proje
 qcdata_mrm(featuretable::Table, project = nothing; kwargs...) = qcdata_mrm!(deepcopy(featuretable), project; kwargs...)
 qcdata_mrm!(project::Project, featuretable::Table; kwargs...) = qcdata_mrm!(featuretable, project; kwargs...)
 function qcdata_mrm!(featuretable::Table, project = nothing;
+                method = isnothing(project) ? nothing : isdefined(project.quantification, :batch) ? project.quantification.batch.method : nothing,
                 rt_correction = nothing,  
                 rt_tol = isnothing(project) ? 0.1 : last(project.data).config[:rt_tol], 
                 raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
@@ -155,13 +153,13 @@ function qcdata_mrm!(featuretable::Table, project = nothing;
     other_fn = default_other_fn
     n = length(unique(featuretable.datafile))
     mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol = raw_rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
-    transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
-    at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
+    transition_matching!(mrm, method; rt_correction, rt_tol, mz_tol)
+    at = analysistable(mrm.table; method, data = signal)
     if !isnothing(project)
         signal = :estimated_concentration
         set_quantification!(at, project.quantification.batch; estimated_concentration = signal)
     end
-    config = dictionary(pairs((; rt_correction, rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)))
+    config = dictionary(pairs((; method, rt_correction, rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)))
     QCData(mrm, at, config)
 end
 
@@ -192,6 +190,7 @@ serialdilution_mrm(project::Project, featuretable::Table, concentration::Vector;
 serialdilution_mrm(featuretable::Table, concentration::Vector, project = nothing; kwargs...) = serialdilution_mrm!(deepcopy(featuretable), concentration, project; kwargs...)
 serialdilution_mrm!(project::Project, featuretable::Table, concentration::Vector; kwargs...) = serialdilution_mrm!(featuretable, concentration, project; kwargs...)
 function serialdilution_mrm!(featuretable::Table, concentration::Vector, project = nothing; 
+                method = isnothing(project) ? nothing : isdefined(project.quantification, :batch) ? project.quantification.batch.method : nothing,
                 pointlevel = nothing, 
                 name = r"cal.*_(\d*)-r\d*.*",
                 rt_correction = nothing,
@@ -213,9 +212,9 @@ function serialdilution_mrm!(featuretable::Table, concentration::Vector, project
     end
     other_fn = default_other_fn
     mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol = raw_rt_tol, mz_tol, n = 1, signal = nothing, est_fn, err_fn, err_tol, other_fn)
-    transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
-    config = dictionary(pairs((; concentration, rt_correction, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn)))
-    at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
+    transition_matching!(mrm, method; rt_correction, rt_tol, mz_tol)
+    config = dictionary(pairs((; method, concentration, rt_correction, r2_threshold, nlevel, rt_tol, mz_tol, signal, est_fn, err_fn, err_tol, other_fn)))
+    at = analysistable(mrm.table; method, data = signal)
     signaltable = getproperty(at, signal)
     pointlevel = isnothing(pointlevel) ? map(x -> parse(Int, first(match(name, string(x)))), signaltable.sample) : pointlevel
     if signaltable isa ColumnDataTable
@@ -305,6 +304,7 @@ quantdata_mrm(project::Project, featuretable::Table; kwargs...) = quantdata_mrm!
 quantdata_mrm(featuretable::Table, project = nothing; kwargs...) = quantdata_mrm!(deepcopy(featuretable), project; kwargs...)
 quantdata_mrm!(project::Project, featuretable::Table; kwargs...) = quantdata_mrm!(featuretable, project; kwargs...)
 function quantdata_mrm!(featuretable::Table, project = nothing;
+                method = isnothing(project) ? nothing : isdefined(project.quantification, :batch) ? project.quantification.batch.method : nothing,
                 rt_correction = nothing,  
                 rt_tol = isnothing(project) ? 0.1 : last(project.data).config[:rt_tol], 
                 raw_rt_tol = isnothing(rt_correction) ? 0.3 : rt_correction.config[:rt_tol],
@@ -323,12 +323,12 @@ function quantdata_mrm!(featuretable::Table, project = nothing;
     other_fn = default_other_fn
     n = length(unique(featuretable.datafile))
     mrm = MRM!(Table(featuretable; match_id = zeros(Int, length(featuretable)), match_score = -getproperty(featuretable, signal)); combine = false, rt_tol = raw_rt_tol, mz_tol, n = 1, signal = false, est_fn, err_fn, err_tol, other_fn)
-    transition_matching!(mrm, project; rt_correction, rt_tol, mz_tol)
-    at = analysistable(mrm.table; method = mrm.config[:method], data = signal)
+    transition_matching!(mrm, method; rt_correction, rt_tol, mz_tol)
+    at = analysistable(mrm.table; method, data = signal)
     if !isnothing(project)
         signal = :estimated_concentration
         update_quantification!(project.quantification.batch, at; estimated_concentration = signal)
     end
-    config = dictionary(pairs((; rt_correction, rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)))
+    config = dictionary(pairs((; method, rt_correction, rt_tol, mz_tol, n, signal, est_fn, err_fn, err_tol, other_fn)))
     QuantData(mrm, at, config)
 end
