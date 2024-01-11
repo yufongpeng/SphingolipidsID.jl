@@ -35,8 +35,8 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         LossCH2O, AddO, AddC2H2O, LossCH8NO, LossC2H8NO, AddC3H5NO, AddC2H5NO, LossCH3,
 
         # Core Data structures
-        CompoundSP, AnalyteSP,
-        PreIS, MRM, QuantData, QCData, SerialDilution, Quantification, Project, Query,
+        CompoundSP, AnalyteSP, TransitionID,
+        PreIS, MRM, MRM!, qtMRM, qtMRM!, Quantification, Project, Query,
         # Create library/rule
         library, rule,
         # Data inputs
@@ -54,9 +54,8 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         analytetable_mrm, transitiontable, concurrent_transition, write_transition, 
         read_transition, union_transition!, union_transition, diff_transition!, diff_transition,
         # Quantification
-        quantification_mrm, set_quantification_mrm!, set_qcdata_mrm!, qcdata_mrm, qcdata_mrm!, 
-        set_serialdilution_mrm!, serialdilution_mrm, serialdilution_mrm!, qualitytable, 
-        set_quantdata_mrm!, quantdata_mrm, quantdata_mrm!,
+        quantification_mrm, set_quantification_mrm!, match, match!, quantify, quantify!, set_qc_id!, qctable, set_serialdilution!, run_serialdilution, 
+        run_serialdilution!, serialdilutiontable,
         # Utils/Query
         q!, qand, qor, qnot, spid, analyteid, transitionid, lcb, acyl, acylα, acylβ, reuse,
         new_project, allow_unknown, only_known, ncb, ndb, nox, ndbox, compound_formula, 
@@ -71,7 +70,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         plot_rt_mw, plotlyjs, gr, histogram_transition
 
 import Base: getproperty, propertynames, show, print, isless, isequal, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!, in,
-            union, union!, intersect, setdiff, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy, convert
+            union, union!, intersect, setdiff, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy, convert, match
 
 """
     const SPDB
@@ -231,17 +230,13 @@ struct TransitionID
 end
 """
     AbstractData
-    AbstractRawData <: AbstractData
-    AbstractQuantData{T} <: AbstractData
 
 Abstract type for LC-MS data.
 """
 abstract type AbstractData end
-abstract type AbstractRawData <: AbstractData end
-abstract type AbstractQuantData{T} <: AbstractData end
 # precursor/product, ion => name, ms/mz => m/z, mw => molecular weight
 """
-    PreIS <: AbstractRawData
+    PreIS <: AbstractData
 
 Precursor ion scan data.
 
@@ -269,7 +264,7 @@ Precursor ion scan data.
     * `:n`: `Int`. Minimal number of detection.
     * `:other_fn`: `Dictionary`. Stores functions for calculating other signal information.
 """
-struct PreIS <: AbstractRawData
+struct PreIS <: AbstractData
     table::Table # id, mz1, mz2_id, height, area, collision_energy, FWHM, symmetry, error, isf
     range::Vector{RealIntervals}
     mz2::Vector{Float64}
@@ -277,7 +272,7 @@ struct PreIS <: AbstractRawData
     config::Dictionary
 end
 """
-    MRM <: AbstractRawData
+    MRM <: AbstractData
 
 Multiple reaction monitoring data.
 
@@ -305,85 +300,12 @@ Multiple reaction monitoring data.
     * `:n`: `Int`. Minimal number of detection.
     * `:other_fn`: `Dictionary`. Stores functions for calculating other signal information.
 """
-struct MRM <: AbstractRawData
+struct MRM <: AbstractData
     table::Table
     mz2::Vector{Float64}
     polarity::Bool
     config::Dictionary
 end
-
-"""
-    QuantData{T} <: AbstractQuantData{T}
-
-Type containing raw data and tables related to quantification. 
-
-* `raw`: raw data.
-* `table`: `AnalysisTable`, data for quantification (`table.area` or `table.height`), and quantification result (`table.estimated_concentration`).
-* `config`: `Dictionary` containing config information.
-"""
-struct QuantData{T} <: AbstractQuantData{T}
-    raw::T
-    table::AnalysisTable
-    config::Dictionary
-end
-
-function getproperty(dt::QuantData, p::Symbol)
-    if !in(p, fieldnames(QuantData)) && in(p, propertynames(getfield(dt, :table))) 
-        getproperty(getfield(dt, :table), p)
-    else
-        getfield(dt, p)
-    end
-end
-propertynames(dt::QuantData) = Tuple(unique((:raw, :table, :config, propertynames(getfield(dt, :table))...)))
-
-"""
-    QCData{T} <: AbstractQuantData{T}
-
-Type for QC samples containing raw data and tables related to quantification. 
-
-* `raw`: raw data.
-* `table`: `AnalysisTable`, data for quantification (`table.area` or `table.height`), and quantification result (`table.estimated_concentration`).
-* `config`: `Dictionary` containing config information.
-"""
-struct QCData{T} <: AbstractQuantData{T}
-    raw::T
-    table::AnalysisTable # id, analyte, FWHM, symmetry, estimate, error, raw_id
-    config::Dictionary
-end
-
-function getproperty(qc::QCData, p::Symbol)
-    if !in(p, fieldnames(QCData)) && in(p, propertynames(getfield(qc, :table))) 
-        getproperty(getfield(qc, :table), p)
-    else
-        getfield(qc, p)
-    end
-end
-propertynames(qc::QCData) = Tuple(unique((:raw, :table, :config, propertynames(getfield(qc, :table))...)))
-#QCData(raw::T, table::Table, config::Dictionary) where {T <: Data} = QCData{T}(raw, table, config)
-"""
-    SerialDilution{T} <: AbstractQuantData{T}
-
-Type for serial dilution samples containing raw data and calibration data. 
-
-* `raw`: raw data.
-* `batch`: `Batch` containg analyte settings and calibration curves.
-* `config`: `Dictionary` containing config information.
-"""
-struct SerialDilution{T} <: AbstractQuantData{T}
-    raw::T
-    batch::Batch
-    config::Dictionary
-end
-
-function getproperty(sd::SerialDilution, p::Symbol)
-    if p in propertynames(getfield(sd, :batch)) 
-        getproperty(getfield(sd, :batch), p)
-    else
-        getfield(sd, p)
-    end
-end
-propertynames(sd::SerialDilution) = Tuple(unique((:raw, :batch, :config, propertynames(getfield(sd, :batch))...)))
-#SerialDilution(raw::T, table::Table, level::Vector, config::Dictionary) where {T <: Data} = SerialDilution{T}(raw, table, level, config)
 
 """
     Quantification{A}
@@ -422,7 +344,7 @@ Type holding rt data and regression line for correcting rt from new batch (data 
 This is a callable object taking a class and rt or vector of class and a vector of rt as input, and returning new rt or a vector of new rt. If the class is not in `fn`, it will return the original rt. 
 """
 struct RTCorrection
-    data::AbstractRawData
+    data::AbstractData
     table::Table
     model::Dictionary
     config::Dictionary
@@ -456,7 +378,7 @@ This type is considered as `Vector{AnalyteSP}` and it supports iteration and mos
 mutable struct Project <: AbstractProject
     analyte::Vector{AnalyteSP}
     data::Vector{AbstractData}
-    quantification::Quantification
+    quantification::Union{Quantification, Nothing}
     appendix::Dictionary
 end
 """
@@ -468,7 +390,7 @@ function Project(; kwargs...)
     appendix = Dictionary{Symbol, Any}(kwargs)
     get!(appendix, :anion, :acetate)
     get!(appendix, :signal, :area)
-    Project(AnalyteSP[], AbstractData[], Quantification(), appendix)
+    Project(AnalyteSP[], AbstractData[], nothing, appendix)
 end
 """
     Project(qt::Quantification; kwargs...)

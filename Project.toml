@@ -1,7 +1,7 @@
 name = "SphingolipidsID"
 uuid = "c1ebf20f-b457-45e9-b029-ffb3f0746310"
 authors = ["Yu-Fong Peng <sciphypar@gmail.com"]
-version = "0.3.0"
+version = "0.4.0"
 
 [deps]
 AnovaBase = "946dddda-6a23-4b48-8e70-8e60d9b8d680"

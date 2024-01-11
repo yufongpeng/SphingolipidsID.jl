@@ -409,8 +409,8 @@ function abs_err_rt(analyte::AbstractVector{AnalyteSP})
     end
 end
 
-rt_correction(modelcall::RetentionModelCall, data::AbstractRawData, analytetable::Table; mz_tol = 0.35, rt_tol = 0.3) = rt_correction(modelcall, analytetable, data; mz_tol, rt_tol)
-function rt_correction(modelcall::RetentionModelCall, analytetable::Table, data::AbstractRawData; mz_tol = 0.35, rt_tol = 0.3)
+rt_correction(modelcall::RetentionModelCall, data::AbstractData, analytetable::Table; mz_tol = 0.35, rt_tol = 0.3) = rt_correction(modelcall, analytetable, data; mz_tol, rt_tol)
+function rt_correction(modelcall::RetentionModelCall, analytetable::Table, data::AbstractData; mz_tol = 0.35, rt_tol = 0.3)
     RTCorrection(data, analytetable, map(groupview(x -> class(x.analyte), analytetable)) do tbl
         rt_correction_modeling(modelcall, tbl, data; rt_tol, mz_tol)
     end, Dictionary([:rt_tol, :mz_tol], [rt_tol, mz_tol]))

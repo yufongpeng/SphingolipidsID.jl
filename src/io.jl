@@ -136,9 +136,7 @@ function read_featuretable_masshunter_mrm(file::String;
     end, "\n"))
     txt = ["RT", "Height", "Area", "Symmetry", "FWHM"]
     tbl = CSV.read(str, Table; select = (i, name) -> any(==(text, String(name)) for text in txt), silencewarnings, maxwarnings, debug, delim, kwargs...)
-    n = size(tbl, 1)
     tbl = Table(
-        id = collect(1:n),
         mz1 = (@p zip(data.ms1, rep) |> mapmany(repeat([_[1]], _[2]))),
         mz2 = (@p zip(data.ms2, rep) |> mapmany(repeat([_[1]], _[2]))),
         rt = tbl.RT,
@@ -152,7 +150,8 @@ function read_featuretable_masshunter_mrm(file::String;
     )
     tbl = tbl[tbl.symmetry .!= "MM"]
     udf = unique(tbl.datafile)
-    Table(tbl; symmetry = parse.(Float64, string.(tbl.symmetry)), injection_order = map(x -> findfirst(==(x), udf), tbl.datafile))
+    n = size(tbl, 1)
+    Table((; id = collect(1:n), ), tbl; symmetry = parse.(Float64, string.(tbl.symmetry)), injection_order = map(x -> findfirst(==(x), udf), tbl.datafile))
 end
 
 """
@@ -216,17 +215,24 @@ end
 
 function write(file::String, qt::Quantification{A}; delim = '\t') where A
     mkpath(file)
-    isdefined(qt, :batch) && ChemistryQuantitativeAnalysis.write(joinpath(file, "batch.batch"), qt.batch; delim)
-    isdefined(qt, :config) && JLD2.save_object(joinpath(file, "config.jld2"), set!(copy(qt.config), :analytetype, A))
+    set!(qt.config, :analytetype, A)
+    if haskey(qt.config, :serialdilution)
+        serialdilution = qt.config[:serialdilution]
+        set!(qt.config, :serialdilution, nothing)
+        ChemistryQuantitativeAnalysis.write(joinpath(file, "serialdilution.batch"), serialdilution; delim)
+        JLD2.save_object(joinpath(file, "config.jld2"), qt.config)
+        set!(qt.config, :serialdilution, serialdilution)
+    else
+        JLD2.save_object(joinpath(file, "config.jld2"), qt.config)
+    end
+    delete!(qt.config, :analytetype)
+    ChemistryQuantitativeAnalysis.write(joinpath(file, "batch.batch"), qt.batch; delim)
 end
 
 data_extension(::PreIS, files::Vararg{String}) = string(joinpath(files...), ".preis")
 data_extension(::MRM, files::Vararg{String}) = string(joinpath(files...), ".mrm")
 data_extension(::Type{PreIS}, files::Vararg{String}) = string(joinpath(files...), ".preis")
 data_extension(::Type{MRM}, files::Vararg{String}) = string(joinpath(files...), ".mrm")
-data_extension(::QCData, files::Vararg{String}) = string(joinpath(files...), ".qcd")
-data_extension(::SerialDilution, files::Vararg{String}) = string(joinpath(files...), ".sdd")
-data_extension(::QuantData, files::Vararg{String}) = string(joinpath(files...), ".qtd")
 
 function write(file::String, data::PreIS; delim = '\t', kwargs...)
     mkpath(file)
@@ -249,27 +255,6 @@ function write(file::String, data::MRM; delim = '\t', kwargs...)
     CSV.write(joinpath(file, "table.txt"), tbl; delim, kwargs...)
 end
 
-function write(file::String, data::QCData{T}; delim = '\t', kwargs...) where T
-    mkpath(file)
-    JLD2.save_object(joinpath(file, "config.jld2"), data.config)
-    write(data_extension(T, file, "raw"), data.raw; delim, kwargs...)
-    ChemistryQuantitativeAnalysis.write(joinpath(file, "table.at"), data.table; delim)
-end
-
-function write(file::String, data::SerialDilution{T}; delim = '\t', kwargs...) where T
-    mkpath(file)
-    JLD2.save_object(joinpath(file, "config.jld2"), data.config)
-    write(data_extension(T, file, "raw"), data.raw; delim, kwargs...)
-    ChemistryQuantitativeAnalysis.write(joinpath(file, "batch.batch"), data.batch; delim)
-end
-
-function write(file::String, data::QuantData{T}; delim = '\t', kwargs...) where T
-    mkpath(file)
-    JLD2.save_object(joinpath(file, "config.jld2"), data.config)
-    write(data_extension(T, file, "raw"), data.raw; delim, kwargs...)
-    ChemistryQuantitativeAnalysis.write(joinpath(file, "table.at"), data.table; delim)
-end
-
 function write(file::String, project::Project; delim = '\t', kwargs...)
     mkpath(file)
     emptyp = Project()
@@ -282,64 +267,46 @@ function write(file::String, project::Project; delim = '\t', kwargs...)
         ana
     end
     JLD2.save_object(joinpath(file, "analyte.jld2"), analyte)
-    methods = Vector{Union{Nothing, Missing, MethodTable}}(undef, length(project.data))
-    rt_corrections = Vector{Union{Nothing, RTCorrection}}(undef, length(project.data))
-    fill!(methods, nothing)
-    fill!(rt_corrections, nothing)
+    projects = Vector{Union{Missing, Nothing, Project}}(undef, length(project.data))
+    rt_corrections = Vector{Union{Missing, RTCorrection}}(undef, length(project.data))
+    fill!(projects, missing)
+    fill!(rt_corrections, missing)
     for (i, data) in enumerate(project.data)
-        if !haskey(data.config, :method) && !haskey(data.config, :rt_correction)
+        if !haskey(data.config, :project) && !haskey(data.config, :rt_correction)
             write(data_extension(data, file, "data", string(i)), data; delim, kwargs...)
         else
-            if haskey(data.config, :method)
-                methods[i] = data.config[:method]
-                set!(data.config, :method, nothing)
+            if haskey(data.config, :project)
+                projects[i] = data.config[:project]
+                set!(data.config, :project, nothing)
             end
             if haskey(data.config, :rt_correction)
                 rt_corrections[i] = data.config[:rt_correction]
                 set!(data.config, :rt_correction, nothing)
             end
             write(data_extension(data, file, "data", string(i)), data; delim, kwargs...)
-            haskey(data.config, :method) && set!(data.config, :method, methods[i])
+            haskey(data.config, :project) && set!(data.config, :project, projects[i])
             haskey(data.config, :rt_correction) && set!(data.config, :rt_correction, rt_corrections[i])
         end
     end
-    if isdefined(project.quantification, :batch)
-        methods = map(methods) do m
-            m === project.quantification.batch.method ? missing : m
-        end
+    projects = map(projects) do p
+        p === project ? nothing : p
     end
-    JLD2.save_object(joinpath(file, "methods.jld2"), methods)
+    JLD2.save_object(joinpath(file, "projects.jld2"), projects)
     JLD2.save_object(joinpath(file, "rt_corrections.jld2"), rt_corrections)
     qt = project.quantification
-    if !isdefined(qt, :config) || (!haskey(qt.config, :quantdata) && !haskey(qt.config, :qcdata) && !haskey(qt.config, :serialdilution))
-        write(joinpath(file, "quantification.qt"), qt; delim)
-    else
-        qtdata = Dictionary{Symbol, Int}()
-        for type in [:qcdata, :serialdilution, :quantdata]
-            data = get(qt.config, type, nothing)
-            id = isnothing(data) ? 0 : findfirst(x -> x === data, project.data)
-            isnothing(id) && throw(ErrorException("Data $data is not in `project.data`"))
-            set!(qtdata, type, id)
-            set!(qt.config, type, nothing)
-        end
-        JLD2.save_object(joinpath(file, "qtdata.jld2"), qtdata)
-        write(joinpath(file, "quantification.qt"), qt; delim)
-        for type in [:qcdata, :serialdilution, :quantdata]
-            i = get(qtdata, type, nothing)
-            isnothing(i) || (i == 0 ? delete!(qt.config, type) : set!(qt.config, type, project.data[i]))
-        end
-    end
+    isnothing(qt) ? mkpath(joinpath(file, "quantification.qt")) : write(joinpath(file, "quantification.qt"), qt; delim)
     JLD2.save_object(joinpath(file, "appendix.jld2"), project.appendix)
 end
 
 function read_quantification(file::String)
     endswith(file, ".qt") || throw(ArgumentError("The file is not a valid Quantification directory"))
-    config = in("config.jld2", readdir(file)) ? JLD2.load_object(joinpath(file, "config.jld2")) : return Quantification()
+    config = in("config.jld2", readdir(file)) ? JLD2.load_object(joinpath(file, "config.jld2")) : return nothing
     batch = ChemistryQuantitativeAnalysis.read(joinpath(file, "batch.batch"), Table; analytetype = config[:analytetype])
+    in("serialdilution.batch", readdir(file)) && set!(config, :serialdilution, ChemistryQuantitativeAnalysis.read(joinpath(file, "serialdilution.batch"), Table; analytetype = config[:analytetype]))
     Quantification(batch, delete!(config, :analytetype))
 end
 
-function read_mrm(file::String; analytetype = TransitionID)
+function read_mrm(file::String)
     endswith(file, ".mrm") || throw(ArgumentError("The file is not a valid MRM directory"))
     config = JLD2.load_object(joinpath(file, "config.jld2"))
     tbl = CSV.read(joinpath(file, "table.txt"), Table; config[:table]...)
@@ -348,7 +315,7 @@ function read_mrm(file::String; analytetype = TransitionID)
     MRM(Table(tbl; mz2_id = map(x -> findfirst(==(x), mz2), tbl.mz2), mz2 = nothing, polarity = nothing), mz2, polarity, delete!(config, :table))
 end
 
-function read_preis(file::String; analytetype = TransitionID)
+function read_preis(file::String)
     endswith(file, ".preis") || throw(ArgumentError("The file is not a valid PreIS directory"))
     config = JLD2.load_object(joinpath(file, "config.jld2"))
     tbl = CSV.read(joinpath(file, "table.txt"), Table; config[:table]...)
@@ -358,55 +325,21 @@ function read_preis(file::String; analytetype = TransitionID)
     PreIS(Table(tbl; mz2_id = map(x -> findfirst(==(x), mz2), tbl.mz2), mz2 = nothing, range = nothing, polarity = nothing), range, mz2, polarity,  delete!(config, :table))
 end
 
-function read_qcdata(file::String; analytetype = TransitionID)
-    endswith(file, ".qcd") || throw(ArgumentError("The file is not a valid QCData directory"))
-    rawfile = only(filter(startswith("raw"), readdir(file)))
-    raw = read(joinpath(file, rawfile))
-    table = ChemistryQuantitativeAnalysis.read(joinpath(file, "table.at"), Table; analytetype)
-    config = JLD2.load_object(joinpath(file, "config.jld2"))
-    QCData(raw, table, config)
-end
-
-function read_serialdilution(file::String; analytetype = TransitionID)
-    endswith(file, ".sdd") || throw(ArgumentError("The file is not a valid SerialDilution directory"))
-    rawfile = only(filter(startswith("raw"), readdir(file)))
-    raw = read(joinpath(file, rawfile))
-    batch = ChemistryQuantitativeAnalysis.read(joinpath(file, "batch.batch"), Table; analytetype)
-    config = JLD2.load_object(joinpath(file, "config.jld2"))
-    SerialDilution(raw, batch, config)
-end
-
-function read_quantdata(file::String; analytetype = TransitionID)
-    endswith(file, ".qtd") || throw(ArgumentError("The file is not a valid QuantData directory"))
-    rawfile = only(filter(startswith("raw"), readdir(file)))
-    raw = read(joinpath(file, rawfile))
-    table = ChemistryQuantitativeAnalysis.read(joinpath(file, "table.at"), Table; analytetype)
-    config = JLD2.load_object(joinpath(file, "config.jld2"))
-    QuantData(raw, table, config)
-end
-
 function read_project(file::String)
     endswith(file, ".project") || throw(ArgumentError("The file is not a valid Project directory"))
     appendix = JLD2.load_object(joinpath(file, "appendix.jld2"))
     quantification = read_quantification(joinpath(file, "quantification.qt"))
-    analytetype = isdefined(quantification, :batch) ? first(typeof(quantification).parameters) : Symbol
-    methods = map(JLD2.load_object(joinpath(file, "methods.jld2"))) do x
-        ismissing(x) ? quantification.batch.method : x
-    end
-    rt_corrections = JLD2.load_object(joinpath(file, "rt_corrections.jld2"))
-    data = map(x -> read(x; analytetype), readdir(joinpath(file, "data"); join = true))
-    for (dt, m, r) in zip(data, methods, rt_corrections)
-        set!(dt.config, :method, m)
-        set!(dt.config, :rt_correction, r)
-    end
-    if in("qtdata.jld2", readdir(file)) && isdefined(quantification, :config)
-        qcdata = JLD2.load_object(joinpath(file, "qtdata.jld2"))
-        for (k, v) in pairs(qcdata)
-            v > 0 ? set!(quantification.config, k, data[v]) : delete!(quantification.config, k)
-        end
-    end
     analyte = JLD2.load_object(joinpath(file, "analyte.jld2"))
     project = last(first(analyte)).project
+    projects = map(JLD2.load_object(joinpath(file, "projects.jld2"))) do x
+        isnothing(x) ? project : x
+    end
+    rt_corrections = JLD2.load_object(joinpath(file, "rt_corrections.jld2"))
+    data = map(x -> read(x), readdir(joinpath(file, "data"); join = true))
+    for (dt, p, r) in zip(data, projects, rt_corrections)
+        ismissing(p) || set!(dt.config, :project, p)
+        ismissing(p) || set!(dt.config, :rt_correction, r)
+    end
     project.analyte = analyte
     project.data = data
     project.quantification = quantification
@@ -414,15 +347,9 @@ function read_project(file::String)
     project
 end
 
-function read(file::String; analytetype = TransitionID)
+function read(file::String)
     if endswith(file, ".project")
         read_project(file)
-    elseif endswith(file, ".qtd")
-        read_quantdata(file; analytetype)
-    elseif endswith(file, ".sdd")
-        read_serialdilution(file; analytetype)
-    elseif endswith(file, ".qcd")
-        read_qcdata(file; analytetype)
     elseif endswith(file, ".mrm")
         read_mrm(file)
     elseif endswith(file, ".preis")
@@ -616,35 +543,11 @@ function Base.show(io::IO, ::MIME"text/plain", data::MRM)
     print(io, data, ":\n")
     for (i, m) in enumerate(data.mz2)
         v = @view data.table.mz1[data.table.mz2_id .== i]
-        v = length(v) > 10 ? string(join(round.(v[1:5]; digits = 4), ", "), ", ..., ", join(round.(v[end - 4:end]; digits = 4))) : join(round.(v; digits = 4), ", ")
+        v = length(v) == 1 ? string(round(first(v); digits = 4)) : length(v) > 10 ? string(join(round.(v[1:5]; digits = 4), ", "), ", ..., ", join(round.(v[end - 4:end]; digits = 4), ", ")) : join(round.(v; digits = 4), ", ")
         println(io, " ", v, " -> ", round(m; digits = 4))
     end
 end
 
-Base.show(io::IO, data::QuantData{T}) where T = print(io, "QuantData{$T} in ", data.raw.polarity ? "positive" : "negative", " ion mode with ", length(data.analyte), " analytes")
-function Base.show(io::IO, ::MIME"text/plain", data::QuantData{T}) where T 
-    print(io, data, ":\n")
-    show(io, MIME"text/plain"(), data.table)
-    println(io)
-end
-Base.show(io::IO, data::QCData{T}) where T = print(io, "QCData{$T} in ", data.raw.polarity ? "positive" : "negative", " ion mode with ", length(data.analyte), " analytes")
-function Base.show(io::IO, ::MIME"text/plain", data::QCData{T}) where T 
-    print(io, data, ":\n")
-    show(io, MIME"text/plain"(), qualitytable(data))
-    println(io)
-end
-Base.show(io::IO, data::SerialDilution{T}) where T = print(io, "SerialDilution{$T} in ", data.raw.polarity ? "positive" : "negative", " ion mode with ", length(data.analyte), " analytes")
-function Base.show(io::IO, ::MIME"text/plain", data::SerialDilution{T}) where T 
-    print(io, data, ":\n")
-    show(io, MIME"text/plain"(), qualitytable(data))
-    println(io)
-end
-Base.show(io::IO, qt::Quantification) = print(io, "Quantification with ", length(qt.analyte), " analytes")
-function Base.show(io::IO, ::MIME"text/plain", qt::Quantification)
-    print(io, qt, ":\n")
-    show(io, MIME"text/plain"(), qt.batch)
-    println(io)
-end
 Base.show(io::IO, rtcor::RTCorrection) = print(io, "RTCorrection with ", length(rtcor.model), " correction functions")
 function Base.show(io::IO, ::MIME"text/plain", rtcor::RTCorrection)
     print(io, rtcor, ":\n")

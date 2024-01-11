@@ -2,16 +2,16 @@
     MRM(featuretable::Table; 
             raw = false,
             filter = true,
-            combine = true,
+            combine = false,
             use_match_id = false,
             rt_tol = 0.1, 
             mz_tol = 0.35, 
-            n = 3, 
+            n = 1, 
             signal = :area,
             est_fn = mean, 
             err_fn = default_error, 
             err_tol = 0.5,
-            other_fn = Dictionary{Symbol, Any}([:datafile], [nothing]))
+            other_fn = Dictionary{Symbol, Any}())
 
 Create `MRM` from a feature table.
 
@@ -32,21 +32,21 @@ Create `MRM` from a feature table.
 function MRM(featuretable::Table; 
             raw = false,                            
             filter = true,
-            combine = true,
+            combine = false,
             use_match_id = false,
             rt_tol = 0.1, 
             mz_tol = 0.35, 
-            n = 3, 
+            n = 1, 
             signal = :area,
             est_fn = mean, 
             err_fn = default_error, 
             err_tol = 0.5,
-            other_fn = Dictionary{Symbol, Any}([:datafile], [nothing])
+            other_fn = Dictionary{Symbol, Any}()
     )
     polarity = all(featuretable.polarity) ? true : any(featuretable.polarity) ? throw(ArgumentError(
         "featuretable should contain only positive or negative data."
     )) : false
-    MRM!(deepcopy(Table(featuretable; polarity = nothing)), polarity; 
+    MRM!(deepcopy(Table(deepcopy(featuretable); polarity = nothing)), polarity; 
         raw,                            
         filter,
         combine,
@@ -64,16 +64,16 @@ end
 function MRM!(featuretable::Table; 
             raw = false,
             filter = true,
-            combine = true,
+            combine = false,
             use_match_id = false,
             rt_tol = 0.1, 
             mz_tol = 0.35, 
-            n = 3, 
+            n = 1, 
             signal = :area,
             est_fn = mean, 
             err_fn = default_error, 
             err_tol = 0.5,
-            other_fn = Dictionary{Symbol, Any}([:datafile], [nothing])
+            other_fn = Dictionary{Symbol, Any}()
     )
     polarity = all(featuretable.polarity) ? true : any(featuretable.polarity) ? throw(ArgumentError(
         "featuretable should contain only positive or negative data."
@@ -96,23 +96,16 @@ end
 function MRM!(featuretable::Table, polarity::Bool; 
                 raw = false,
                 filter = true,
-                combine = true,
+                combine = false,
                 use_match_id = false,
                 rt_tol = 0.1, 
                 mz_tol = 0.35, 
-                n = 3, 
+                n = 1, 
                 signal = :area,
                 est_fn = mean, 
                 err_fn = default_error, 
                 err_tol = 0.5,
                 other_fn = Dictionary{Symbol, Any}())
-    default_other_fn = Dictionary{Symbol, Any}([:datafile], [nothing])
-    if !isempty(other_fn)
-        for (k, v) in pairs(other_fn)
-            set!(default_other_fn, k, v)
-        end
-    end
-    other_fn = default_other_fn
     featuretable = raw ? featuretable : filter_combine_features!(featuretable; 
         filter,
         combine,
@@ -132,4 +125,26 @@ function MRM!(featuretable::Table, polarity::Bool;
     MRM(Table(copy(featuretable);
                 mz2_id = (@p eachindex(featuretable) |> map(findfirst(x -> in(_, x), mz2_loc))),
                 mz2 = nothing), mz2s, polarity, config)
+end
+
+function qtMRM!(featuretable::Table; rt_tol = 0.1, mz_tol = 0.35, signal = :area)
+    mrm = MRM!(Table(featuretable; 
+            match_id = hasproperty(featuretable, :match_id) ? featuretable.match_id : zeros(Int, length(featuretable)), 
+            match_score = hasproperty(featuretable, :match_score) ? featuretable.match_score : -getproperty(featuretable, signal)
+            ); 
+        rt_tol, mz_tol
+    )
+    mrm.table.match_id .= mrm.table.id
+    mrm
+end
+
+function qtMRM(featuretable::Table; rt_tol = 0.1, mz_tol = 0.35, signal = :area)
+    mrm = MRM(Table(featuretable; 
+            match_id = hasproperty(featuretable, :match_id) ? featuretable.match_id : zeros(Int, length(featuretable)), 
+            match_score = hasproperty(featuretable, :match_score) ? featuretable.match_score : -getproperty(featuretable, signal)
+            ); 
+        rt_tol, mz_tol
+    )
+    mrm.table.match_id .= mrm.table.id
+    mrm
 end
