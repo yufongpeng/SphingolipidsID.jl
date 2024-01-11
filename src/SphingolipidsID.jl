@@ -2,11 +2,12 @@ module SphingolipidsID
 
 using CSV, PrettyTables,
         MLStyle, DataPipes, SplitApplyCombine, TypedTables, Dictionaries,
-        Statistics, Clustering, Plots, GLM, AnovaGLM
+        Statistics, StatsBase, Clustering, Plots, GLM, ThreadsX, LinearAlgebra, ChemistryQuantitativeAnalysis, JLD2
+using AnovaBase: getterms, anova, @formula
 using UnitfulMoles: parse_compound, ustrip, @u_str
 export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # config input
-        read_adduct_code, read_class_db, read_ce, class_db_index, set_db!,
+        read_adduct_code, read_class_db, read_ce, class_db_index, set_db!, push_library!,
         # Type Class
         ClassSP, SPB, Cer, CerP, SM, HexCer, SHexCer, Hex2Cer, SHexHexCer, Hex3Cer,
         HexNAcHex2Cer, HexNAcHex2Cer_, HexNAc_Hex2Cer, HexNAcHex3Cer, HexNAcHex3Cer_, HexNAc_Hex3Cer, Hex_HexNAc_Hex2Cer, ClasswoNANA,
@@ -18,9 +19,11 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         CLS,
         # Type LCB/ACYL
         LCB, LCB2, LCB3, LCB4, SPB2, SPB3, SPB4, NotPhyto, NotPhyto3, NotPhyto4,
+        LCBIS,SPB2IS, SPB3IS, SPB4IS, NotPhyto3IS, NotPhyto4IS, 
         ACYL, Acyl, Acylα, Acylβ,
-        Lcb, Nacyl, Nacylα, Nacylβ, NACYL,
+        ACYLIS, AcylIS, AcylαIS, AcylβIS,
         ChainSP, SumChain, DiChain,
+        ChainSPIS, SumChainIS, DiChainIS,
         # Type Glycan
         Sugar, Glycan, Hex, HexNAc, NeuAc,
         # Type Ion/Adduct
@@ -33,12 +36,13 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
 
         # Core Data structures
         CompoundSP, AnalyteSP,
-        #IonPlus, IonComparison, RuleMode, RuleUnion, AcylIon,
-        Data, PreIS, MRM, Project, Query,
+        PreIS, MRM, QuantData, QCData, SerialDilution, Quantification, Project, Query,
         # Create library/rule
         library, rule,
         # Data inputs
-        featuretable_mzmine, sort_data!, sort_data, file_order, fill_mz2!, fill_ce!, featuretable_masshunter_mrm, filter_duplicate!, rsd, re,
+        read_featuretable, read_featuretable_mzmine3, sort_data!, sort_data, file_order, 
+        fill_polarity!, fill_polarity, fill_mz2!, fill_ce!, fill_range!, fill_mz2, fill_ce, fill_range, 
+        split_datafile, read_featuretable_masshunter_mrm, filter_combine_features!, rsd, rmae, default_error,
         # PreIS
         preis, preis!, finish_profile!,
         # ID
@@ -46,21 +50,28 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         # Score
         nfrags, @cpdsc, @score, calc_score, apply_score!, calc_threshold, apply_threshold!, w_rank, w_nfrags, w_rank_log, w_rank_exp, 
         normalized_sig_diff, abs_sig_diff,
-        # Data output: MRM
-        mrmtable, nMRM, write_mrm, read_mrm, union_mrm!, union_mrm, diff_mrm!, diff_mrm,
+        # Transition
+        analytetable_mrm, transitiontable, concurrent_transition, write_transition, 
+        read_transition, union_transition!, union_transition, diff_transition!, diff_transition,
+        # Quantification
+        quantification_mrm, set_quantification_mrm!, set_qcdata_mrm!, qcdata_mrm, qcdata_mrm!, 
+        set_serialdilution_mrm!, serialdilution_mrm, serialdilution_mrm!, qualitytable, 
+        set_quantdata_mrm!, quantdata_mrm, quantdata_mrm!,
         # Utils/Query
-        q!, qand, qor, qnot, spid, lcb, acyl, acylα, acylβ, reuse,
-        new_project, mw, mz, class, chain, sumcomp, rt,
-        assign_parent!, assign_isf_parent!,
-        initialize_clusters!, analytes2clusters!, select_clusters!,
-        model_clusters!, compare_models, @model, predfn_clusters!,
-        expand_clusters!, update_clusters!, replace_clusters!,
-        show_clusters, apply_clusters!,
+        q!, qand, qor, qnot, spid, analyteid, transitionid, lcb, acyl, acylα, acylβ, reuse,
+        new_project, allow_unknown, only_known, ncb, ndb, nox, ndbox, compound_formula, 
+        mw, mz, class, chain, sumcomp, rt, cluster, incluster, @ri_str,
+        assign_parent!, assign_isf_parent!, mode,
+        # RT prediction
+        initialize_cluster!, analyte2cluster!, select_cluster!,
+        model_cluster!, compare_models, @model, predfn_cluster!,
+        expand_cluster!, update_cluster!, replace_cluster!,
+        show_cluster, model_rt!, apply_rt!, predict_rt, err_rt, abs_err_rt, rt_correction, update_rt_correction!, 
         # Plots
-        plot_rt_mw, plotlyjs, gr
+        plot_rt_mw, plotlyjs, gr, histogram_transition
 
-import Base: show, print, isless, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!,
-            union, union!, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy, convert
+import Base: getproperty, propertynames, show, print, isless, isequal, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!, in,
+            union, union!, intersect, setdiff, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy, convert
 
 """
     const SPDB
@@ -92,43 +103,40 @@ include(joinpath("type", "utils.jl"))
 Abstarct type for projects.
 """
 abstract type AbstractProject end
-
 """
-    AbstractCompoundSP
+    AbstractCompoundID
 
 Abstract type for compound identification.
 """
-abstract type AbstractCompoundSP end
+abstract type AbstractCompoundID end
 """
-    SPID{C <: ClassSP, S <: ChainSP}
+    AbstractCompoundSP <: AbstractCompoundID
 
-A `NamedTuple` contains only the minimal information of a compound.
+Abstract type for compound identification with fragments and other information.
+"""
+abstract type AbstractCompoundSP <: AbstractCompoundID end
+"""
+    SPID{C <: ClassSP, S <: ChainSP} <: AbstractCompoundID
+
+A type contains only the minimal information of a compound.
 
 * `class`: `ClassSP`.
 * `chain`: `ChainSP`.
 """
-const SPID{C <: ClassSP, S <: ChainSP} = @NamedTuple begin
+struct SPID{C <: ClassSP, S <: ChainSP} <: AbstractCompoundID
     class::C
     chain::S
 end
 """
-    SPID(cls::ClassSP, sc::ChainSP)
-    SPID(cpd::AbstractCompoundSP)
-
-Function for creating `SPID`.
-"""
-SPID(cls::ClassSP, sc::ChainSP) = (class = cls, chain = sc)
-SPID(cpd::AbstractCompoundSP) = SPID(class(cpd), chain(cpd))
-"""
     CompoundSPVanilla <: AbstractCompoundSP
 
-A simpler version of `CompoundSP` with only `class`, `chain`, and `fragments`.
+A simpler version of `CompoundSP` with only `class`, `chain`, and `fragment`.
 """
 mutable struct CompoundSPVanilla <: AbstractCompoundSP
     class::ClassSP
     chain::ChainSP
-    fragments::Table
-    CompoundSPVanilla(class::ClassSP, chain::ChainSP, fragments = Table(ion1 = Ion[], ion2 = ion2, source = Int[], id = Int[])) = new(class, chain, fragments)
+    fragment::Table
+    CompoundSPVanilla(class::ClassSP, chain::ChainSP, fragment = Table(ion1 = Ion[], ion2 = ion2, source = Int[], id = Int[])) = new(class, chain, fragment)
 end
 """
     CompoundSP <: AbstractCompoundSP
@@ -137,86 +145,107 @@ A compound which has a specific structure after ionization and in-source fragmen
 
 * `class`: `ClassSP`.
 * `chain`: `ChainSP`.
-* `fragments`: `Table` with 4 columns.
+* `fragment`: `Table` with 4 columns.
     * `ion1`: parent ion.
-    * `ion2`: fragments.
+    * `ion2`: fragment.
     * `source`: the index of the original data in `project.data`.
     * `id`: the index of the original data in the table `project.data[source]`.
-* `area`: `Tuple{Float64, Float64}`. First element is the mean area; second element is the relative error.
-* `states`: `Vector{Int}`. First element represents class; second element represents chain. `1` means this compound was matched; `0` means this compounds was uncertain; `-1` means there was contradiction.
-* `results`: `Vector{RuleSet}`. First element represents class; second element represents chain.
+* `signal`: `Tuple{Float64, Float64}`. First element is the estimate; second element is the error.
+* `state`: `Vector{Int}`. First element represents class; second element represents chain. `1` means this compound was matched; `0` means this compound was uncertain; `-1` means there was contradiction.
+* `result`: `Vector{RuleSet}`. First element represents class; second element represents chain.
 * `project`: `AbstractProject`; project associated with this compound.
 """
 mutable struct CompoundSP <: AbstractCompoundSP
     class::ClassSP
     chain::ChainSP
-    fragments::Table # ion1, ion2, source, id
-    area::Tuple{Float64, Float64}
-    states::Vector{Int}
-    results::Vector{RuleSet}
+    fragment::Table # ion1, ion2, source, id
+    signal::Tuple{Float64, Float64}
+    state::Vector{Int}
+    result::Vector{RuleSet}
     project::AbstractProject
-    CompoundSP(class::ClassSP, chain::ChainSP, fragments, area, states, results, project) = new(class, chain, fragments, area, states, results, project)
-    CompoundSP(class::ClassSP, chain::ChainSP, fragments = Table(ion1 = Ion[], ion2 = ion2, source = Int[], id = Int[])) = new(class, chain, fragments, (0.0, 0.0), [0, 0], RuleSet[RuleSet(:missing, EmptyRule()), RuleSet(:missing, EmptyRule())])
+    CompoundSP(class::ClassSP, chain::ChainSP, fragment, signal, state, result, project) = new(class, chain, fragment, signal, state, result, project)
+    CompoundSP(class::ClassSP, chain::ChainSP, fragment = Table(ion1 = Ion[], ion2 = ion2, source = Int[], id = Int[])) = new(class, chain, fragment, (0.0, 0.0), [0, 0], RuleSet[RuleSet(:missing, EmptyRule()), RuleSet(:missing, EmptyRule())])
 end
+#CompoundSP(cpd::CompoundSP, chain::ChainSP) = CompoundSP(cpd.class, chain, cpd.fragment, cpd.signal, cpd.state, cpd.result, cpd.project)
 """
-    const CompoundID = Union{<: SPID, <: AbstractCompoundSP}
+    AbstractAnalyteID
 
-A Union type for compounds identification.
+Abstract type for analyte identification.
 """
-const CompoundID = Union{<: SPID, <: AbstractCompoundSP}
-#CompoundSP(cpd::CompoundSP, chain::ChainSP) = CompoundSP(cpd.class, chain, cpd.fragments, cpd.area, cpd.states, cpd.results, cpd.project)
-
+abstract type AbstractAnalyteID end
 """
-    AnalyteSP
+    AnalyteSP <: AbstractAnalyteID
 
 An analyte which has specific structure in sample but it may become several compounds in MS due to in-source fragmentation.
 
-* `compounds`: `Vector{CompoundSP}`. The last element is the true identification of this analyte; the preceeding elements represent in-source fragments.
+* `compound`: `Vector{CompoundSP}`. The last element is the true identification of this analyte; the preceeding elements represent in-source fragments.
 * `rt`: retention time in minutes.
-* `states`: `Vector{Int}`
+* `state`: `Vector{Int}`
     1. class
     2. chain
     3. rt
     4. error
     5. isf
     6. total
+    7. manual
     `1` indicates that it is qualified; `0` indicates that it is uncertain or not tested; `1` indicates that it is disqualified.
-* `cpdsc`: `Pair{Int, Float64}`; score from `analyte.compounds` in the form of `index of function in SPDB[:SCORE] => score`
+* `cpdsc`: `Pair{Int, Float64}`; score from `analyte.compound` in the form of `index of function in SPDB[:SCORE] => score`
 * `score`: `Pair{Int, Float64}`; score from analyte itself in the form of `index of function in SPDB[:SCORE] => score`
-* `manual_check`: `1` indicates that it is checked and approved; `0` indicates that it is not checked, `-1` indicates that it is disapproved.
 
 This type is considered as `Vector{CompoundSP}` and it supports iteration and most functions for `Vector`. 
 """
-mutable struct AnalyteSP
-    compounds::Vector{CompoundSP}
+mutable struct AnalyteSP <: AbstractAnalyteID
+    compound::Vector{CompoundSP}
     rt::Float64
-    states::Vector{Int}
+    state::Vector{Int}
     cpdsc::Pair{Int, Float64}
     score::Pair{Int, Float64}
-    manual_check::Int
+    #manual_check::Int
 end
-# ==()
 """
-    AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64) 
+    AnalyteSP(compound::Vector{CompoundSP}, rt::Float64) 
 
 Create a `AnalyteSP` with a vector of `CompoundSP` and their retention time.
 """
-AnalyteSP(compounds::Vector{CompoundSP}, rt::Float64) = AnalyteSP(compounds, rt, repeat([0], 6), 0 => 0.0, 0 => 0.0, 0)
-
-### connect db
+AnalyteSP(compound::Vector{CompoundSP}, rt::Float64) = AnalyteSP(compound, rt, repeat([0], 7), 0 => 0.0, 0 => 0.0)
 """
-    Data
+    AnalyteID <: AbstractAnalyteID
+
+A type contains only compounds (in-source fragments) of an analyte and retention time.
+
+* `compound`: `Vector{SPID}`.
+* `rt`: `Float64`.
+"""
+struct AnalyteID <: AbstractAnalyteID
+    compound::Vector{SPID}
+    rt::Float64
+end
+"""
+    TransitionID
+
+A type represents a transition of an analyte and whether it is a quantifier. 
+"""
+struct TransitionID
+    compound::SPID
+    quantifier::Bool
+end
+"""
+    AbstractData
+    AbstractRawData <: AbstractData
+    AbstractQuantData{T} <: AbstractData
 
 Abstract type for LC-MS data.
 """
-abstract type Data end
+abstract type AbstractData end
+abstract type AbstractRawData <: AbstractData end
+abstract type AbstractQuantData{T} <: AbstractData end
 # precursor/product, ion => name, ms/mz => m/z, mw => molecular weight
 """
-    PreIS <: Data
+    PreIS <: AbstractRawData
 
 Precursor ion scan data.
 
-* `raw`: `Table` from raw data processed by MZMINE.
+* `table`: processed feature table.
     * `id`: a unique `Int`.
     * `mz1`: m/z of parent ion.
     * `mz2_id`: index of fragments in the attribute `mz2`.
@@ -225,80 +254,236 @@ Precursor ion scan data.
     * `collision_energy`: collision energy (eV).
     * `FWHM`: Full width at half maximum.
     * `symmetry`: peak symmetry.
-    * `error`: relative error of `area`.
-    * `alignment`: index of `analyte` for alignment.
+    * `error`: signal error.
     * `isf`: `1` indicates that it is not a isf; `0` indicates that it is uncertain; `-1` indicates that it is a isf.
-* `range`: `Vector{Tuple{Float64, Float64}}`. Each tuple represents the scan range of the corresponding `mz2`.
+* `range`: `Vector{RealIntervals}` representing the scan range of the corresponding `mz2`.
 * `mz2`: `Vector{Float64}`, m/z of fragments.
-* `mz_tol`: `Float64`. Tolerance of m/z deviation when contructing this object.
 * `polarity`: `Bool`; `true` for positive ion mode; `false` for negative ion mode.
-* `additional`: `Dict` containing additional information.
+* `config`: `Dictionary` containing config information.
+    * `signal`: `:area` or `:height` for concentration estimation.
+    * `:mz_tol`: `Float64`. Tolerance of m/z deviation when contructing this object.
+    * `:rt_tol`: `Float64`. Tolerance of rt deviation when contructing this object.
+    * `:err_tol`: `Float64`. Tolerance of signal deviation when contructing this object.
+    * `:est_fn`: `Function`. Function for calculating signal estimate.
+    * `:err_fn`: `Function`. Function for calculating error.
+    * `:n`: `Int`. Minimal number of detection.
+    * `:other_fn`: `Dictionary`. Stores functions for calculating other signal information.
 """
-struct PreIS <: Data
-    raw::Table #id, mz1, mz2_id, area, ev, rt, alignment, isf
-    range::Vector{Tuple{Float64, Float64}}
+struct PreIS <: AbstractRawData
+    table::Table # id, mz1, mz2_id, height, area, collision_energy, FWHM, symmetry, error, isf
+    range::Vector{RealIntervals}
     mz2::Vector{Float64}
-    mz_tol::Float64
     polarity::Bool
-    additional::Dict
+    config::Dictionary
 end
 """
-    MRM <: Data
+    MRM <: AbstractRawData
 
 Multiple reaction monitoring data.
 
-* `raw`: `Table` from raw data processed by MZMINE.
+* `table`: processed feature table.
     * `id`: a unique `Int`.
     * `mz1`: m/z of parent ion.
     * `mz2_id`: index of fragments in the attribute `mz2`.
+    * `collision_energy`: collision energy (eV).    
     * `height`: peak height.
     * `area`: peak area.
-    * `collision_energy`: collision energy (eV).
     * `FWHM`: Full width at half maximum.
     * `symmetry`: peak symmetry.
-    * `error`: relative error of `area`.
-    * `alignment`: index of `analyte` for alignment.
-    * `isf`: `1` indicates that it is not a isf; `0` indicates that it is uncertain; `-1` indicates that it is a isf.
+    * `error`: signal error, optinal.
+    * `raw_id`: `id` of original table, optional.
+    * `match_id`: `id` of matched transition from `project.quantification`.
 * `mz2`: `Vector{Float64}`, m/z of fragments.
-* `mz_tol`: `Float64`. Tolerance of m/z deviation when contructing this object.
 * `polarity`: `Bool`; `true` for positive ion mode; `false` for negative ion mode.
-* `additional`: `Dict` containing additional information.
+* `config`: `Dictionary` containing config information.
+    * `signal`: `:area` or `:height` for signal estimation.
+    * `:mz_tol`: `Float64`. Tolerance of m/z deviation when contructing this object.
+    * `:rt_tol`: `Float64`. Tolerance of rt deviation when contructing this object.
+    * `:err_tol`: `Float64`. Tolerance of signal deviation when contructing this object.
+    * `:est_fn`: `Function`. Function for calculating signal estimate.
+    * `:err_fn`: `Function`. Function for calculating error.
+    * `:n`: `Int`. Minimal number of detection.
+    * `:other_fn`: `Dictionary`. Stores functions for calculating other signal information.
 """
-struct MRM <: Data
-    raw::Table #id, mz1, mz2_id, area, ev, rt, alignment, isf
+struct MRM <: AbstractRawData
+    table::Table
     mz2::Vector{Float64}
-    mz_tol::Float64
     polarity::Bool
-    additional::Dict
+    config::Dictionary
 end
+
+"""
+    QuantData{T} <: AbstractQuantData{T}
+
+Type containing raw data and tables related to quantification. 
+
+* `raw`: raw data.
+* `table`: `AnalysisTable`, data for quantification (`table.area` or `table.height`), and quantification result (`table.estimated_concentration`).
+* `config`: `Dictionary` containing config information.
+"""
+struct QuantData{T} <: AbstractQuantData{T}
+    raw::T
+    table::AnalysisTable
+    config::Dictionary
+end
+
+function getproperty(dt::QuantData, p::Symbol)
+    if !in(p, fieldnames(QuantData)) && in(p, propertynames(getfield(dt, :table))) 
+        getproperty(getfield(dt, :table), p)
+    else
+        getfield(dt, p)
+    end
+end
+propertynames(dt::QuantData) = Tuple(unique((:raw, :table, :config, propertynames(getfield(dt, :table))...)))
+
+"""
+    QCData{T} <: AbstractQuantData{T}
+
+Type for QC samples containing raw data and tables related to quantification. 
+
+* `raw`: raw data.
+* `table`: `AnalysisTable`, data for quantification (`table.area` or `table.height`), and quantification result (`table.estimated_concentration`).
+* `config`: `Dictionary` containing config information.
+"""
+struct QCData{T} <: AbstractQuantData{T}
+    raw::T
+    table::AnalysisTable # id, analyte, FWHM, symmetry, estimate, error, raw_id
+    config::Dictionary
+end
+
+function getproperty(qc::QCData, p::Symbol)
+    if !in(p, fieldnames(QCData)) && in(p, propertynames(getfield(qc, :table))) 
+        getproperty(getfield(qc, :table), p)
+    else
+        getfield(qc, p)
+    end
+end
+propertynames(qc::QCData) = Tuple(unique((:raw, :table, :config, propertynames(getfield(qc, :table))...)))
+#QCData(raw::T, table::Table, config::Dictionary) where {T <: Data} = QCData{T}(raw, table, config)
+"""
+    SerialDilution{T} <: AbstractQuantData{T}
+
+Type for serial dilution samples containing raw data and calibration data. 
+
+* `raw`: raw data.
+* `batch`: `Batch` containg analyte settings and calibration curves.
+* `config`: `Dictionary` containing config information.
+"""
+struct SerialDilution{T} <: AbstractQuantData{T}
+    raw::T
+    batch::Batch
+    config::Dictionary
+end
+
+function getproperty(sd::SerialDilution, p::Symbol)
+    if p in propertynames(getfield(sd, :batch)) 
+        getproperty(getfield(sd, :batch), p)
+    else
+        getfield(sd, p)
+    end
+end
+propertynames(sd::SerialDilution) = Tuple(unique((:raw, :batch, :config, propertynames(getfield(sd, :batch))...)))
+#SerialDilution(raw::T, table::Table, level::Vector, config::Dictionary) where {T <: Data} = SerialDilution{T}(raw, table, level, config)
+
+"""
+    Quantification{A}
+
+Type containg information of analyte settings, calibration data, qc data, serial dilution data, and sample data.
+
+* `batch`: `Batch` containg analyte settings, calibration data, and sample data.
+* `config`: `Dictionary` containing config information. `config[:qcdata]` stores a `QCData`, `config[:serialdilution]` stores a `SerialDilution`, and `config[:quantdata]` stores a `QuantData` (sample data).
+"""
+struct Quantification{A}
+    batch::Batch{A}
+    config::Dictionary
+    Quantification() = new{Any}()
+    Quantification(batch::Batch{A}, config::Dictionary) where A = new{A}(batch, config)
+end # Wrap MethodTable
+
+function getproperty(quant::Quantification, p::Symbol)
+    if p in propertynames(getfield(quant, :batch)) 
+        getproperty(getfield(quant, :batch), p)
+    else
+        getfield(quant, p)
+    end
+end
+propertynames(quant::Quantification) = (:batch, :config, propertynames(getfield(quant, :batch))...)
+
+"""
+    RTCorrection
+
+Type holding rt data and regression line for correcting rt from new batch (data for quantification) to old batch (data for identification).
+
+* `data`: raw data from new batch.
+* `table`: old transition table generated from `project.analyte` and function `analytetable_mrm`.
+* `model`: `Dictionary` containg regression coefficents for each class.
+* `config`: `Dictionary` containgin configuration.
+
+This is a callable object taking a class and rt or vector of class and a vector of rt as input, and returning new rt or a vector of new rt. If the class is not in `fn`, it will return the original rt. 
+"""
+struct RTCorrection
+    data::AbstractRawData
+    table::Table
+    model::Dictionary
+    config::Dictionary
+end
+(fn::RTCorrection)(cls::ClassSP, dt) = model_predict(get(fn.model, cls, nothing), dt)
+(fn::RTCorrection)(cls::Vector{<: ClassSP}, dt) = mapreduce(vcat, cls, dt) do c, d
+    model_predict(get(fn.model, c, nothing), Table([d]))
+end
+function getproperty(rtcor::RTCorrection, p::Symbol)
+    if !in(p, fieldnames(RTCorrection)) && in(p, propertynames(getfield(rtcor, :table))) 
+        getproperty(getfield(rtcor, :table), p)
+    else
+        getfield(rtcor, p)
+    end
+end
+propertynames(rtcor::RTCorrection) = Tuple(unique((:data, :table, :model, propertynames(getfield(rtcor, :table))...)))
 
 """
     Project <: AbstractProject
 
 An LC-MS analysis project.
 
-* `analytes`: `Vector{AnalyteSP}`.
-* `data`: `Vector{Data}`. Each data is considered as different experiments, and they will not be compared during identification.
-* `anion`: the anion used in mobile phase (`:acetate`, `:formate`).
-* `clusters`: `Dictionary` containg clusters of analytes.
+* `analyte`: `Vector{AnalyteSP}`.
+* `data`: `Vector{<: AbstractData}`. Each data is considered as different experiments, and they will not be compared during identification.
 * `appendix`: `Dictionary` containg additional information.
+    * `:anion`: the anion used in mobile phase (`:acetate`, `:formate`).
+    * `:signal`: `:area` or `:height` for concentration estimation.
 
 This type is considered as `Vector{AnalyteSP}` and it supports iteration and most functions for `Vector`.
 """
-struct Project <: AbstractProject
-    analytes::Vector{AnalyteSP}
-    data::Vector{Data}
-    anion::Symbol
-    clusters::Dictionary
-    #alignment::Int
+mutable struct Project <: AbstractProject
+    analyte::Vector{AnalyteSP}
+    data::Vector{AbstractData}
+    quantification::Quantification
     appendix::Dictionary
 end
 """
-    Project(; anion = :acetate)
+    Project(; kwargs...)
 
-Create an empty `Project`.
+Create an empty `Project`. All keyword arguments will be put into `project.appendix`. By default, `project.appendix[:anion]` will be `:acetate`; `project.appendix[:signal]` will be `:area`.
 """
-Project(; anion = :acetate) = Project(AnalyteSP[], Data[], anion, Dictionary{ClassSP, Vector{Int}}(), Dictionary{Symbol, Any}())
+function Project(; kwargs...)
+    appendix = Dictionary{Symbol, Any}(kwargs)
+    get!(appendix, :anion, :acetate)
+    get!(appendix, :signal, :area)
+    Project(AnalyteSP[], AbstractData[], Quantification(), appendix)
+end
+"""
+    Project(qt::Quantification; kwargs...)
+
+Create a `Project` from `Quantification`. All keyword arguments will be put into `project.appendix`. By default, `project.appendix[:anion]` will be `:acetate`; `project.appendix[:signal]` will be `:area`.
+"""
+function Project(qt::Quantification; kwargs...)
+    appendix = Dictionary{Symbol, Any}(kwargs)
+    get!(appendix, :anion, get(qt.appendix, :anion, :acetate))
+    get!(appendix, :signal, get(qt.appendix, :signal, :area))
+    analyte = isa(qt.analyte, Vector{AnalyteSP}) ? qt.analyte : map(qt.analyte, qt.batch.analytetable.rt) do ana, rt
+        isa(ana, AnalyteSP) ? ana : AnalyteSP([CompoundSP(class(ana), chain(ana))], rt)
+    end
+    Project(analyte, AbstractData[], qt, appendix)
+end
 """
     AbstractQuery
 
@@ -308,7 +493,7 @@ abstract type AbstractQuery end
 """
     Query <: AbstractQuery
 
-Query object.
+Query of a project.
 
 * `project`: queried `Project`.
 * `result`: the result of query.
@@ -322,11 +507,11 @@ mutable struct Query <: AbstractQuery
     view::Bool
 end
 """
-    ReUseable <: AbstractQuery
+    ReusableQuery <: AbstractQuery
 
 Reusable query object.
 """
-struct ReUseable <: AbstractQuery
+struct ReusableQuery <: AbstractQuery
     query::Query
 end
 
@@ -344,7 +529,8 @@ include("plots.jl")
 include("ruleID.jl")
 include("score.jl")
 include("query.jl")
-include("mrmtable.jl")
+include("transition.jl")
+include("quantification.jl")
 
 # S: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-237.2224
 # DHS: Acyl + C2H3N-392.3898, SPB;2O - C2H7NO-239.2224

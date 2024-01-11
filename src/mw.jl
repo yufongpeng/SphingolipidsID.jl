@@ -11,7 +11,9 @@ const MW = Dict(
     "Na" => 22.989770u"g",
     "K"  => 38.963708u"g",
     "Cl" => 34.968853u"g",
-    "Ag" => 106.905095u"g"
+    "Ag" => 106.905095u"g",
+    "Cxiii" => 13.003355u"g",
+    "D" => 2.014102u"g"
 )
 
 """
@@ -19,7 +21,7 @@ const MW = Dict(
 
 Molecular weight of a formula.
 """
-mw(formula::AbstractString) = mw(parse_compound(string(formula)))
+mw(formula::AbstractString) = mw(parse_compound(replace(string(formula), "[2H]" => "D", "[13C]" => "Cxiii")))
 
 function mw(elements::Vector)
     # Vector of el => #el
@@ -48,33 +50,34 @@ function nmw(formula::AbstractString)
 end
 
 """
-    mz(cpd::CompoundID, ion::ISF)
-    mz(cpd::CompoundID, ion::Ion)
-    mz(cpd::CompoundID, add::Adduct)
+    mz(cpd::AbstractCompoundID, ion::ISF)
+    mz(cpd::AbstractCompoundID, ion::Ion)
+    mz(cpd::AbstractCompoundID, add::Adduct)
     mz(ion::Union{Ion, ISF})
 
 Calculate m/z of `cpd`.
 
 If `ion` contains class information, it will substitute the class of `cpd`; otherwise, the m/z is calculated with only `ion`.
 """
-mz(cpd::CompoundID, ion::ISF) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.chain)))
-#mz(cpd::CompoundID, ions::AcylIon{T}) where T = mz.(ions.ions, (cpd.sum .- sumcomp(T()))...)
-mz(cpd::CompoundID, ion::Ion) = mz(ion)
-mz(cpd::CompoundID, add::Adduct) = parse_adduct(add)(mw(cpd))
-mz(cpd::CompoundID, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.chain)))
+mz(cpd::AbstractCompoundID, ion::ISF) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.chain)))
+#mz(cpd::AbstractCompoundID, ions::AcylIon{T}) where T = mz.(ions.ions, (cpd.sum .- sumcomp(T()))...)
+mz(cpd::AbstractCompoundID, ion::Ion) = mz(ion)
+mz(cpd::AbstractCompoundID, add::Adduct) = parse_adduct(add)(mw(cpd))
+mz(cpd::AbstractCompoundID, add::AbstractString) = parse_adduct(add)(mw(cpd))
+mz(cpd::AbstractCompoundID, ion::Ion{<: Adduct, <: ClassSP}) = parse_adduct(ion.adduct)(mw(SPID(ion.molecule, cpd.chain)))
 mz(ion::Union{Ion, ISF}) = parse_adduct(ion.adduct)(mw(ion.molecule))
 #mz(ion::Ion, cb, db, o) = parse_adduct(ion.adduct)(mw(ion.molecule, cb, db, o))
 
 """
-    mw(analyte::AnalyteSP)
-    mw(cpd::CompoundID)
+    mw(analyte::AbstractAnalyteID)
+    mw(cpd::AbstractCompoundID)
     mw(hg::HeadGroup)
     mw(lcb::LCB)
     mw(acyl::ACYL)
 
 Molecular weight of analyte, compound, or certain structures.
 """
-mw(analyte::AnalyteSP) = mw(last(analyte))
+mw(analyte::AbstractAnalyteID) = mw(last(analyte))
 #mw(molecule, cb, db, o) = mw(molecule)
 #hydrosyn(a, b) = a + b - nmw("H2O")
 mw(::PhosphoCholine) = mw("C5H13NO4P")
@@ -82,16 +85,23 @@ mw(::Hex) = mw("C6H12O6")
 mw(::HexNAc) = mw("C8H15NO6")
 mw(::NeuAc) = mw("C11H19NO9")
 mw(glycan::Glycan) = mapreduce(mw, +, glycan.chain) - (length(glycan.chain) - 1) * mw("H2O")
-mw(lcb::LCB) = ncb(lcb) * mw("C") + nox(lcb) * mw("O") + (2 * (ncb(lcb) - ndb(lcb)) + 3) * mw("H") + mw("N")
-mw(acyl::ACYL) = ncb(acyl) * mw("C") + (2 * ncb(acyl) - 2 * ndb(acyl) - 1) * mw("H") + nox(acyl) * mw("O")
+mw(lcb::LCB) = n13C(lcb) * mw("Cxiii") + (ncb(lcb) - n13C(lcb)) * mw("C") + nox(lcb) * mw("O") + nD(lcb) * mw("D") + (2 * (ncb(lcb) - ndb(lcb)) + 3 - nD(lcb)) * mw("H") + mw("N")
+mw(acyl::ACYL) = n13C(acyl) * mw("Cxiii") + (ncb(acyl) - n13C(acyl)) * mw("C") + nD(acyl) * mw("D") + (2 * ncb(acyl) - 2 * ndb(acyl) - 1 - nD(acyl)) * mw("H") + nox(acyl) * mw("O")
 
-function mw(cpd::CompoundID)
+mw(cpd::AbstractCompoundID) = 
+    mw(compound_formula(cpd))
+
+function compound_formula(cpd::AbstractCompoundID)
     cls = class_db_index(cpd.class)
-    unit = cls[[:u1, :u2]]
+    unit = [cls[[:u1, :u2]]..., ["O" => 1]]
     init_us = cls[[:nu1, :nu2]]
-    Δu = [ncb(cpd) - init_us[1], ndb(cpd) - init_us[2]]
-    ms = mw(merge_formula(cls.formula, unit, Δu))
-    ms + nox(cpd) * mw("O")
+    Δu = [ncb(cpd) - init_us[1], ndb(cpd) - init_us[2], nox(cpd)]
+    f = merge_formula(cls.formula, unit, Δu)
+    nc = parse(Int, match(r"C(\d*)", f)[1])
+    nh = parse(Int, match(r"H(\d*)", f)[1])
+    newc = n13C(cpd) > 0 ? string("C", nc - n13C(cpd), "[13C]", n13C(cpd)) : string("C", nc)
+    newh = nD(cpd) > 0 ? string("H", nh - nD(cpd), "[2H]", nD(cpd)) : string("H", nh)
+    replace(f, r"C\d*" => newc, r"H\d*" => newh)
 end
 
 function parse_unit(s::AbstractString)

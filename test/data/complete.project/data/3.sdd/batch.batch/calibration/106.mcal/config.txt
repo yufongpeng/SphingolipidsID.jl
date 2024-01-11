@@ -1,0 +1,17 @@
+[analyte]
+HexCer 18:1;O2/23:0;O
+
+[isd]
+nothing
+
+[type]
+true
+
+[zero]
+false
+
+[weight]
+0.0
+
+[delim]
+\t

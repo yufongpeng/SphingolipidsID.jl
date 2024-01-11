@@ -2,3 +2,7 @@
 *.jl.cov
 *.jl.mem
 /Manifest.toml
+/notebook
+/SPID
+/test/manualtest_id.jl
+/test/manualtest_qt.jl

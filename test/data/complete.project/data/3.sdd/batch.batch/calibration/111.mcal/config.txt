@@ -1,0 +1,17 @@
+[analyte]
+Hex2Cer 16:1;O2/16:0
+
+[isd]
+nothing
+
+[type]
+true
+
+[zero]
+false
+
+[weight]
+0.0
+
+[delim]
+\t

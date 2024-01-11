@@ -3,40 +3,47 @@
     q!(project::Project, qc)
     q!(qc, aquery::Query)
     q!(aquery::Query, qc)
-    q!(qc, reuseable::ReUseable)
-    q!(reuseable::ReUseable, qc)
+    q!(qc, reusable::ReusableQuery)
+    q!(reusable::ReusableQuery, qc)
 
-Create a query to a project, a previous query or a reusable query.
+Create a query retrieving analytes from a project, previous query or reusable query.
 
 # Query commands
-## Pair
-    `:item => (lowerbound, upperbound)`
-    * `:rt`
-    * `:mw`
-    * `:mz`
-    * `:topscore`
-    * `:topsc`
-## Class
-    Any subtype of `ClassSP`.
-## Symbol
-    item + logic, e.g., `:class!`.
-    ## Item
-        * `class`
-        * `chain`
-        * `rt`
-        * `error`
-        * `isf`
-        * `total`
-    ## Logic
-        * ``: positive(`1`)
-        * `_`: not determined(`0`) or positive(`1`)
-        * `!`: negative(`-1`)
-## QueryCommands
+1. Unary function returning bolean value
+2. `:topscore => topN` or `:topsc => topN`
+3. `attribute => criteria`\n
+    Attribute: A unary function applying to `analyte`, e.g. `rt`, `mz`, `mw`, `ncb`, etc.\n
+    Criteria:\n
+    1. `ri\"interval\"`: a real interval, e.g. `ri\"[5, 5.5)\"`, `ri\"(-inf, 7]\"`, etc.
+    2. A unary function returning bolean value
+    3. The above objects wrapped in `FunctionalFunction`, e.g. `allow_unknown(ri\"[5, 10]" ∘ abs)`, `only_known(<(10))`, etc.
+    3. `(lowerbound, upperbound)` equivalent to `ri\"(lowerbound, upperbound)\"`
+    4. `[lowerbound, upperbound]` equivalent to `ri\"[lowerbound, upperbound]\"`
+    5. `lowerbound` equivalent to `ri\"[lowerbound, lowerbound + 1)\"`
+4. Specific structure
+    * Subtype or instance of `ClassSP`
+    * Instance of `LCB`, `ACYL`, `ChainSP`, or `SPID`
+5. `Symbol`\n
+    Query based on analyte status.\n
+    Format: `attribute + logic`, e.g., `:class!`.\n
+    Attribute:\n
+    * `class`
+    * `chain`
+    * `rt`
+    * `error`
+    * `isf`
+    * `total`
+    Logic:\n
+    * nothing: positive(`1`)
+    * `_`: not determined(`0`) or positive(`1`)
+    * `!`: negative(`-1`)
+6. `MRM`
+7. `QueryCommands`\n
     Any object of `QueryCommands` created by
     * `qnot`
     * `qor`
     * `qand`
-## MRM
+    Any valid queries can be wrapped into `QueryCommands`.
 # Keyword Arguments
 * `view`: whether copy the `result`.
 """
@@ -55,9 +62,11 @@ function q!(project::Project, qc; view = true)
 end
 
 q!(qc, aquery::Query; kwargs...) = q!(aquery, qc; kwargs...)
-reuse(aquery::Query) = ReUseable(aquery)
-q!(qc, reuseable::ReUseable; kwargs...) = q!(reuseable, qc; kwargs...)
-q!(reuseable::ReUseable, qc; kwargs...) = q!(reuse_copy(reuseable.query), qc; kwargs...)
+reuse(aquery::Query) = ReusableQuery(aquery)
+q!(qc, reusable::ReusableQuery; kwargs...) = q!(reusable, qc; kwargs...)
+q!(reusable::ReusableQuery, qc; kwargs...) = q!(reuse_copy(reusable.query), qc; kwargs...)
+
+q!(aquery::Query, qf::T; view = aquery.view, neg = false, kwargs...) where {T <: Function} = finish_query!(aquery, qcmd(qf, neg), qf; view)
 
 function q!(aquery::Query, qc::Pair; view = aquery.view, neg = false, kwargs...)
     @match qc.first begin
@@ -65,13 +74,18 @@ function q!(aquery::Query, qc::Pair; view = aquery.view, neg = false, kwargs...)
         :topsc      => return finish_query!(aquery, qcmd(qc, neg), query_score(aquery, qc.second; kwargs...); view)
         _           => nothing
     end
-    qf = @match qc.first begin
-        :rt => analyte -> between(analyte.rt, qc.second)
-        :mw => analyte -> between(mw(last(analyte)), qc.second)
-        :mz => analyte -> any(between(query_raw(aquery.project, frag.source, frag.id).mz1,
-                                                qc.second) for frag in last(analyte).fragments)
+    fn2 = @match qc.second begin
+        (lb, ub)            => in(RealInterval(lb, ub, <, <))
+        [lb, ub]            => in(RealInterval(lb, ub, <=, <=))
+        v::Number           => in(RealInterval(v, v + 1, <=, <))
+        f::RealIntervals    => in(f)
+        _                   => qc.second
     end
-    finish_query!(aquery, qcmd(qc, neg), qf; view)
+    qf = @match qc.first begin
+        &mz => mz(fn2)
+        fn1 => fn2 ∘ fn1
+    end
+    finish_query!(aquery, qcmd(qc.first => fn2, neg), qf; view)
 end
 
 query_fn(qc::Type{<: ClassSP}) = analyte -> isa(class(analyte), qc) ||
@@ -91,68 +105,68 @@ q!(aquery::Query, qc; view = aquery.view, neg = false) =
 
 function q!(aquery::Query, qc::Symbol; view = aquery.view, neg = false)
     qf = @match qc begin
-        :class  => analyte -> ≡(analyte.states[states_id(:class)], 1)
-        :chain  => analyte -> ≡(analyte.states[states_id(:chain)], 1)
-        :rt     => analyte -> ≡(analyte.states[states_id(:rt)], 1)
-        :error  => analyte -> ≡(analyte.states[states_id(:error)], 1)
-        :isf    => analyte -> ≡(analyte.states[states_id(:isf)], 1)
-        :total  => analyte -> ≡(analyte.states[states_id(:total)], 1)
-        :class_ => analyte -> ≡(analyte.states[states_id(:class)], 0)
-        :chain_ => analyte -> ≡(analyte.states[states_id(:chain)], 0)
-        :rt_    => analyte -> ≡(analyte.states[states_id(:rt)], 0)
-        :error_ => analyte -> ≡(analyte.states[states_id(:error)], 0)
-        :isf_   => analyte -> ≡(analyte.states[states_id(:isf)], 0)
-        :total_ => analyte -> ≡(analyte.states[states_id(:total)], 0)
-        :class! => analyte -> ≡(analyte.states[states_id(:class)], -1)
-        :chain! => analyte -> ≡(analyte.states[states_id(:chain)], -1)
-        :rt!    => analyte -> ≡(analyte.states[states_id(:rt)], -1)
-        :error! => analyte -> ≡(analyte.states[states_id(:error)], -1)
-        :isf!   => analyte -> ≡(analyte.states[states_id(:isf)], -1)
-        :total! => analyte -> ≡(analyte.states[states_id(:total)], -1)
-        #:all    => analyte -> all(==(1), analyte.states)
+        :class  => analyte -> ≡(analyte.state[state_id(:class)], 1)
+        :chain  => analyte -> ≡(analyte.state[state_id(:chain)], 1)
+        :rt     => analyte -> ≡(analyte.state[state_id(:rt)], 1)
+        :error  => analyte -> ≡(analyte.state[state_id(:error)], 1)
+        :isf    => analyte -> ≡(analyte.state[state_id(:isf)], 1)
+        :total  => analyte -> ≡(analyte.state[state_id(:total)], 1)
+        :class_ => analyte -> ≡(analyte.state[state_id(:class)], 0)
+        :chain_ => analyte -> ≡(analyte.state[state_id(:chain)], 0)
+        :rt_    => analyte -> ≡(analyte.state[state_id(:rt)], 0)
+        :error_ => analyte -> ≡(analyte.state[state_id(:error)], 0)
+        :isf_   => analyte -> ≡(analyte.state[state_id(:isf)], 0)
+        :total_ => analyte -> ≡(analyte.state[state_id(:total)], 0)
+        :class! => analyte -> ≡(analyte.state[state_id(:class)], -1)
+        :chain! => analyte -> ≡(analyte.state[state_id(:chain)], -1)
+        :rt!    => analyte -> ≡(analyte.state[state_id(:rt)], -1)
+        :error! => analyte -> ≡(analyte.state[state_id(:error)], -1)
+        :isf!   => analyte -> ≡(analyte.state[state_id(:isf)], -1)
+        :total! => analyte -> ≡(analyte.state[state_id(:total)], -1)
+        #:all    => analyte -> all(==(1), analyte.state)
     end
     finish_query!(aquery, qcmd(qc, neg), qf; view)
 end
 
 function q!(aquery::Query, mrm::MRM;
-                view = aquery.view, neg = false, compatible = false, db_product = SPDB[mrm.polarity ? :FRAGMENT_POS : :FRAGMENT_NEG],
+                view = aquery.view, neg = false, compatible = false,
                 mode::Symbol = :default)
-    products = @p mrm.mz2 map(id_product(_, mrm.polarity; db = db_product, mz_tol = mrm.mz_tol))
+    products = @p mrm.mz2 map(id_product(_, mrm.polarity; mz_tol = mrm.config[:mz_tol]))
     if compatible
         qf = cpd -> begin
-            _, ms1 = generate_ms(cpd, mode, aquery.project.anion)
-            any(!isempty(products[i]) && any(iscompatible(cpd, product) for product in products[i]) &&
-                any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ≡(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
+            _, ms1 = generate_ms(cpd, mode, aquery.project.appedix[:anion])
+            any(!isempty(products[i]) && any(iscompatible(product, cpd) for product in products[i]) &&
+                any(any(between(ms, mz1, mrm.config[:mz_tol]) for ms in ms1) for mz1 in filterview(x -> ≡(x.mz2_id, i), mrm.table).mz1) for i in eachindex(products))
         end
     else
         qf = cpd -> begin
-            _, ms1 = generate_ms(cpd, mode, aquery.project.anion)
-            any(!isempty(products[i]) && any(iscomponent(cpd, product) for product in products[i]) &&
-                any(any(between(ms, mz1, mrm.mz_tol) for ms in ms1) for mz1 in filterview(x -> ≡(x.mz2_id, i), mrm.raw).mz1) for i in eachindex(products))
+            _, ms1 = generate_ms(cpd, mode, aquery.project.appendix[:anion])
+            any(!isempty(products[i]) && any(iscomponent(product, cpd) for product in products[i]) &&
+                any(any(between(ms, mz1, mrm.config[:mz_tol]) for ms in ms1) for mz1 in filterview(x -> ≡(x.mz2_id, i), mrm.table).mz1) for i in eachindex(products))
         end
     end
-    finish_query!(aquery, qcmd(:validated_by => "mrm", neg), qf; view, objects = last.(aquery))
+    finish_query!(aquery, qcmd(:validated_by => mrm, neg), qf; view, objects = last.(aquery))
 end
 
-function coelution(project::Project; analytes = project.analytes, polarity::Bool = true, mz_tol = 0.35, rt_tol = 0.1)
+function coelution(project::Project; analyte = project.analyte, polarity::Bool = true, mz_tol = 0.35, rt_tol = 0.1)
     result = NamedTuple{(:mz1, :rt, :analytes), Tuple{Vector{Float64}, Vector{Float64}, SubArray{AnalyteSP}}}[]
-    for analyte in analytes
-        frags = last(analyte).fragments
+    for ana in analyte
+        frags = last(ana).fragment
         id = findfirst(i -> isa(frags.mz1[i].adduct, Pos) ≡ polarity, reverse(eachindex(frags)))
         isnothing(id) && continue
-        mz = query_raw(project, frags.source[id], frags.id[id], :mz1)
-        rt = query_raw(project, frags.source[id], frags.id[id], :rt)
+        mz = query_data(project, frags.source[id], frags.id[id], :mz1)
+        rt = query_data(project, frags.source[id], frags.id[id], :rt)
         pushed = false
         for group in result
             abs(mean(group.mz1) - mz) > mz_tol && continue
             abs(mean(group.rt - rt)) > rt_tol && continue
             push!(group.mz1, mz)
             push!(group.rt, rt)
-            push!(group.analytes, analyte)
+            push!(group.analytes, ana)
             pushed = true
             break
         end
-        pushed || push!(result, (mz1 = [mz], rt = [rt], analytes = [analyte]))
+        pushed || push!(result, (mz1 = [mz], rt = [rt], analytes = [ana]))
     end
     result
 end
@@ -176,23 +190,23 @@ abs_sig_diff(Δ) =
 _abs_sig_diff(global_scores, local_scores, prev_score, current_score, Δ) = (prev_score - current_score) < Δ
 
 function query_score(aquery::Query, topN = 0.5; is_wild_card = normalized_sig_diff(0.1))
-    analytes = aquery.result
+    analyte = aquery.result
     # no isomer => has isomer
     id1 = Int[]
     id2 = Int[]
-    for (i, analyte) in enumerate(analytes)
-        (hasisomer(class(analyte)) || hasisomer(chain(analyte))) ? push!(id2, i) : push!(id1, i)
+    for (i, ana) in enumerate(analyte)
+        (hasisomer(class(ana)) || hasisomer(chain(ana))) ? push!(id2, i) : push!(id1, i)
     end
     dict = Dict{SPID, Vector{Tuple{Float64, Int}}}()
-    foreach(id -> push!(get!(dict, SPID(last(analytes[id])), Tuple{Float64, Int}[]), (analytes[id].score.second, id)), id1)
+    foreach(id -> push!(get!(dict, SPID(last(analyte[id])), Tuple{Float64, Int}[]), (analyte[id].score.second, id)), id1)
     for id in id2
-        sc = analytes[id].score.second
+        sc = analyte[id].score.second
         pushed = false
         for (ky, vl) in dict
-            iscompatible(analytes[id], ky) &&
+            iscompatible(analyte[id], ky) &&
                 (pushed = true; push!(vl, (sc, id)))
         end
-        pushed || push!(dict, SPID(last(analytes[id])) => [(sc, id)])
+        pushed || push!(dict, SPID(last(analyte[id])) => [(sc, id)])
     end
     final = Int[]
     len = topN >= 1 ? (vl -> topN) : (vl -> max(1, round(Int, length(vl) * topN * (1 + eps(Float64)))))
@@ -236,7 +250,7 @@ flatten_query(qc::QueryNot{QueryAnd}) = QueryOr(map(flatten_query ∘ qnot, qc.q
 q!(aquery::Query, qc::QueryCommands; view = true) = _q!(aquery, flatten_query(qc); view)
 _q!(aquery::Query, qc::QueryNot{QueryCmd}; view = true) = q!(aquery, qc.qcmd.query; view, neg = true)
 _q!(aquery::Query, qc::QueryCmd; view = true) = q!(aquery, qc.query; view)
-_q!(aquery::Query, qcs::QueryAnd; view = true) = _q!(_q!(aquery, popfirst!(qcs.qcmd); view), qcs.qcmd; view)
+_q!(aquery::Query, qcs::QueryAnd; view = true) = length(qcs.qcmd) == 1 ? _q!(aquery, qcs.qcmd[1]; view) : _q!(_q!(aquery, popfirst!(qcs.qcmd); view), QueryAnd(qcs.qcmd); view)
 function _q!(aquery::Query, qcs::QueryOr; view = true)
     pid = parentindices(aquery.result)[1]
     qs = map(qcs.qcmd) do qc
@@ -250,28 +264,27 @@ function _q!(aquery::Query, qcs::QueryOr; view = true)
 end
 
 """
-    query_raw(project::Project, source::Int, id::Int)
-    query_raw(project::Project, source::Int, id::Int, col)
+    query_data(project::Project, source::Int, id::Int)
+    query_data(project::Project, source::Int, id::Int, col)
 
-Make query to raw data in a `project`. The raw data is specified by `source`, `id`, and optionally `col`.
+Make query to data in a `project`. The data is specified by `source`, `id`, and optionally `col`.
 """
-query_raw(project::Project, source::Int, id::Int) = project.data[source].raw[findfirst(==(id), project.data[source].raw.id)]
-query_raw(project::Project, source::Int, id::Int, col) = getproperty(project.data[source].raw, col)[findfirst(==(id), project.data[source].raw.id)]
+query_data(project::Project, source::Int, id::Int) = project.data[source].table[findfirst(==(id), project.data[source].table.id)]
+query_data(project::Project, source::Int, id::Int, col) = getproperty(project.data[source].table, col)[findfirst(==(id), project.data[source].table.id)]
 """
-    set_raw!(project::Project, source::Int, id::Int, col, val)
+    set_data!(project::Project, source::Int, id::Int, col, val)
 
 Replace query value with `val`.
 """
-set_raw!(project::Project, source::Int, id::Int, col, val) = (getproperty(project.data[source].raw, col)[findfirst(==(id), project.data[source].raw.id)] = val)
+set_data!(project::Project, source::Int, id::Int, col, val) = (getproperty(project.data[source].table, col)[findfirst(==(id), project.data[source].table.id)] = val)
 """
-    set_raw_if!(project::Project, source::Int, id::Int, col, val, crit)
+    set_data_if!(project::Project, source::Int, id::Int, col, val, crit)
 
 Replace query value with `val` if `crit(old_value) == true`.
 """
-function set_raw_if!(project::Project, source::Int, id::Int, col, val, crit)
-    i = findfirst(==(id), project.data[source].raw.id)
-    crit(getproperty(project.data[source].raw, col)[i]) || return
-    getproperty(project.data[source].raw, col)[i] = val
+function set_data_if!(project::Project, source::Int, id::Int, col, val, crit)
+    i = findfirst(==(id), project.data[source].table.id)
+    crit(getproperty(project.data[source].table, col)[i]) || return
+    getproperty(project.data[source].table, col)[i] = val
 end
-
-# filter/comparator
+mz(fn) = analyte -> any(fn(query_data(last(analyte).project, frag.source, frag.id).mz1) for frag in last(analyte).fragment)

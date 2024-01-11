@@ -39,6 +39,11 @@ struct SPB4 <: LCB4
     carbon::Int
     doublebond::Int
 end
+struct SPB4IS <: LCB4
+    carbon::Int
+    doublebond::Int
+    isotope::NamedTuple
+end
 """
     NotPhyto4 <: LCB4
 
@@ -49,6 +54,11 @@ When the additional oxygen is three and above, it's assumed that the long-chain 
 struct NotPhyto4 <: LCB4
     carbon::Int
     doublebond::Int
+end
+struct NotPhyto4IS <: LCB4
+    carbon::Int
+    doublebond::Int
+    isotope::NamedTuple
 end
 """
     SPB3 <: LCB3
@@ -61,6 +71,11 @@ struct SPB3 <: LCB3
     carbon::Int
     doublebond::Int
 end
+struct SPB3IS <: LCB3
+    carbon::Int
+    doublebond::Int
+    isotope::NamedTuple
+end
 """
     NotPhyto3 <: LCB3
 
@@ -72,6 +87,11 @@ struct NotPhyto3 <: LCB3
     carbon::Int
     doublebond::Int
 end
+struct NotPhyto3IS <: LCB3
+    carbon::Int
+    doublebond::Int
+    isotope::NamedTuple
+end
 """
     SPB2 <: LCB2
 
@@ -81,7 +101,13 @@ struct SPB2 <: LCB2
     carbon::Int
     doublebond::Int
 end
-const NotPhyto = Union{NotPhyto3, NotPhyto4}
+struct SPB2IS <: LCB2
+    carbon::Int
+    doublebond::Int
+    isotope::NamedTuple
+end
+const NotPhyto = Union{NotPhyto3, NotPhyto4, NotPhyto3IS, NotPhyto4IS}
+const LCBIS = Union{SPB2IS, SPB3IS, SPB4IS, NotPhyto4, NotPhyto3IS, NotPhyto4IS}
 """
     ACYL <: ChainSP
 
@@ -98,6 +124,12 @@ struct Acyl <: ACYL
     doublebond::Int
     oxygen::Int
 end
+struct AcylIS <: ACYL
+    carbon::Int
+    doublebond::Int
+    oxygen::Int
+    isotope::NamedTuple
+end
 """
     Acylα <: ACYL
 
@@ -107,6 +139,12 @@ struct Acylα <: ACYL
     carbon::Int
     doublebond::Int
     oxygen::Int
+end
+struct AcylαIS <: ACYL
+    carbon::Int
+    doublebond::Int
+    oxygen::Int
+    isotope::NamedTuple
 end
 """
     Acylβ <: ACYL
@@ -118,6 +156,13 @@ struct Acylβ <: ACYL
     doublebond::Int
     oxygen::Int
 end
+struct AcylβIS <: ACYL
+    carbon::Int
+    doublebond::Int
+    oxygen::Int
+    isotope::NamedTuple
+end
+const ACYLIS = Union{AcylIS, AcylαIS, AcylβIS}
 """
     SumChain <: ChainSP
 
@@ -128,6 +173,12 @@ struct SumChain <: ChainSP
     doublebond::Int
     oxygen::Int
 end
+struct SumChainIS <: ChainSP
+    carbon::Int
+    doublebond::Int
+    oxygen::Int
+    isotope::NamedTuple
+end
 """
     DiChain{S <: LCB, T <: ACYL} <: ChainSP
 
@@ -137,5 +188,8 @@ struct DiChain{S <: LCB, T <: ACYL} <: ChainSP
     lcb::S
     acyl::T
 end
+
+const DiChainIS = Union{DiChain{<: LCBIS}, DiChain{T, <: ACYLIS} where T}
+const ChainSPIS = Union{LCBIS, ACYLIS, DiChainIS, SumChainIS}
 
 @as_record ChainSP

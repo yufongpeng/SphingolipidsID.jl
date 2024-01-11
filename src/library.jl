@@ -17,12 +17,20 @@ function set_db!(key::Symbol, db = eval(key); kwargs...)
 end
 
 """
-    read_adduct_code(file::String)
+    read_adduct_code(file::String; 
+                        silencewarnings::Bool = false,
+                        maxwarnings::Int = 10, 
+                        debug::Bool = false
+                    )
 
 Read config file for `SPDB[:ADDUCTCODE]`. The csv file should not contain header and the columns are the string representation and type of the adduct, respectively.
 """
-function read_adduct_code(file::String)
-    code = CSV.read(file, Table, header = [:repr, :object])
+function read_adduct_code(file::String; 
+                            silencewarnings::Bool = false,
+                            maxwarnings::Int = 10, 
+                            debug::Bool = false
+                        )
+    code = CSV.read(file, Table; header = [:repr, :object], silencewarnings, maxwarnings, debug)
     Table(
         repr = code.repr,
         object = (@p code.object map((eval ∘ Meta.parse)(_)()))
@@ -37,15 +45,20 @@ const ADDUCTCODE = read_adduct_code(joinpath(@__DIR__, "..", "config", "ADDUCTCO
 set_db!(:ADDUCTCODE)
 
 repr_adduct(x::Adduct) = SPDB[:ADDUCTCODE].repr[findfirst(==(x), SPDB[:ADDUCTCODE].object)]
+repr_adduct(x::AbstractString) = x
 object_adduct(x::AbstractString) = SPDB[:ADDUCTCODE].object[findfirst(==(x), SPDB[:ADDUCTCODE].repr)]
+object_adduct(x::Adduct) = x
 
 """
-    read_class_db(file::String,
+    read_class_db(file::String;
                     col_name = :Abbreviation,
                     col_regex = :regex,
                     col_formula = [:formula, :u1, :u2],
                     col_unit = [:nu1, :nu2],
-                    col_ions = [:default_ion, :parent_ion, :adduct_ion, :isf_ion]
+                    col_ions = [:default_ion, :parent_ion, :adduct_ion, :isf_ion],
+                    silencewarnings::Bool = false,
+                    maxwarnings::Int = 10, 
+                    debug::Bool = false
                 )
 
 Read config file for `SPDB[:CLASSDB]`. The csv file should contain columns controlled by the following keyword arguments:
@@ -55,16 +68,24 @@ Read config file for `SPDB[:CLASSDB]`. The csv file should contain columns contr
 * `col_unit`: number of units(chain and double bonds) of base compound.
 * `col_ions`: ions that will be generated. The first column is the default ions for generating MRM; the second one is parent ions which a compound must contain at least one; 
 the third one is adduct ion which are all possible ions; the fourth one is isf ions generating from in-source fragmentation. Ions are represented by the index in `SPDB[:ADDUCTCODE]`.
+* `silencewarnings`: whether invalid value warnings should be silenced.
+* `maxwarnings`: if more than `maxwarnings` number of warnings are printed while parsing, further warnings will be
+silenced by default; for multithreaded parsing, each parsing task will print up to `maxwarnings`.
+* `debug`: passing `true` will result in many informational prints while a dataset is parsed; can be useful when
+reporting issues or figuring out what is going on internally while a dataset is parsed.
 """
-function read_class_db(file::String,
+function read_class_db(file::String;
                         col_name = :Abbreviation,
                         col_regex = :regex,
                         col_formula = [:formula, :u1, :u2],
                         col_unit = [:nu1, :nu2],
-                        col_ions = [:default_ion, :parent_ion, :adduct_ion, :isf_ion]
-                        )
+                        col_ions = [:default_ion, :parent_ion, :adduct_ion, :isf_ion],
+                        silencewarnings::Bool = false,
+                        maxwarnings::Int = 10, 
+                        debug::Bool = false
+                    )
 
-    class_db = CSV.read(file, Table)
+    class_db = CSV.read(file, Table; silencewarnings, maxwarnings, debug)
     parse_ion = x -> SPDB[:ADDUCTCODE].object[(eval ∘ Meta.parse)(x)]
     Table(
         #Abbreviation = map(x -> (eval ∘ Meta.parse)(x)(), getproperty(class_db, col_name)),
@@ -104,14 +125,14 @@ Create a library.
 * `range`: `Tuple` or `Vector{<: Tuple}`. Each tuple contains the range of carbon chain, double bonds, and addtional elements as `String`.
 """
 library(class::Vector, adduct::Vector{<: Adduct}, range::Vector{<: Tuple}) = library(class, map(repr_adduct, adduct), range)
-#library(class::Vector{Type{<: ClassSP}}, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple}) = library([cls() for cls in class], adduct, range)
+#library(class::Vector{DataTyple}, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple}) = library([cls() for cls in class], adduct, range)
 function library(class::Vector, adduct::Vector{<: AbstractString}, range::Vector{<: Tuple})
     range = map(range) do r
         vectorize.(r)
     end
     n = mapreduce(rng -> mapreduce(length, *, rng), +, range) * length(adduct) * length(class)
     tbl = Table(
-                    Abbreviation = Vector{Type{<: ClassSP}}(undef, n),
+                    Abbreviation = Vector{DataType}(undef, n),
                     Species = Vector{SPID}(undef, n),
                     Formula = Vector{String}(undef, n),
                     Adduct = repeat(adduct, Int(n / length(adduct))),
@@ -197,6 +218,10 @@ const LIBRARY_POS = reduce(append!, (
     library(GP1, ["[M+2H]2+", "[M+3H]3+"], (34:2:38, 0:4, "O2")),
 ))
 
+push_library!(library::Symbol, cpd::AbstractCompoundID, adduct) = push_library!(SPDB[library], cpd, adduct)
+function push_library!(library::Table, cpd::AbstractCompoundID, adduct)
+    push!(library, (Abbreviation = typeof(class(cpd)), Species = cpd, Formula = compound_formula(cpd), Adduct = repr_adduct(adduct), mz = mz(cpd, adduct)))
+end
 #LIBRARY_NEG
 """
     const FRAGMENT_POS
@@ -207,7 +232,7 @@ const FRAGMENT_POS = let
     frags = [lcb(18, 1, 1), lcb(18, 0, 2),
             lcb(16, 1, 2), lcb(17, 1, 2), lcb(18, 1, 2), lcb(18, 0, 3), lcb(19, 1, 2), lcb(20, 1, 2),
             lcb(16, 2, 2), lcb(18, 2, 2), lcb(18, 1, 3), lcb(20, 2, 2)]
-    ion = map(default_adduct, frags)
+    ion = Ion[default_adduct(f, true) for f in frags]
     append!(ion, [Ion(ProtonationNL2H2O(), NeuAc()),
                     Ion(ProtonationNLH2O(), NeuAc()),
                     HexNAcHex,
@@ -267,15 +292,34 @@ const CONNECTION = Dict{ClassSP, Any}(
 )
 
 """
-    read_ce(file::String; col_ms = [:ms1, :ms2], col_adduct = [:adduct1, :adduct2], col_ev = :eV)
+    read_ce(file::String; 
+            col_ms = [:ms1, :ms2], 
+            col_adduct = [:adduct1, :adduct2], 
+            col_ev = :eV,
+            silencewarnings::Bool = false,
+            maxwarnings::Int = 10, 
+            debug::Bool = false
+            )
 
 Read config file for `SPDB[:CE]`. The csv file should contain columns controlled by the following keyword arguments:
 * `col_ms`: 2-element vector containing the type of ms1 and ms2, repectively.
 * `col_adduct`: 2-element vector containing the index of adducts for ms1 and ms2, repectively. `0` indicates default value.
 * `col_ev`: collision aenergy.
+* `silencewarnings`: whether invalid value warnings should be silenced.
+* `maxwarnings`: if more than `maxwarnings` number of warnings are printed while parsing, further warnings will be
+silenced by default; for multithreaded parsing, each parsing task will print up to `maxwarnings`.
+* `debug`: passing `true` will result in many informational prints while a dataset is parsed; can be useful when
+reporting issues or figuring out what is going on internally while a dataset is parsed.
 """
-function read_ce(file::String; col_ms = [:ms1, :ms2], col_adduct = [:adduct1, :adduct2], col_ev = :eV)
-    ce = CSV.read(file, Table; select = 1:5)
+function read_ce(file::String; 
+                col_ms = [:ms1, :ms2],
+                col_adduct = [:adduct1, :adduct2],
+                col_ev = :eV,
+                silencewarnings::Bool = false,
+                maxwarnings::Int = 10, 
+                debug::Bool = false
+                )
+    ce = CSV.read(file, Table; select = 1:5, silencewarnings, maxwarnings, debug)
     Table(
         ms1 = [t() for t in (eval ∘ Meta.parse).(getproperty(ce, col_ms[1]))],
         adduct1 = [SPDB[:ADDUCTCODE].object[x] for x in getproperty(ce, col_adduct[1])],

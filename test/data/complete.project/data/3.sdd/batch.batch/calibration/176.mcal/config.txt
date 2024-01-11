@@ -1,0 +1,17 @@
+[analyte]
+GM3 43:0;O2
+
+[isd]
+nothing
+
+[type]
+true
+
+[zero]
+false
+
+[weight]
+0.0
+
+[delim]
+\t

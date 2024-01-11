@@ -1,0 +1,17 @@
+[analyte]
+GM3 18:1;O2/18:0(D5)
+
+[isd]
+nothing
+
+[type]
+true
+
+[zero]
+false
+
+[weight]
+0.0
+
+[delim]
+\t

@@ -1,0 +1,5 @@
+[analyte]
+GM3 18:1;O2/18:0(D5) (qualifier)
+
+[conc]
+1.0
