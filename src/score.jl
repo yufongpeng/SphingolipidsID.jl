@@ -1,4 +1,4 @@
-SPDB[:SCORE] = (param = NamedTuple[], fn = Function[])
+SPDB[:SCORE] = (param = NamedTuple[], fn = Any[])
 """
     @cpdsc(targetconvert, weight, objective)
 

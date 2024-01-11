@@ -257,6 +257,7 @@ end
 
 function write(file::String, project::Project; delim = '\t', kwargs...)
     mkpath(file)
+    JLD2.save_object(joinpath(file, "SPDB.jld2"), SPDB)
     emptyp = Project()
     analyte = map(project.analyte) do ana
         ana = copy(ana)
@@ -327,6 +328,47 @@ end
 
 function read_project(file::String)
     endswith(file, ".project") || throw(ArgumentError("The file is not a valid Project directory"))
+    spdb = JLD2.load_object(joinpath(file, "SPDB.jld2"))
+    for (i, p) in enumerate(spdb[:SCORE].param)
+        in(p, SPDB[:SCORE].param) && continue
+        if length(p) == 2
+            push!(SPDB[:SCORE].param, p)
+            id = lastindex(SPDB[:SCORE].param)
+            objective = eval(p.objective)
+            push!(SPDB[:SCORE].fn, (analyte, mutate) -> mutate ? (analyte.score = id => objective(analyte)) : (id => objective(analyte)))
+        else
+            weight = @match p.weight begin
+                1 => :w1
+                _ => p.weight
+            end # any 2-arg fn: (analyte, cpd) -> Number
+            replace_int = @λ begin
+                x::Int  => Expr(:call, :get!, :dict, x, 0)
+                :all    => Expr(:call, :sum, Expr(:call, :values, :dict))
+                x::Expr => Expr(x.head, map(replace_int, x.args)...)
+                x       => x
+            end
+            transform_score(dict) = eval(replace_int(p.objective))
+            converter = eval(p.converter)
+            weight = eval(weight)
+            push!(SPDB[:SCORE].param, p)
+            i = lastindex(SPDB[:SCORE].param)
+            fn = (analyte::AnalyteSP, mutate::Bool) -> begin
+                dict = Dict{Int, Float64}()
+                for cpd in analyte
+                    uw = converter(cpd.state)
+                    dict[uw] = get!(dict, uw, 0) + weight(analyte, cpd)
+                end
+                result = i => transform_score(dict)
+                mutate ? (analyte.cpdsc = result) : result
+            end
+            push!(SPDB[:SCORE].fn, fn)
+        end
+    end
+    for (k, v) in pairs(spdb)
+        if get(SPDB, k, nothing) != v
+            SPDB[k] = v
+        end
+    end
     appendix = JLD2.load_object(joinpath(file, "appendix.jld2"))
     quantification = read_quantification(joinpath(file, "quantification.qt"))
     analyte = JLD2.load_object(joinpath(file, "analyte.jld2"))
