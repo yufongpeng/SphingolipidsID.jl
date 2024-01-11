@@ -91,7 +91,7 @@ end
 
 function Project(preis::PreIS; data_id = -1, kwargs...)
     appendix = Dictionary{Symbol, Any}(kwargs)
-    project = Project(AnalyteSP[], AbstractData[], Quantification(), appendix)
+    project = Project(AnalyteSP[], AbstractData[], nothing, appendix)
     preis!(project, preis; data_id)
 end
 

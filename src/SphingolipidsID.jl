@@ -318,9 +318,7 @@ Type containg information of analyte settings, calibration data, qc data, serial
 struct Quantification{A}
     batch::Batch{A}
     config::Dictionary
-    Quantification() = new{Any}()
-    Quantification(batch::Batch{A}, config::Dictionary) where A = new{A}(batch, config)
-end # Wrap MethodTable
+end
 
 function getproperty(quant::Quantification, p::Symbol)
     if p in propertynames(getfield(quant, :batch)) 
