@@ -27,7 +27,7 @@ function quantification_mrm(analyte::AbstractVector{<: AbstractAnalyteID}, quant
                         isd_fn = x -> -1,
                         mz_tol, rt_tol, anion, default_mz2
                         )
-        conctable = ColumnDataTable(isdtable.analyte, :Level, Table(; Level = [1], (Symbol.(isdtable.analyte) .=> vectorize.(isd.concentration))...))
+        conctable = ColumnDataTable(isdtable.analyte, :Level, Table(; Level = [1], (Symbol.(isdtable.analyte) .=> vectorize.(convert.(Float64, isd.concentration)))...))
     else
         isdtable = analytetable_mrm(isd, quantifier; qualifier, mz_tol, rt_tol, anion, default_mz2, coelution_fn = x -> lastindex(x.analytes), isd_fn = x -> -1)
         conctable = ColumnDataTable(isdtable.analyte, :Level, Table(; Level = [1], (Symbol.(isdtable.analyte) .=> vectorize.(ones(Float64, length(isdtable.analyte))))...))
@@ -161,6 +161,7 @@ function match(mrm::MRM, project = nothing; kwargs...)
     # check columns
     hasproperty(mrm.table, :match_id) || throw(ArgumentError("Table in MRM dose not have column :match_id; please use `qtMRM` or `qtMRM!`."))
     hasproperty(mrm.table, :match_score) || throw(ArgumentError("Table in MRM dose not have column :match_score; please use `qtMRM` or `qtMRM!`."))
+    @info "MRM | Transition matching"
     _match!(deepcopy(mrm), project, isnothing(project) ? nothing : project.quantification; kwargs...)
 end
 
@@ -168,6 +169,7 @@ function match!(mrm::MRM, project = nothing; kwargs...)
     # check columns
     hasproperty(mrm.table, :match_id) || throw(ArgumentError("Table in MRM dose not have column :match_id; please use `qtMRM` or `qtMRM!`."))
     hasproperty(mrm.table, :match_score) || throw(ArgumentError("Table in MRM dose not have column :match_score; please use `qtMRM` or `qtMRM!`."))
+    @info "MRM | Transition matching"
     _match!(mrm, project, isnothing(project) ? nothing : project.quantification; kwargs...)
 end
 
@@ -193,6 +195,7 @@ end
 function quantify(mrm::MRM, project = get(mrm.config, :match_config, Dictionary([:project], [nothing]))[:project]; kwargs...)
     hasproperty(mrm.table, :match_id) || throw(ArgumentError("Table in MRM dose not have column :match_id; please use `qtMRM` or `qtMRM!`."))
     hasproperty(mrm.table, :match_score) || throw(ArgumentError("Table in MRM dose not have column :match_score; please use `qtMRM` or `qtMRM!`."))
+    @info "MRM | Quantifying analytes"
     _quantify(mrm, project, isnothing(project) ? nothing : project.quantification; kwargs...)
 end
 
@@ -201,7 +204,7 @@ function _quantify(mrm::MRM, project::Project, qt::Quantification;
                     rel_sig = :relative_signal,
                     est_conc = :estimated_concentration)
     at = analysistable(mrm.table; method = qt.batch.method, data = signal)
-    set_quantification!(at, project.quantification.batch; relsig = rel_sig, estimated_concentration = est_conc)
+    set_quantification!(at, project.quantification.batch; rel_sig, est_conc)
 end
 
 function _quantify(mrm::MRM, project::Union{Project, Nothing}, qt::Nothing; 
@@ -214,6 +217,7 @@ end
 function quantify!(mrm::MRM, project = get!(mrm.config, :match_config, Dictionary([:project], [nothing]))[:project]; kwargs...)
     hasproperty(mrm.table, :match_id) || throw(ArgumentError("Table in MRM dose not have column :match_id; please use `qtMRM` or `qtMRM!`."))
     hasproperty(mrm.table, :match_score) || throw(ArgumentError("Table in MRM dose not have column :match_score; please use `qtMRM` or `qtMRM!`."))
+    @info "MRM | Quantifying analytes"
     _quantify!(mrm, project, isnothing(project) ? nothing : project.quantification; kwargs...)
 end
 
@@ -224,7 +228,7 @@ function _quantify!(mrm::MRM, project::Project, qt::Quantification;
     id = findfirst(x -> ===(x, mrm), project.data)
     id = isnothing(id) ? (push!(project.data, mrm); lastindex(project.data)) : id
     at = analysistable(mrm.table; method = qt.batch.method, data = signal)
-    update_quantification!(project.quantification.batch, at; relsig = rel_sig, estimated_concentration = est_conc)
+    update_quantification!(project.quantification.batch, at; rel_sig, est_conc)
     set!(project.quantification.config, :data_id, id)
     set!(project.quantification.config, :signal, signal)
     set!(project.quantification.config, :rel_sig, rel_sig)
@@ -240,6 +244,7 @@ function _quantify!(mrm::MRM, project::Project, qt::Nothing;
     id = isnothing(id) ? (push!(project.data, mrm); lastindex(project.data)) : id
     at = analysistable(mrm.table; method = qt, data = signal)
     signaltable = getproperty(at, signal)
+    @info "MRM | Constructing new Quantification"
     conctable = if isa(signaltable, ColumnDataTable)
         tbl = Table((; signaltable.samplecol => [1], (Symbol.(signaltable.analyte) .=> [[1.0] for i in eachindex(signaltable.analyte)])...))
         ColumnDataTable(signaltable.analyte, signaltable.samplecol, tbl)
@@ -259,7 +264,7 @@ function _quantify!(mrm::MRM, project::Project, qt::Nothing;
                                 [:data_id, :signal, :anion, :rt_tol, :mz_tol, :rel_sig, :est_conc], 
                                 [id, project.appendix[:signal], project.appendix[:anion], mrm.config[:rt_ol], mrm.config[:mz_tol], rel_sig, est_conc])
                             )
-    update_quantification!(project.quantification.batch, at; relsig = rel_sig, estimated_concentration = est_conc)
+    update_quantification!(project.quantification.batch, at; rel_sig, est_conc)
     at
 end
 
@@ -291,8 +296,8 @@ function qctable(dt::ChemistryQuantitativeAnalysis.AbstractDataTable; est_fn = m
     end
 end
 
-set_serialdilution!(project::Project, crit::T) where {T <: Function} = set_serialdilution!(project.quantification, crit)
-function set_serialdilution!(qt::Quantification, crit::T) where {T <: Function}
+set_serialdilution_id!(project::Project, crit::T) where {T <: Function} = set_serialdilution_id!(project.quantification, crit)
+function set_serialdilution_id!(qt::Quantification, crit::T) where {T <: Function}
     s = getproperty(qt.batch.data, qt.config[:signal]).sample
     id = findall(crit, s)
     set!(qt.config, :serialdilution_id, length(id) == length(s) ? nothing : id)

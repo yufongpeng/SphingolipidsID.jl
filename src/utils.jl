@@ -1,10 +1,90 @@
 # public
+# Detect coelution isf for manual check
+coeluting_isf(aquery::AbstractQuery; polarity::Bool = true, rt_tol = 0.1) = coeluting_isf(aquery.project; analyte = aquery.result, polarity, rt_tol)
+function coeluting_isf(project::Project; analyte = project.analyte, polarity::Bool = true, rt_tol = 0.1)
+    result = NamedTuple{(:analyte, :rt, :Δrt, Symbol("#fragments")), Tuple{Vector{AnalyteSP}, Vector{Float64}, Vector{Float64}, Vector{Int}}}[]
+    for (i, ana) in enumerate(analyte)
+        frags = last(ana).fragment
+        id = findall(ion -> isa(ion.ion1.adduct, Pos) ≡ polarity && in(ion.ion1.adduct, class_db_index(ion.ion1.molecule).parent_ion), frags)
+        isempty(id) && continue
+        isf = [ana]
+        for other in @view analyte[i + 1:end]
+            between(rt(ana), rt(other), rt_tol) || continue
+            any(any(any(frag.source == frags.source[i] && frag.id == frags.id[i] for i in id) for frag in cpd.fragment) for cpd in other) || continue
+            push!(isf, other)
+        end
+        length(isf) > 1 && push!(result, (analyte = isf, rt = map(rt, isf), Δrt = repeat([NaN], length(isf)), var"#fragments" = map(nfrags, isf)))
+    end
+    for group in result
+        id = collect(eachindex(group.analyte))
+        for (i, v) in enumerate(group.analyte)
+            any(x -> iscompatible(lcb(last(x)), lcb(last(v))) || iscompatible(acyl(last(x)), acyl(last(v))), @view group.analyte[setdiff(id, i)]) || deleteat!(id, findfirst(==(i), id))
+        end
+        id = setdiff(eachindex(group.analyte), id)
+        deleteat!(group.analyte, id)
+        deleteat!(group.rt, id)
+        deleteat!(group.Δrt, id)
+        deleteat!(group.var"#fragments", id)
+    end
+    filter!(x -> length(x.analyte) > 1, result)
+    tbl = map(Table, result)
+    haskey(project.appendix, :rt_model) ? map(x -> Table(x; Δrt = replace!(err_rt(x.analyte), nothing => NaN)), result) : tbl
+end
+
+coeluting_isobar(aquery::AbstractQuery; polarity::Bool = true, mz_tol = 0.35, rt_tol = 0.1) = coeluting_isobar(aquery.project; analyte = aquery.result, polarity, mz_tol, rt_tol)
+function coeluting_isobar(project::Project; analyte = project.analyte, polarity::Bool = true, mz_tol = 0.35, rt_tol = 0.1)
+    result = NamedTuple{(:analyte, :mz1, :Δmz1, :rt, :Δrt, Symbol("#fragments")), Tuple{Vector{AnalyteSP}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Float64}, Vector{Int}}}[]
+    for ana in analyte
+        frags = last(ana).fragment
+        id = findlast(ion -> isa(ion.ion1.adduct, Pos) ≡ polarity, frags)
+        isnothing(id) && continue
+        mz1 = query_data(project, frags.source[id], frags.id[id], :mz1)
+        pushed = false
+        for group in result
+            (!between(mean(group.mz1), mz1, mz_tol) ||
+            !between(mean(group.rt), rt(ana), rt_tol)) && continue
+            push!(group.mz1, mz1)
+            push!(group.Δmz1, mz(last(ana), frags.ion1[id].adduct) - mz1)
+            push!(group.rt, rt(ana))
+            push!(group.Δrt, NaN)
+            push!(group.analyte, ana)
+            push!(group.var"#fragments", nfrags(ana))
+            pushed = true
+            break
+        end
+        pushed || push!(result, (analyte = [ana], mz1 = [mz1], Δmz1 = [mz(last(ana), frags.ion1[id].adduct) - mz1], rt = [rt(ana)], Δrt = [NaN], var"#fragments" = [nfrags(ana)]))
+    end
+    for group in result
+        id = collect(eachindex(group.analyte))
+        for (i, v) in enumerate(group.analyte)
+            any(x -> iscompatible(lcb(last(x)), lcb(last(v))) || iscompatible(acyl(last(x)), acyl(last(v))), @view group.analyte[setdiff(id, i)]) || deleteat!(id, findfirst(==(i), id))
+        end
+        id = setdiff(eachindex(group.analyte), id)
+        deleteat!(group.analyte, id)
+        deleteat!(group.mz1, id)
+        deleteat!(group.Δmz1, id)
+        deleteat!(group.rt, id)
+        deleteat!(group.Δrt, id)
+        deleteat!(group.var"#fragments", id)
+    end
+    filter!(x -> length(x.analyte) > 1, result)
+    tbl = map(Table, result)
+    haskey(project.appendix, :rt_model) ? map(x -> Table(x; Δrt = replace!(err_rt(x.analyte), nothing => NaN)), result) : tbl
+end
+
+set_state!(analyte::AnalyteSP, v::Int) = set_state!(analyte, :manual, v)
+function set_state!(analyte::AnalyteSP, state::Symbol, v::Int)
+    analyte.state[state_id(state)] = v
+    analyte
+end
 """
     nfrags(cpd::AbstractCompoundSP)
+    nfrags(analyte::AnalyteSP)
 
 Number of fragments of a compund, i.e., `size(cpd.fragment, 1)`.
 """
 nfrags(cpd::AbstractCompoundSP) = size(cpd.fragment, 1)
+nfrags(analyte::AnalyteSP) = sum(cpd -> size(cpd.fragment, 1), analyte)
 """
     concurrent_transition(tbl::Table; end_time = maximum(tbl.rt .+ tbl.Δrt))
 

@@ -326,57 +326,63 @@ function read_preis(file::String)
     PreIS(Table(tbl; mz2_id = map(x -> findfirst(==(x), mz2), tbl.mz2), mz2 = nothing, range = nothing, polarity = nothing), range, mz2, polarity,  delete!(config, :table))
 end
 
+function cons_score!(p)
+    if length(p) == 2
+        push!(SPDB[:SCORE].param, p)
+        id = lastindex(SPDB[:SCORE].param)
+        objective = eval(p.objective)
+        push!(SPDB[:SCORE].fn, (analyte, mutate) -> mutate ? (analyte.score = id => objective(analyte)) : (id => objective(analyte)))
+    else
+        weight = @match p.weight begin
+            1 => :w1
+            _ => p.weight
+        end # any 2-arg fn: (analyte, cpd) -> Number
+        replace_int = @λ begin
+            x::Int  => Expr(:call, :get!, :dict, x, 0)
+            :all    => Expr(:call, :sum, Expr(:call, :values, :dict))
+            x::Expr => Expr(x.head, map(replace_int, x.args)...)
+            x       => x
+        end
+        transform_score(dict) = eval(replace_int(p.objective))
+        converter = eval(p.converter)
+        weight = eval(weight)
+        push!(SPDB[:SCORE].param, p)
+        i = lastindex(SPDB[:SCORE].param)
+        fn = (analyte::AnalyteSP, mutate::Bool) -> begin
+            dict = Dict{Int, Float64}()
+            for cpd in analyte
+                uw = converter(cpd.state)
+                dict[uw] = get!(dict, uw, 0) + weight(analyte, cpd)
+            end
+            result = i => transform_score(dict)
+            mutate ? (analyte.cpdsc = result) : result
+        end
+        push!(SPDB[:SCORE].fn, fn)
+    end
+end
+
 function read_project(file::String)
     endswith(file, ".project") || throw(ArgumentError("The file is not a valid Project directory"))
+    @info "Read | $file as Project"
+    @info "Read | SPDB"
     spdb = JLD2.load_object(joinpath(file, "SPDB.jld2"))
-    for (i, p) in enumerate(spdb[:SCORE].param)
-        in(p, SPDB[:SCORE].param) && continue
-        if length(p) == 2
-            push!(SPDB[:SCORE].param, p)
-            id = lastindex(SPDB[:SCORE].param)
-            objective = eval(p.objective)
-            push!(SPDB[:SCORE].fn, (analyte, mutate) -> mutate ? (analyte.score = id => objective(analyte)) : (id => objective(analyte)))
-        else
-            weight = @match p.weight begin
-                1 => :w1
-                _ => p.weight
-            end # any 2-arg fn: (analyte, cpd) -> Number
-            replace_int = @λ begin
-                x::Int  => Expr(:call, :get!, :dict, x, 0)
-                :all    => Expr(:call, :sum, Expr(:call, :values, :dict))
-                x::Expr => Expr(x.head, map(replace_int, x.args)...)
-                x       => x
-            end
-            transform_score(dict) = eval(replace_int(p.objective))
-            converter = eval(p.converter)
-            weight = eval(weight)
-            push!(SPDB[:SCORE].param, p)
-            i = lastindex(SPDB[:SCORE].param)
-            fn = (analyte::AnalyteSP, mutate::Bool) -> begin
-                dict = Dict{Int, Float64}()
-                for cpd in analyte
-                    uw = converter(cpd.state)
-                    dict[uw] = get!(dict, uw, 0) + weight(analyte, cpd)
-                end
-                result = i => transform_score(dict)
-                mutate ? (analyte.cpdsc = result) : result
-            end
-            push!(SPDB[:SCORE].fn, fn)
-        end
+    @info "Read | Reconstructing score function"
+    for p in spdb[:SCORE].param
+        in(p, SPDB[:SCORE].param) || cons_score!(p)
     end
-    for (k, v) in pairs(spdb)
-        if get(SPDB, k, nothing) != v
-            SPDB[k] = v
-        end
-    end
+    @info "Read | appendix"
     appendix = JLD2.load_object(joinpath(file, "appendix.jld2"))
+    @info "Read | quantification"
     quantification = read_quantification(joinpath(file, "quantification.qt"))
+    @info "Read | analyte"
     analyte = JLD2.load_object(joinpath(file, "analyte.jld2"))
     project = last(first(analyte)).project
     projects = map(JLD2.load_object(joinpath(file, "projects.jld2"))) do x
         isnothing(x) ? project : x
     end
+    @info "Read | data"
     rt_corrections = JLD2.load_object(joinpath(file, "rt_corrections.jld2"))
+    # reconstruct model function?
     data = map(x -> read(x), readdir(joinpath(file, "data"); join = true))
     for (dt, p, r) in zip(data, projects, rt_corrections)
         ismissing(p) || set!(dt.config, :project, p)
@@ -386,6 +392,12 @@ function read_project(file::String)
     project.data = data
     project.quantification = quantification
     project.appendix = appendix
+    #=
+    if haskey(appendix, :predfn_replaces)
+        @info "Read | Reconstructing cluster_predict function"
+        predfn_cluster!(project; appendix[:predfn_replaces]...)
+    end
+    =#
     project
 end
 
@@ -572,34 +584,38 @@ end
 Base.show(io::IO, analyte::AnalyteID) = print(io, isempty(analyte.compound) ? "?" : last(analyte), " @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 4))
 Base.show(io::IO, transition::TransitionID) = print(io, transition.compound, transition.quantifier ? "" : " (qualifier)")
 
-Base.show(io::IO, data::PreIS) = print(io, "PreIS in ", data.polarity ? "positive" : "negative", " ion mode with ", length(data.table), " features")
+Base.show(io::IO, data::PreIS) = print(io, "PreIS(", data.table, ", ", data.range, ", ", data.mz2, ", ", data.polarity, ", ", data.config)
 function Base.show(io::IO, ::MIME"text/plain", data::PreIS)
-    print(io, data, ":\n")
+    print(io, typeof(data),  " in ", data.polarity ? "positive" : "negative", " ion mode with ", length(data.table), " features:")
     for dt in zip(data.range, data.mz2)
-        println(io, " ", dt[1], " -> ", round(dt[2]; digits = 4))
+        print(io, "\n ", dt[1], " -> ", round(dt[2]; digits = 4))
     end
 end
 
-Base.show(io::IO, data::MRM) = print(io, "MRM in ", data.polarity ? "positive" : "negative", " ion mode with ", length(data.table), " features")
+Base.show(io::IO, data::MRM) = print(io, "MRM(", data.table, ", ", data.mz2, ", ", data.polarity, ", ", data.config)
 function Base.show(io::IO, ::MIME"text/plain", data::MRM)
-    print(io, data, ":\n")
+    print(io, typeof(data),  " in ", data.polarity ? "positive" : "negative", " ion mode with ", length(data.table), " features:")
     for (i, m) in enumerate(data.mz2)
         v = @view data.table.mz1[data.table.mz2_id .== i]
-        v = length(v) == 1 ? string(round(first(v); digits = 4)) : length(v) > 10 ? string(join(round.(v[1:5]; digits = 4), ", "), ", ..., ", join(round.(v[end - 4:end]; digits = 4), ", ")) : join(round.(v; digits = 4), ", ")
-        println(io, " ", v, " -> ", round(m; digits = 4))
+        v = length(v) == 1 ? string(round(first(v); digits = 4)) : length(v) > 10 ? string(join(round.(v[1:5]; digits = 4), ", "), ", …, ", join(round.(v[end - 4:end]; digits = 4), ", ")) : join(round.(v; digits = 4), ", ")
+        print(io, "\n ", v, " -> ", round(m; digits = 4))
     end
 end
 
-Base.show(io::IO, rtcor::RTCorrection) = print(io, "RTCorrection with ", length(rtcor.model), " correction functions")
+Base.show(io::IO, rtcor::RTCorrection) = print(io, "RTCorrection(", rtcor.data, ", ", rtcor.table, ", ", rtcor.model, ", ", rtcor.config)
 function Base.show(io::IO, ::MIME"text/plain", rtcor::RTCorrection)
-    print(io, rtcor, ":\n")
+    print(io, typeof(rtcor), " with ", length(rtcor.model), " correction functions:\n")
     show(io, MIME"text/plain"(), rtcor.model)
-    println(io)
 end
 
-Base.show(io::IO, pj::Project) = print(io, "Project with ", length(pj), " analytes")
+Base.show(io::IO, qt::Quantification) = print(io, "Quantification(", qt.batch, ", ", qt.config)
+function Base.show(io::IO, ::MIME"text/plain", qt::Quantification)
+    print(io, typeof(qt), " of ")
+    show(io, MIME"text/plain"(), qt.batch)
+end
+Base.show(io::IO, pj::Project) = print(io, "Project(", pj.analyte, ", ", pj.data, ", ", pj.quantification, ", ", pj.appendix)
 function Base.show(io::IO, ::MIME"text/plain", pj::Project)
-    print(io, pj, ":\n")
+    print(io, typeof(pj), " with ", length(pj), " analytes:\n")
     println(io, "∘ Salt: ", get(pj.appendix, :anion, "unknown"))
     println(io, "∘ Signal: ", get(pj.appendix, :signal, "unknown"))
     println(io, "∘ Data: ")
@@ -607,14 +623,12 @@ function Base.show(io::IO, ::MIME"text/plain", pj::Project)
         show(io, MIME"text/plain"(), data)
         println(io)
     end
-    print(io, "∘ Analytes: ")
+    print(io, "\n∘ Analytes: ")
     if length(pj) > 10
         for analyte in @view pj[1:5]
             print(io, "\n ", analyte)
         end
-        println(io, "\n\t", ".")
-        println(io, "\t", ".")
-        print(io, "\t", ".")
+        print(io, "\n\t", "⋮")
         for analyte in @view pj[end - 4:end]
             print(io, "\n ", analyte)
         end
@@ -622,6 +636,12 @@ function Base.show(io::IO, ::MIME"text/plain", pj::Project)
         for analyte in pj
             print(io, "\n ", analyte)
         end
+    end
+    if !isnothing(pj.quantification)
+        print(io, "\n\n∘ Quantification:\n")
+        print(io, lpad("\n", 40, "-"))
+        show(io, MIME"text/plain"(), pj.quantification)
+        print(io, lpad("\n", 40, "-"))
     end
 end
 
@@ -664,9 +684,7 @@ function Base.show(io::IO, aquery::Query)
         for r in @view aquery[1:5]
             print(io, "\n ", r)
         end
-        println(io, "\n\t", ".")
-        println(io, "\t", ".")
-        print(io, "\t", ".")
+        print(io, "\n\t", "⋮")
         for r in @view aquery[end - 4:end]
             print(io, "\n ", r)
         end

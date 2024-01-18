@@ -1,5 +1,5 @@
 [analyte]
-Cer 20:2;O/22:0
+Cer 18:1;O2/25:1
 
 [isd]
 nothing

@@ -1,5 +1,5 @@
 [analyte]
-Cer 20:1;O2/23:0
+HexCer 18:1;O2/25:0
 
 [isd]
 nothing

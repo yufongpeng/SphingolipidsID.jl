@@ -40,9 +40,7 @@ function analyte2cluster!(project::Project; new = false, scale = 0.0, radius = 0
     cluster_possible = get!(project.appendix, :cluster_possible, Dictionary{ClassSP, Vector{Vector{Int}}}())
     new && empty!(cluster_possible)
     @p zip(keys(groups), cluster_) foreach(union!(empty!(get!(cluster_possible, _[1], Vector{Int}[])), _[2]))
-    printstyled("Possible clusters:\n", color = :green)
-    display(project.appendix[:cluster_possible])
-    println()
+    @info string("Possible clusters:\n", repr(MIME"text/plain"(), project.appendix[:cluster_possible]))
     project
 end
 
@@ -89,9 +87,7 @@ function select_cluster!(project::Project; by = identity, new = false, kwargs...
         union!(get!(cluster_candidate, key, Int[]), val(cluster_possible[key])...)
     end
     filter!(!isempty, cluster_candidate)
-    printstyled("Selected candidate clusters:\n", color = :green)
-    display(cluster_candidate)
-    println()
+    @info string("Selected candidate clusters:\n", repr(MIME"text/plain"(), cluster_candidate))
     project
 end
 
@@ -142,7 +138,7 @@ function model_fn(expr)
     nmterms = fnterm2symbol.(fnterms)
     expr = find_tbl(expr) ? expr : Expr(expr.head, push!(expr.args, :tbl)...)
     expr = replace_formula(expr, fnterms, nmterms)
-    Expr(:call, Expr(:curly, :ModelCall, cl), QuoteNode(nmterms), QuoteNode(fnterms), Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), expr)))
+    Expr(:call, Expr(:curly, :ModelCall, cl), QuoteNode(nmterms), QuoteNode(fnterms), QuoteNode(expr), Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), expr)))
 end
 """
     @model()
@@ -174,7 +170,6 @@ end
 Fit `model` with `project.appendix[:cluster_candidate]`. The result is stored in `project.appendix[:cluster_model]`.
 """
 function model_cluster!(modelcall::RetentionModelCall, project::Project)
-    haskey(project.appendix, :cluster_model) && delete!(project.appendix, :cluster_model)
     @p pairs(project.appendix[:cluster_candidate]) |>
         map(Table(
                 mw = map(mw, @views project.analyte[_[2]]),
@@ -184,9 +179,8 @@ function model_cluster!(modelcall::RetentionModelCall, project::Project)
         reduce(vcat) |>
         modelcall |> 
         RetentionModel(modelcall) |> 
-        insert!(project.appendix, :cluster_model)
-    display(project.appendix[:cluster_model].model)
-    println()
+        set!(project.appendix, :cluster_model)
+    @info string("Model:\n", repr(MIME"text/plain"(), project.appendix[:cluster_model].model))
     project
 end
 #model_cluster!(project::Project) = model_cluster!(ModelCall{true}([:rt, :mw, :cluster], [:rt, :mw, :cluster], tbl -> lm(@formula(rt ~ mw + cluster), tbl)), project)
@@ -198,13 +192,11 @@ Fit `model` with `analyte`. The result is stored in `project.appendix[:rt_model]
 """
 model_rt!(modelcall::RetentionModelCall, aquery::AbstractQuery) = (model_rt!(modelcall, aquery.project; analyte = aquery.result); aquery)
 function model_rt!(modelcall::RetentionModelCall, project::Project; analyte = project.analyte)
-    haskey(project.appendix, :rt_model) && delete!(project.appendix, :rt_model)
     @p Table(; (modelcall.nmterms .=> map(x -> eval(x).(analyte), modelcall.fnterms))...) |>
         modelcall |> 
         RetentionModel(modelcall) |> 
-        insert!(project.appendix, :rt_model)
-    display(project.appendix[:rt_model].model)
-    println()
+        set!(project.appendix, :rt_model)
+    @info string("Model:\n", repr(MIME"text/plain"(), project.appendix[:rt_model].model))
     project
 end
 
@@ -252,8 +244,8 @@ function predfn_cluster!(project::Project; replaces...)
         in(cluster, model.model.mf.schema.schema[Term(:cluster)].contrasts.levels) ?
             abs(rt(analyte) - predict(model.model, [(mw = mw(analyte), cluster = cluster)])[1]) <= rt_tol : false
     end
-    haskey(project.appendix, :cluster_predict) && delete!(project.appendix, :cluster_predict)
-    insert!(project.appendix, :cluster_predict, fn)
+    set!(project.appendix, :cluster_predict, fn)
+    set!(project.appendix, :predfn_replaces, replaces)
     project
 end
 """
@@ -268,9 +260,7 @@ function expand_cluster!(project::Project; rt_tol = 1)
             push!(get!(project.appendix[:cluster_candidate], deisomerized(class(analyte)), Int[]), i)
     end
     foreach(unique!, project.appendix[:cluster_candidate])
-    printstyled("Expanded candidate clusters:\n", color = :green)
-    display(project.appendix[:cluster_candidate])
-    println()
+    @info string("Expanded candidate clusters:\n", repr(MIME"text/plain"(), project.appendix[:cluster_candidate]))
     project
 end
 """
@@ -303,9 +293,7 @@ Update `project.appendix[:cluster]` with `new_cluster`.
 function update_cluster!(project::Project, new_cluster = project.appendix[:cluster_candidate])
     cluster_ = get!(project.appendix, :cluster, Dictionary{ClassSP, Vector{Int}}())
     @p pairs(new_cluster) foreach(union!(get!(cluster_, _[1], Int[]), _[2]))
-    printstyled("Updated clusters:\n", color = :green)
-    display(cluster_)
-    println()
+    @info string("Updated clusters:\n", repr(MIME"text/plain"(), cluster_))
     project
 end
 
@@ -359,6 +347,7 @@ Predict rt of analyte(s) based on `project.appendix[:rt_model]`. If prediction i
 """
 function predict_rt(analyte::AnalyteSP)
     project = last(analyte).project
+    haskey(project.appendix, :rt_model) || throw(ArgumentError("There is no fitted retention time model."))
     tbl = Table(; (project.appendix[:rt_model].fn.nmterms .=> map(x -> eval(x).([analyte]), project.appendix[:rt_model].fn.fnterms))...)
     sch = project.appendix[:rt_model].model.mf.schema
     toval = [name for name in propertynames(tbl) if isa(get(sch, Term(name), nothing), CategoricalTerm)]
@@ -370,6 +359,7 @@ function predict_rt(analyte::AnalyteSP)
 end
 function predict_rt(analyte::AbstractVector{AnalyteSP})
     project = last(first(analyte)).project
+    haskey(project.appendix, :rt_model) || throw(ArgumentError("There is no fitted retention time model."))
     tbl = Table(; (project.appendix[:rt_model].fn.nmterms .=> map(x -> eval(x).(analyte), project.appendix[:rt_model].fn.fnterms))...)
     include_id = find_predictable(project.appendix[:rt_model].model, tbl)
     ŷ = Vector{Union{Float64, Nothing}}(undef, length(tbl))

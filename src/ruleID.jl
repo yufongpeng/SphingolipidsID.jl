@@ -28,11 +28,10 @@ function apply_rules!(project::Project; analyte = project.analyte,
                         class_fail::Symbol = :pop_cpd,
                         chain_fail::Symbol = :ignore
                     )
-    printstyled("ID> ", color = :green, bold = true)
     tomatch = @match match_mode begin
-        :both   => (println("Class and Chain"); (true, true))
-        :class  => (println("Class only"); (true, false))
-        :chain  => (println("Chain only"); (false, true))
+        :both   => (@info("ID | Class and Chain"); (true, true))
+        :class  => (@info("ID | Class only"); (true, false))
+        :chain  => (@info("ID | Chain only"); (false, true))
     end
     Threads.@threads for ana in analyte
         _apply_rules!(ana, tomatch, class_mode, chain_mode, class_rule, class_fail, chain_fail)

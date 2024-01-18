@@ -130,8 +130,7 @@ function preis!(project::Project, preis::PreIS; data_id = -1)
     db = SPDB[preis.polarity ? :LIBRARY_POS : :LIBRARY_NEG]
     for subft in groupview(getproperty(:mz2_id), ft)
         products = id_product(dt.mz2[subft.mz2_id[1]], preis.polarity; mz_tol = preis.config[:mz_tol])
-        printstyled("PreIS> ", color = :green, bold = true)
-        println(products)
+        @info string("PreIS | ", products)
         for data in subft
             cpdsvanilla = mapreduce(vcat, eachindex(db)) do db_id
                 abs(db.mz[db_id] - data.mz1) > preis.config[:mz_tol] ? CompoundSPVanilla[] :
@@ -434,8 +433,7 @@ function preis!(
 
     for subft in groupview(getproperty(:mz2_id), ft)
         products = id_product(dt.mz2[subft.mz2_id[1]], polarity; mz_tol)
-        printstyled("PreIS> ", color = :green, bold = true)
-        println(products)
+        @info string("PreIS | ", products)
         for data in subft
             cpdsvanilla = mapreduce(vcat, eachindex(db)) do db_id
                 abs(db.mz[db_id] - data.mz1) > mz_tol ? CompoundSPVanilla[] :
@@ -469,16 +467,14 @@ Sort, merge, split, and delete analytes after all PreIS data are added.
 function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     set!(project.appendix, :rt_tol, rt_tol)
     set!(project.appendix, :err_tol, err_tol)
-    printstyled("PreIS> ", color = :green, bold = true)
-    println("Sorting compounds")
+    @info "PreIS | Sorting compounds"
     for analyte in project
         sort!(analyte, lt = isless_class)
         for cpd in analyte
             sort!(cpd.fragment, :ion1; lt = isless_ion)
         end
     end
-    printstyled("PreIS> ", color = :green, bold = true)
-    println("Merging, splitting and deleting analytes")
+    @info "PreIS | Merging, splitting and deleting analytes"
     del = Int[]
     for (i, analyte) in enumerate(project)
         signal = last(analyte).signal
@@ -518,29 +514,43 @@ function finish_profile!(project::Project; rt_tol = 0.1, err_tol = 0.3)
     end
     unique!(del)
     deleteat!(project, del)
+    @info "PreIS | Assigning ISF"
     assign_isf_parent!(project)
     for analyte in project
+        cpd = last(analyte)
+        id = findall(ion -> in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragment.ion1)
+        v = query_data.(Ref(project), cpd.fragment.source[id], cpd.fragment.id[id], :isf)
+        analyte.state[state_id(:isf)] = analyte.state[state_id(:isf)] == -1 ? -1 : any(==(1), v) ? 1 : any(==(-1), v) ? -1 : 0
         for cpd in analyte
             cpd.project = project
         end
     end
-    printstyled("PreIS> ", color = :green, bold = true)
-    println("Sorting analytes")
+    @info "PreIS | Sorting analytes"
     sort!(project; by = x -> (mw(x), rt(x)))
     project
 end
 
-assign_isf_parent!(project::Project) =
-    for analyte in project
+function assign_isf_parent!(project::Project)
+    aq = q!(project, qnot(:isf!))
+    for analyte in aq
         for cpd in @view analyte[1:end - 1]
-            set_data!.(Ref(project), cpd.fragment.source, cpd.fragment.id, :isf, 1)
+            set_data!.(Ref(project), cpd.fragment.source, cpd.fragment.id, :isf, -1)
         end
+    end
+    ids = Dict{Int, Vector{Int}}()
+    for analyte in aq
         cpd = last(analyte)
         id = findall(ion -> !in(ion.adduct, class_db_index(ion.molecule).parent_ion), cpd.fragment.ion1)
-        set_data_if!.(Ref(project), cpd.fragment.source[id], cpd.fragment.id[id], :isf, -1, <(1))
+        set_data!.(Ref(project), cpd.fragment.source[id], cpd.fragment.id[id], :isf, -1)
         id = setdiff(eachindex(cpd.fragment), id)
-        set_data!.(Ref(project), cpd.fragment.source[id], cpd.fragment.id[id], :isf, 1)
+        for i in id
+            push!(get!(ids, cpd.fragment.source[i], Int[]), cpd.fragment.id[i])
+        end
     end
+    for (k, v) in pairs(ids)
+        replace_data!.(Ref(project), k, unique!(v), :isf, 0 => 1, -1 => 0)
+    end
+end
 
 assign_parent!(project::Project) =
     for analyte in project

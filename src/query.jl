@@ -151,28 +151,6 @@ function q!(aquery::Query, mrm::MRM;
     finish_query!(aquery, qcmd(:validated_by => mrm, neg), qf; view, objects = last.(aquery))
 end
 
-function coelution(project::Project; analyte = project.analyte, polarity::Bool = true, mz_tol = 0.35, rt_tol = 0.1)
-    result = NamedTuple{(:mz1, :rt, :analytes), Tuple{Vector{Float64}, Vector{Float64}, SubArray{AnalyteSP}}}[]
-    for ana in analyte
-        frags = last(ana).fragment
-        id = findfirst(i -> isa(frags.mz1[i].adduct, Pos) ≡ polarity, reverse(eachindex(frags)))
-        isnothing(id) && continue
-        mz = query_data(project, frags.source[id], frags.id[id], :mz1)
-        rt = query_data(project, frags.source[id], frags.id[id], :rt)
-        pushed = false
-        for group in result
-            abs(mean(group.mz1) - mz) > mz_tol && continue
-            abs(mean(group.rt - rt)) > rt_tol && continue
-            push!(group.mz1, mz)
-            push!(group.rt, rt)
-            push!(group.analytes, ana)
-            pushed = true
-            break
-        end
-        pushed || push!(result, (mz1 = [mz], rt = [rt], analytes = [ana]))
-    end
-    result
-end
 """
     normalized_sig_diff(Δ)
 
@@ -290,4 +268,7 @@ function set_data_if!(project::Project, source::Int, id::Int, col, val, crit)
     crit(getproperty(project.data[source].table, col)[i]) || return
     getproperty(project.data[source].table, col)[i] = val
 end
-mz(fn) = analyte -> any(fn(query_data(last(analyte).project, frag.source, frag.id).mz1) for frag in last(analyte).fragment)
+
+replace_data!(project::Project, source::Int, id::Int, col, p...) = replace!(@view(getproperty(project.data[source].table, col)[findall(==(id), project.data[source].table.id)]), p...)
+
+mz(fn) = analyte -> any(any(fn(query_data(cpd.project, frag.source, frag.id).mz1) for frag in cpd.fragment) for cpd in analyte)

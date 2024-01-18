@@ -54,13 +54,13 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         analytetable_mrm, transitiontable, concurrent_transition, write_transition, 
         read_transition, union_transition!, union_transition, diff_transition!, diff_transition,
         # Quantification
-        quantification_mrm, set_quantification_mrm!, match, match!, quantify, quantify!, set_qc_id!, qctable, set_serialdilution!, run_serialdilution, 
+        quantification_mrm, set_quantification_mrm!, match, match!, quantify, quantify!, set_qc_id!, qctable, set_serialdilution_id!, run_serialdilution, 
         run_serialdilution!, serialdilutiontable,
         # Utils/Query
         q!, qand, qor, qnot, spid, analyteid, transitionid, lcb, acyl, acylα, acylβ, reuse,
         new_project, allow_unknown, only_known, ncb, ndb, nox, ndbox, compound_formula, 
         mw, mz, class, chain, sumcomp, rt, cluster, incluster, @ri_str,
-        assign_parent!, assign_isf_parent!, mode,
+        assign_parent!, assign_isf_parent!, mode, coeluting_isf, coeluting_isobar, set_state!,
         # RT prediction
         initialize_cluster!, analyte2cluster!, select_cluster!,
         model_cluster!, compare_models, @model, predfn_cluster!,
@@ -71,7 +71,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
 
 import Base: getproperty, propertynames, show, print, isless, isequal, isempty, keys, length, iterate, getindex, view, firstindex, lastindex, sort, sort!, in,
             union, union!, intersect, setdiff, deleteat!, delete!, push!, pop!, popat!, popfirst!, reverse, reverse!, getproperty, copy, convert, match
-
+import JLD2: wconvert, rconvert, writeas
 """
     const SPDB
 

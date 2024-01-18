@@ -174,6 +174,7 @@ Model for retention time prediction. `T` is `true` if `:cluster` is in formula; 
 struct ModelCall{T} <: RetentionModelCall
     nmterms
     fnterms
+    expr
     fn
 end
 """
@@ -232,3 +233,21 @@ struct UnionInterval{N} <: RealIntervals
     intervals::NTuple{N, RealInterval}
 end
 #(ui::UnionInterval)(x) = any(ri -> between(x; low = ri.lowerbound, up = ri.upperbound, lop = ri.leftoperator, rop = ri.rightoperator), ui.intervals)
+
+struct DictionarySerialization{C, T}
+    d::Dictionary{Symbol, T}
+end
+
+JLD2.writeas(::Type{Dictionary{ClassSP, T}}) where T = DictionarySerialization{ClassSP, T}
+JLD2.wconvert(::Type{DictionarySerialization{ClassSP, T}}, v::Dictionary{ClassSP, T}) where T = DictionarySerialization{ClassSP, T}(dictionary(Symbol.(typeof.(keys(v))) .=> values(v)))
+JLD2.rconvert(::Type{Dictionary{ClassSP, T}}, v::DictionarySerialization{ClassSP, T}) where T = Dictionary{ClassSP, T}(collect(eval.(Expr.(:call, keys(v.d)))), collect(values(v.d)))
+
+struct ModelCallSerialization{T} <: RetentionModelCall
+    nmterms
+    fnterms
+    expr
+end
+
+JLD2.writeas(::Type{ModelCall{T}}) where T = ModelCallSerialization{T}
+JLD2.wconvert(::Type{ModelCallSerialization{T}}, v::ModelCall{T}) where T = ModelCallSerialization{T}(v.nmterms, v.fnterms, v.expr)
+JLD2.rconvert(::Type{ModelCall{T}}, v::ModelCallSerialization{T}) where T = ModelCall{T}(v.nmterms, v.fnterms, v.expr, eval(Expr(:(->), :tbl, Expr(:block, LineNumberNode(@__LINE__, @__FILE__), v.expr))))
