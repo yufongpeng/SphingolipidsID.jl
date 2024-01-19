@@ -18,7 +18,7 @@ function coeluting_isf(project::Project; analyte = project.analyte, polarity::Bo
     for group in result
         id = collect(eachindex(group.analyte))
         for (i, v) in enumerate(group.analyte)
-            any(x -> iscompatible(lcb(last(x)), lcb(last(v))) || iscompatible(acyl(last(x)), acyl(last(v))), @view group.analyte[setdiff(id, i)]) || deleteat!(id, findfirst(==(i), id))
+            any(x -> iscompatible_isf(lcb(last(x)), lcb(last(v))) || iscompatible_isf(acyl(last(x)), acyl(last(v))), @view group.analyte[setdiff(id, i)]) || deleteat!(id, findfirst(==(i), id))
         end
         id = setdiff(eachindex(group.analyte), id)
         deleteat!(group.analyte, id)
@@ -70,6 +70,21 @@ function coeluting_isobar(project::Project; analyte = project.analyte, polarity:
     filter!(x -> length(x.analyte) > 1, result)
     tbl = map(Table, result)
     haskey(project.appendix, :rt_model) ? map(x -> Table(x; Δrt = replace!(err_rt(x.analyte), nothing => NaN)), result) : tbl
+end
+
+repeated_analyte(aquery::AbstractQuery; mode = iscompatible) = repeated_analyte(aquery.project; analyte = aquery.result, mode)
+function repeated_analyte(project::Project; analyte = project.analyte, mode = iscompatible)
+    result = Vector{AnalyteSP}[]
+    for v in analyte
+        id = findfirst(x -> any(mode(u, v) for u in x), result)
+        if isnothing(id)
+            push!(result, [v])
+        else
+            push!(result[id], v)
+        end
+    end
+    filter!(x -> length(x) > 1, result)
+    map(x -> Table(; analyte = x, rt = rt.(x), Δrt = err_rt(x), var"#fragments" = nfrags.(x)), result)
 end
 
 set_state!(analyte::AnalyteSP, v::Int) = set_state!(analyte, :manual, v)

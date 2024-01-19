@@ -1,5 +1,5 @@
 [analyte]
-GM3 18:1;O2/14:0
+Hex3Cer 18:1;O2/23:0
 
 [isd]
 nothing

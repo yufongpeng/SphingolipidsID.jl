@@ -560,6 +560,7 @@ function Base.show(io::IO, ::MIME"text/plain", analyte::AnalyteSP)
     scs = join(filter!(!isempty, sc), ", ")
     print(io, "Analytes with ", length(analyte), " compounds @", round(analyte.rt, digits = 2), " MW=", round(mw(analyte), digits = 2), " st$(manual)$(total)id$(class)$(chain)rt$(rt)sig$(diq)$(isf):")
     print(io, "\n∘ Score: ", scs)
+    print(io, "\n∘ Δrt: ", err_rt(analyte))
     print(io, "\n∘ Compounds:")
     for cpd in analyte
         print(io, "\n ", cpd)

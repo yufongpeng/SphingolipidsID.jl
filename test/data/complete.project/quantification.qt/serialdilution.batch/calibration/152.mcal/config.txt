@@ -1,5 +1,5 @@
 [analyte]
-GM3 43:0;O2
+GM3 18:2;O2/24:0;O
 
 [isd]
 nothing

@@ -60,7 +60,7 @@ export SPDB, LIBRARY_POS, FRAGMENT_POS, ADDUCTCODE, CLASSDB,
         q!, qand, qor, qnot, spid, analyteid, transitionid, lcb, acyl, acylα, acylβ, reuse,
         new_project, allow_unknown, only_known, ncb, ndb, nox, ndbox, compound_formula, 
         mw, mz, class, chain, sumcomp, rt, cluster, incluster, @ri_str,
-        assign_parent!, assign_isf_parent!, mode, coeluting_isf, coeluting_isobar, set_state!,
+        assign_parent!, assign_isf_parent!, mode, coeluting_isf, coeluting_isobar, repeated_analyte,set_state!,
         # RT prediction
         initialize_cluster!, analyte2cluster!, select_cluster!,
         model_cluster!, compare_models, @model, predfn_cluster!,

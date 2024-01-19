@@ -124,39 +124,39 @@ id	analyte	isd	calibration	mz1	mz2	rt	quantifier	analytes	polarity	coelution
 123	Hex2Cer 18:2;O2/24:1	5	5	970.719469	262.25347400000004	6.895	true	AnalyteSP[Hex2Cer 18:2;O2/24:1 @6.9 MW=969.7116 st🟡🟢id🟢🟡rt🟢sig🟢🟢]	Positive	1
 124	Hex2Cer 18:1;O2/24:1	5	5	972.7351189999999	264.26912400000003	7.2775	true	AnalyteSP[Hex2Cer 18:1;O2/24:1 @7.28 MW=971.7273 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
 125	Hex2Cer 18:2;O2/24:0	5	5	972.7351189999999	262.25347400000004	7.37	true	AnalyteSP[Hex2Cer 18:2;O2/24:0 @7.37 MW=971.7273 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-126	Hex2Cer 18:1;O/23:0;O2	5	5	976.7300339999999	266.284774	7.76	true	AnalyteSP[Hex2Cer 18:1;O/23:0;O2 @7.76 MW=975.7222 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-127	Hex2Cer 18:0;O3/24:2	5	5	988.7300339999999	282.279689	7.34	true	AnalyteSP[Hex2Cer 18:0;O3/24:2 @7.34 MW=987.7222 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-128	Hex2Cer 18:0;O3/24:1	5	5	990.745684	282.279689	7.7	true	AnalyteSP[Hex2Cer 18:0;O3/24:1 @7.7 MW=989.7379 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-129	Hex3Cer 16:1;O2/16:0	5	5	996.647094	236.23782400000005	4.49	true	AnalyteSP[Hex3Cer 16:1;O2/16:0 @4.49 MW=995.6393 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-130	Hex2Cer 18:1;O2/26:0	5	5	1002.782069	264.26912400000003	8.23	true	AnalyteSP[Hex2Cer 18:1;O2/26:0 @8.23 MW=1001.7742 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-131	Hex3Cer 17:1;O2/16:0	5	5	1010.6627440000001	250.25347400000004	4.93	true	AnalyteSP[Hex3Cer 17:1;O2/16:0 @4.93 MW=1009.6549 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-132	Hex3Cer 18:2;O2/16:0	5	5	1022.6627440000001	262.25347400000004	4.67	true	AnalyteSP[Hex3Cer 18:2;O2/16:0 @4.67 MW=1021.6549 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-133	Hex3Cer 16:1;O2/18:0	5	5	1024.6783939999998	236.23782400000005	5.34	true	AnalyteSP[Hex3Cer 16:1;O2/18:0 @5.34 MW=1023.6706 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-134	Hex3Cer 18:1;O2/16:0	5	5	1024.6783939999998	264.26912400000003	5.340833333333333	true	AnalyteSP[Hex3Cer 18:1;O2/16:0 @5.34 MW=1023.6706 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-135	Hex3Cer 18:1;O/15:0;O2	5	5	1026.657659	266.284774	5.32	true	AnalyteSP[Hex3Cer 18:1;O/15:0;O2 @5.32 MW=1025.6498 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-136	Hex3Cer 18:0;O2/16:0	5	5	1026.6940439999998	284.295339	5.625	true	AnalyteSP[Hex3Cer 18:0;O2/16:0 @5.62 MW=1025.6862 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-137	Hex3Cer 18:1;O2/18:0	5	5	1052.709694	264.26912400000003	6.016666666666667	true	AnalyteSP[Hex3Cer 18:1;O2/18:0 @6.02 MW=1051.7019 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-138	Hex3Cer 18:2;O2/20:0	5	5	1078.725344	262.25347400000004	6.1	true	AnalyteSP[Hex3Cer 18:2;O2/20:0 @6.1 MW=1077.7175 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-139	Hex3Cer 18:2;O2/22:2	5	5	1102.725344	262.25347400000004	5.62	true	AnalyteSP[Hex3Cer 18:2;O2/22:2 @5.62 MW=1101.7175 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-140	Hex3Cer 18:1;O2/22:2	5	5	1104.740994	264.26912400000003	6.07	true	AnalyteSP[Hex3Cer 18:1;O2/22:2 @6.07 MW=1103.7332 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-141	Hex3Cer 18:2;O2/22:1	5	5	1104.740994	262.25347400000004	6.12	true	AnalyteSP[Hex3Cer 18:2;O2/22:1 @6.12 MW=1103.7332 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-142	Hex3Cer 18:1;O2/22:1	5	5	1106.7566439999998	264.26912400000003	6.65	true	AnalyteSP[Hex3Cer 18:1;O2/22:1 @6.65 MW=1105.7488 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-143	Hex3Cer 18:2;O2/22:0	5	5	1106.7566439999998	262.25347400000004	6.67	true	AnalyteSP[Hex3Cer 18:2;O2/22:0 @6.67 MW=1105.7488 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-144	Hex3Cer 18:1;O2/22:0	5	5	1108.7722939999999	264.26912400000003	7.125	true	AnalyteSP[Hex3Cer 18:1;O2/22:0 @7.12 MW=1107.7645 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-145	Hex3Cer 18:1;O2/22:0	5	5	1108.7722939999999	264.26912400000003	7.41	true	AnalyteSP[Hex3Cer 18:1;O2/22:0 @7.41 MW=1107.7645 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-146	Hex3Cer 17:1;O2/24:1	5	5	1120.7722939999999	250.25347400000004	6.88	true	AnalyteSP[Hex3Cer 17:1;O2/24:1 @6.88 MW=1119.7645 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-147	Hex3Cer 18:2;O2/23:0	5	5	1120.7722939999999	262.25347400000004	6.92	true	AnalyteSP[Hex3Cer 18:2;O2/23:0 @6.92 MW=1119.7645 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-148	Hex3Cer 18:1;O2/23:0	5	5	1122.787944	264.26912400000003	7.35	true	AnalyteSP[Hex3Cer 18:1;O2/23:0 @7.35 MW=1121.7801 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-149	GM3 18:1;O2/14:0	6	6	1125.689688	264.26912400000003	2.86	true	AnalyteSP[GM3 18:1;O2/14:0 @2.86 MW=1124.6819 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-150	GM3 18:1;O2/14:0 (qualifier)	7	7	1125.689688	274.09267900000003	2.86	false	AnalyteSP[GM3 18:1;O2/14:0 @2.86 MW=1124.6819 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-151	Hex3Cer 18:2;O2/24:2	5	5	1130.7566439999998	262.25347400000004	6.15	true	AnalyteSP[Hex3Cer 18:2;O2/24:2 @6.15 MW=1129.7488 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-152	Hex3Cer 18:1;O2/24:2	5	5	1132.7722939999999	264.26912400000003	6.63	true	AnalyteSP[Hex3Cer 18:1;O2/24:2 @6.63 MW=1131.7645 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-153	Hex3Cer 18:2;O2/24:1	5	5	1132.7722939999999	262.25347400000004	6.65	true	AnalyteSP[Hex3Cer 18:2;O2/24:1 @6.65 MW=1131.7645 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-154	Hex3Cer 17:1;O2/25:2	5	5	1132.7722939999999	250.25347400000004	6.69	true	AnalyteSP[Hex3Cer 17:1;O2/25:2 @6.69 MW=1131.7645 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-155	Hex3Cer 18:1;O2/24:1	5	5	1134.787944	264.26912400000003	7.09	true	AnalyteSP[Hex3Cer 18:1;O2/24:1 @7.09 MW=1133.7801 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-156	Hex3Cer 18:2;O2/24:0	5	5	1134.787944	262.25347400000004	7.19	true	AnalyteSP[Hex3Cer 18:2;O2/24:0 @7.19 MW=1133.7801 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-157	Hex3Cer 18:1;O2/24:0	5	5	1136.803594	264.26912400000003	7.58	true	AnalyteSP[Hex3Cer 18:1;O2/24:0 @7.58 MW=1135.7958 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-158	Hex3Cer 18:1;O2/24:0	5	5	1136.803594	264.26912400000003	7.791111111111111	true	AnalyteSP[Hex3Cer 18:1;O2/24:0 @7.79 MW=1135.7958 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+126	Hex2Cer 18:1;O2/24:0	5	5	974.750769	264.26912400000003	7.781666666666667	true	AnalyteSP[Hex2Cer 18:1;O2/24:0 @7.78 MW=973.7429 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+127	Hex2Cer 18:1;O/23:0;O2	5	5	976.7300339999999	266.284774	7.76	true	AnalyteSP[Hex2Cer 18:1;O/23:0;O2 @7.76 MW=975.7222 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+128	Hex2Cer 18:0;O3/24:2	5	5	988.7300339999999	282.279689	7.34	true	AnalyteSP[Hex2Cer 18:0;O3/24:2 @7.34 MW=987.7222 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+129	Hex2Cer 18:0;O3/24:1	5	5	990.745684	282.279689	7.7	true	AnalyteSP[Hex2Cer 18:0;O3/24:1 @7.7 MW=989.7379 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+130	Hex3Cer 16:1;O2/16:0	5	5	996.647094	236.23782400000005	4.49	true	AnalyteSP[Hex3Cer 16:1;O2/16:0 @4.49 MW=995.6393 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+131	Hex2Cer 18:1;O2/26:0	5	5	1002.782069	264.26912400000003	8.23	true	AnalyteSP[Hex2Cer 18:1;O2/26:0 @8.23 MW=1001.7742 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+132	Hex3Cer 17:1;O2/16:0	5	5	1010.6627440000001	250.25347400000004	4.93	true	AnalyteSP[Hex3Cer 17:1;O2/16:0 @4.93 MW=1009.6549 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+133	Hex3Cer 18:2;O2/16:0	5	5	1022.6627440000001	262.25347400000004	4.67	true	AnalyteSP[Hex3Cer 18:2;O2/16:0 @4.67 MW=1021.6549 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+134	Hex3Cer 16:1;O2/18:0	5	5	1024.6783939999998	236.23782400000005	5.34	true	AnalyteSP[Hex3Cer 16:1;O2/18:0 @5.34 MW=1023.6706 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+135	Hex3Cer 18:1;O2/16:0	5	5	1024.6783939999998	264.26912400000003	5.340833333333333	true	AnalyteSP[Hex3Cer 18:1;O2/16:0 @5.34 MW=1023.6706 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+136	Hex3Cer 18:1;O/15:0;O2	5	5	1026.657659	266.284774	5.32	true	AnalyteSP[Hex3Cer 18:1;O/15:0;O2 @5.32 MW=1025.6498 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+137	Hex3Cer 18:0;O2/16:0	5	5	1026.6940439999998	284.295339	5.625	true	AnalyteSP[Hex3Cer 18:0;O2/16:0 @5.62 MW=1025.6862 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+138	Hex3Cer 18:1;O2/18:0	5	5	1052.709694	264.26912400000003	6.016666666666667	true	AnalyteSP[Hex3Cer 18:1;O2/18:0 @6.02 MW=1051.7019 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+139	Hex3Cer 18:2;O2/20:0	5	5	1078.725344	262.25347400000004	6.1	true	AnalyteSP[Hex3Cer 18:2;O2/20:0 @6.1 MW=1077.7175 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+140	Hex3Cer 18:2;O2/22:2	5	5	1102.725344	262.25347400000004	5.62	true	AnalyteSP[Hex3Cer 18:2;O2/22:2 @5.62 MW=1101.7175 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+141	Hex3Cer 18:1;O2/22:2	5	5	1104.740994	264.26912400000003	6.07	true	AnalyteSP[Hex3Cer 18:1;O2/22:2 @6.07 MW=1103.7332 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+142	Hex3Cer 18:2;O2/22:1	5	5	1104.740994	262.25347400000004	6.12	true	AnalyteSP[Hex3Cer 18:2;O2/22:1 @6.12 MW=1103.7332 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+143	Hex3Cer 18:1;O2/22:1	5	5	1106.7566439999998	264.26912400000003	6.65	true	AnalyteSP[Hex3Cer 18:1;O2/22:1 @6.65 MW=1105.7488 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+144	Hex3Cer 18:2;O2/22:0	5	5	1106.7566439999998	262.25347400000004	6.67	true	AnalyteSP[Hex3Cer 18:2;O2/22:0 @6.67 MW=1105.7488 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+145	Hex3Cer 18:1;O2/22:0	5	5	1108.7722939999999	264.26912400000003	7.125	true	AnalyteSP[Hex3Cer 18:1;O2/22:0 @7.12 MW=1107.7645 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+146	Hex3Cer 18:1;O2/22:0	5	5	1108.7722939999999	264.26912400000003	7.41	true	AnalyteSP[Hex3Cer 18:1;O2/22:0 @7.41 MW=1107.7645 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+147	Hex3Cer 17:1;O2/24:1	5	5	1120.7722939999999	250.25347400000004	6.88	true	AnalyteSP[Hex3Cer 17:1;O2/24:1 @6.88 MW=1119.7645 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+148	Hex3Cer 18:2;O2/23:0	5	5	1120.7722939999999	262.25347400000004	6.92	true	AnalyteSP[Hex3Cer 18:2;O2/23:0 @6.92 MW=1119.7645 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+149	Hex3Cer 18:1;O2/23:0	5	5	1122.787944	264.26912400000003	7.35	true	AnalyteSP[Hex3Cer 18:1;O2/23:0 @7.35 MW=1121.7801 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+150	GM3 18:1;O2/14:0	6	6	1125.689688	264.26912400000003	2.86	true	AnalyteSP[GM3 18:1;O2/14:0 @2.86 MW=1124.6819 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+151	GM3 18:1;O2/14:0 (qualifier)	7	7	1125.689688	274.09267900000003	2.86	false	AnalyteSP[GM3 18:1;O2/14:0 @2.86 MW=1124.6819 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+152	Hex3Cer 18:2;O2/24:2	5	5	1130.7566439999998	262.25347400000004	6.15	true	AnalyteSP[Hex3Cer 18:2;O2/24:2 @6.15 MW=1129.7488 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+153	Hex3Cer 18:1;O2/24:2	5	5	1132.7722939999999	264.26912400000003	6.63	true	AnalyteSP[Hex3Cer 18:1;O2/24:2 @6.63 MW=1131.7645 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+154	Hex3Cer 18:2;O2/24:1	5	5	1132.7722939999999	262.25347400000004	6.65	true	AnalyteSP[Hex3Cer 18:2;O2/24:1 @6.65 MW=1131.7645 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+155	Hex3Cer 17:1;O2/25:2	5	5	1132.7722939999999	250.25347400000004	6.69	true	AnalyteSP[Hex3Cer 17:1;O2/25:2 @6.69 MW=1131.7645 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+156	Hex3Cer 18:1;O2/24:1	5	5	1134.787944	264.26912400000003	7.09	true	AnalyteSP[Hex3Cer 18:1;O2/24:1 @7.09 MW=1133.7801 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+157	Hex3Cer 18:2;O2/24:0	5	5	1134.787944	262.25347400000004	7.19	true	AnalyteSP[Hex3Cer 18:2;O2/24:0 @7.19 MW=1133.7801 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+158	Hex3Cer 18:1;O2/24:0	5	5	1136.803594	264.26912400000003	7.58	true	AnalyteSP[Hex3Cer 18:1;O2/24:0 @7.58 MW=1135.7958 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
 159	GM3 17:1;O2/16:0	6	6	1139.705338	250.25347400000004	3.4	true	AnalyteSP[GM3 17:1;O2/16:0 @3.4 MW=1138.6975 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
 160	GM3 17:1;O2/16:0 (qualifier)	7	7	1139.705338	274.09267900000003	3.4	false	AnalyteSP[GM3 17:1;O2/16:0 @3.4 MW=1138.6975 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
 161	Hex3Cer 18:0;O2/25:2	5	5	1148.803594	284.295339	7.18	true	AnalyteSP[Hex3Cer 18:0;O2/25:2 @7.18 MW=1147.7958 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
@@ -179,42 +179,41 @@ id	analyte	isd	calibration	mz1	mz2	rt	quantifier	analytes	polarity	coelution
 178	GM3 18:1;O2/20:0	6	6	1209.783588	264.26912400000003	5.182222222222222	true	AnalyteSP[GM3 18:1;O2/20:0 @5.18 MW=1208.7758 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
 179	GM3 16:1;O2/22:0 (qualifier)	7	7	1209.783588	274.09267900000003	5.196111111111112	false	AnalyteSP[GM3 18:1;O2/20:0 @5.18 MW=1208.7758 st🟡🟢id🟢🟢rt🟢sig🟢🟢, GM3 16:1;O2/22:0 @5.21 MW=1208.7758 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
 180	GM3 16:1;O2/22:0	6	6	1209.783588	236.23782400000005	5.21	true	AnalyteSP[GM3 16:1;O2/22:0 @5.21 MW=1208.7758 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-181	HexNAc_Hex3Cer 18:1;O2/16:0	0	0	1227.7577680000002	264.26912400000003	5.038333333333333	true	AnalyteSP[HexNAc_Hex3Cer 18:1;O2/16:0 @5.04 MW=1226.7499 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-182	GM3 16:1;O2/24:1	6	6	1235.799238	236.23782400000005	5.18	true	AnalyteSP[GM3 16:1;O2/24:1 @5.18 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-183	GM3 17:1;O2/23:1 (qualifier)	7	7	1235.799238	274.09267900000003	5.220000000000001	false	AnalyteSP[GM3 16:1;O2/24:1 @5.18 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 18:1;O2/22:1 @5.18 MW=1234.7914 st🟡🟢id🟡🟢rt🟢sig🟢🟢, GM3 18:2;O2/22:0 @5.24 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 17:1;O2/23:1 @5.28 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	4
-184	GM3 18:1;O2/22:1	6	6	1235.799238	264.26912400000003	5.18	true	AnalyteSP[GM3 18:1;O2/22:1 @5.18 MW=1234.7914 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-185	GM3 18:2;O2/22:0	6	6	1235.799238	262.25347400000004	5.24	true	AnalyteSP[GM3 18:2;O2/22:0 @5.24 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-186	GM3 17:1;O2/23:1	6	6	1235.799238	250.25347400000004	5.28	true	AnalyteSP[GM3 17:1;O2/23:1 @5.28 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-187	GM3 18:1;O2/22:0	6	6	1237.8148879999999	264.26912400000003	5.649583333333333	true	AnalyteSP[GM3 18:1;O2/22:0 @5.65 MW=1236.8071 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-188	GM3 16:1;O2/24:0 (qualifier)	7	7	1237.8148879999999	274.09267900000003	5.659791666666667	false	AnalyteSP[GM3 18:1;O2/22:0 @5.65 MW=1236.8071 st🟡🟢id🟢🟢rt🟢sig🟢🟢, GM3 16:1;O2/24:0 @5.67 MW=1236.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
-189	GM3 16:1;O2/24:0	6	6	1237.8148879999999	236.23782400000005	5.67	true	AnalyteSP[GM3 16:1;O2/24:0 @5.67 MW=1236.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-190	HexNAcHex3Cer 18:1;O2/17:0	5	5	1241.773418	264.26912400000003	5.41	true	AnalyteSP[HexNAcHex3Cer 18:1;O2/17:0 @5.41 MW=1240.7656 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-191	GM3 18:1;O2/23:1	6	6	1249.8148879999999	264.26912400000003	5.39	true	AnalyteSP[GM3 18:1;O2/23:1 @5.39 MW=1248.8071 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-192	GM3 18:2;O2/23:0 (qualifier)	7	7	1249.8148879999999	274.09267900000003	5.43	false	AnalyteSP[GM3 18:1;O2/23:1 @5.39 MW=1248.8071 st🟡🟢id🟡🟢rt🟢sig🟢🟢, GM3 18:2;O2/23:0 @5.47 MW=1248.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
-193	GM3 18:2;O2/23:0	6	6	1249.8148879999999	262.25347400000004	5.47	true	AnalyteSP[GM3 18:2;O2/23:0 @5.47 MW=1248.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-194	GM3 18:1;O2/23:0	6	6	1251.830538	264.26912400000003	5.855	true	AnalyteSP[GM3 18:1;O2/23:0 @5.86 MW=1250.8227 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-195	GM3 17:1;O2/24:0 (qualifier)	7	7	1251.830538	274.09267900000003	5.8725000000000005	false	AnalyteSP[GM3 18:1;O2/23:0 @5.86 MW=1250.8227 st🟡🟢id🟢🟢rt🟢sig🟢🟢, GM3 17:1;O2/24:0 @5.89 MW=1250.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
-196	GM3 17:1;O2/24:0	6	6	1251.830538	250.25347400000004	5.89	true	AnalyteSP[GM3 17:1;O2/24:0 @5.89 MW=1250.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-197	GM3 20:1;O2/20:0;O	6	6	1253.8098029999999	292.300424	5.57	true	AnalyteSP[GM3 20:1;O2/20:0;O @5.57 MW=1252.802 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-198	GM3 41:0;O2 (qualifier)	7	7	1253.8219313333332	274.09267900000003	5.577222222222222	false	AnalyteSP[GM3 20:1;O2/20:0;O @5.57 MW=1252.802 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 18:1;O2/22:0;O @5.59 MW=1252.802 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 41:0;O2 @5.57 MW=1252.8384 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	3
-199	GM3 41:0;O2	6	6	1253.8279954999998	264.26912400000003	5.580833333333333	true	AnalyteSP[GM3 18:1;O2/22:0;O @5.59 MW=1252.802 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 41:0;O2 @5.57 MW=1252.8384 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
-200	GM3 18:2;O2/24:1	6	6	1261.8148879999999	262.25347400000004	5.24	true	AnalyteSP[GM3 18:2;O2/24:1 @5.24 MW=1260.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-201	GM3 18:1;O2/24:2 (qualifier)	7	7	1261.8148879999999	274.09267900000003	5.24	false	AnalyteSP[GM3 18:2;O2/24:1 @5.24 MW=1260.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 18:1;O2/24:2 @5.24 MW=1260.8071 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	2
-202	GM3 18:1;O2/24:2	6	6	1261.8148879999999	264.26912400000003	5.24	true	AnalyteSP[GM3 18:1;O2/24:2 @5.24 MW=1260.8071 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-203	GM3 18:1;O2/24:1	6	6	1263.830538	264.26912400000003	5.630208333333334	true	AnalyteSP[GM3 18:1;O2/24:1 @5.63 MW=1262.8227 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-204	GM3 18:2;O2/24:0 (qualifier)	7	7	1263.830538	274.09267900000003	5.653402777777778	false	AnalyteSP[GM3 18:1;O2/24:1 @5.63 MW=1262.8227 st🟡🟢id🟢🟢rt🟢sig🟢🟢, GM3 20:1;O2/22:1 @5.64 MW=1262.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 18:2;O2/24:0 @5.69 MW=1262.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	3
-205	GM3 20:1;O2/22:1	6	6	1263.830538	292.300424	5.64	true	AnalyteSP[GM3 20:1;O2/22:1 @5.64 MW=1262.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-206	GM3 18:2;O2/24:0	6	6	1263.830538	262.25347400000004	5.69	true	AnalyteSP[GM3 18:2;O2/24:0 @5.69 MW=1262.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-207	GM3 18:1;O2/24:0	6	6	1265.846188	264.26912400000003	6.066041666666665	true	AnalyteSP[GM3 18:1;O2/24:0 @6.07 MW=1264.8384 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-208	GM3 18:1;O2/24:0 (qualifier)	7	7	1265.846188	274.09267900000003	6.066041666666665	false	AnalyteSP[GM3 18:1;O2/24:0 @6.07 MW=1264.8384 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
-209	GM3 18:1;O2/23:0;O	6	6	1267.825453	264.26912400000003	5.7825	true	AnalyteSP[GM3 18:1;O2/23:0;O @5.78 MW=1266.8176 st🟡🟢id🟢🟡rt🟢sig🟢🟢]	Positive	1
-210	GM3 18:1;O2/23:0;O (qualifier)	7	7	1267.825453	274.09267900000003	5.7825	false	AnalyteSP[GM3 18:1;O2/23:0;O @5.78 MW=1266.8176 st🟡🟢id🟢🟡rt🟢sig🟢🟢]	Positive	1
-211	GM3 18:1;O2/24:1;O	6	6	1279.825453	264.26912400000003	5.566666666666666	true	AnalyteSP[GM3 18:1;O2/24:1;O @5.57 MW=1278.8176 st🟡🟢id🟢🟡rt🟢sig🟢🟢]	Positive	1
-212	GM3 18:2;O2/24:0;O (qualifier)	7	7	1279.825453	274.09267900000003	5.575833333333334	false	AnalyteSP[GM3 18:1;O2/24:1;O @5.57 MW=1278.8176 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 18:2;O2/24:0;O @5.58 MW=1278.8176 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
-213	GM3 18:2;O2/24:0;O	6	6	1279.825453	262.25347400000004	5.585	true	AnalyteSP[GM3 18:2;O2/24:0;O @5.58 MW=1278.8176 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-214	GM3 43:0;O2	6	6	1281.8592955	264.26912400000003	5.9725	true	AnalyteSP[GM3 18:1;O2/24:0;O @6.0 MW=1280.8333 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 43:0;O2 @5.95 MW=1280.8697 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
-215	GM3 43:0;O2 (qualifier)	7	7	1281.8592955	274.09267900000003	5.9725	false	AnalyteSP[GM3 18:1;O2/24:0;O @6.0 MW=1280.8333 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 43:0;O2 @5.95 MW=1280.8697 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
-216	HexNAcHex3Cer 18:1;O2/24:1	5	5	1337.8673179999998	264.26912400000003	6.96	true	AnalyteSP[HexNAcHex3Cer 18:1;O2/24:1 @6.96 MW=1336.8595 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
-217	HexNAcHex3Cer 18:2;O2/24:0	5	5	1337.8673179999998	262.25347400000004	7.0	true	AnalyteSP[HexNAcHex3Cer 18:2;O2/24:0 @7.0 MW=1336.8595 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-218	GM3 18:1;O3/28:0	6	6	1337.903703	280.264039	7.0	true	AnalyteSP[GM3 18:1;O3/28:0 @7.0 MW=1336.8959 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
-219	GM3 18:1;O3/28:0 (qualifier)	7	7	1337.903703	274.09267900000003	7.0	false	AnalyteSP[GM3 18:1;O3/28:0 @7.0 MW=1336.8959 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+181	GM3 18:1;O2/21:0	6	6	1223.799238	264.26912400000003	5.41	true	AnalyteSP[GM3 18:1;O2/21:0 @5.41 MW=1222.7914 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+182	GM3 18:1;O2/21:0 (qualifier)	7	7	1223.799238	274.09267900000003	5.41	false	AnalyteSP[GM3 18:1;O2/21:0 @5.41 MW=1222.7914 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+183	HexNAc_Hex3Cer 18:1;O2/16:0	0	0	1227.7577680000002	264.26912400000003	5.038333333333333	true	AnalyteSP[HexNAc_Hex3Cer 18:1;O2/16:0 @5.04 MW=1226.7499 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+184	GM3 16:1;O2/24:1	6	6	1235.799238	236.23782400000005	5.18	true	AnalyteSP[GM3 16:1;O2/24:1 @5.18 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+185	GM3 17:1;O2/23:1 (qualifier)	7	7	1235.799238	274.09267900000003	5.220000000000001	false	AnalyteSP[GM3 16:1;O2/24:1 @5.18 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 18:1;O2/22:1 @5.18 MW=1234.7914 st🟡🟢id🟡🟢rt🟢sig🟢🟢, GM3 18:2;O2/22:0 @5.24 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 17:1;O2/23:1 @5.28 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	4
+186	GM3 18:1;O2/22:1	6	6	1235.799238	264.26912400000003	5.18	true	AnalyteSP[GM3 18:1;O2/22:1 @5.18 MW=1234.7914 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+187	GM3 18:2;O2/22:0	6	6	1235.799238	262.25347400000004	5.24	true	AnalyteSP[GM3 18:2;O2/22:0 @5.24 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+188	GM3 17:1;O2/23:1	6	6	1235.799238	250.25347400000004	5.28	true	AnalyteSP[GM3 17:1;O2/23:1 @5.28 MW=1234.7914 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+189	GM3 18:1;O2/22:0	6	6	1237.8148879999999	264.26912400000003	5.649583333333333	true	AnalyteSP[GM3 18:1;O2/22:0 @5.65 MW=1236.8071 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+190	GM3 16:1;O2/24:0 (qualifier)	7	7	1237.8148879999999	274.09267900000003	5.659791666666667	false	AnalyteSP[GM3 18:1;O2/22:0 @5.65 MW=1236.8071 st🟡🟢id🟢🟢rt🟢sig🟢🟢, GM3 16:1;O2/24:0 @5.67 MW=1236.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
+191	GM3 16:1;O2/24:0	6	6	1237.8148879999999	236.23782400000005	5.67	true	AnalyteSP[GM3 16:1;O2/24:0 @5.67 MW=1236.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+192	GM3 18:1;O2/23:1	6	6	1249.8148879999999	264.26912400000003	5.39	true	AnalyteSP[GM3 18:1;O2/23:1 @5.39 MW=1248.8071 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+193	GM3 18:2;O2/23:0 (qualifier)	7	7	1249.8148879999999	274.09267900000003	5.43	false	AnalyteSP[GM3 18:1;O2/23:1 @5.39 MW=1248.8071 st🟡🟢id🟡🟢rt🟢sig🟢🟢, GM3 18:2;O2/23:0 @5.47 MW=1248.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
+194	GM3 18:2;O2/23:0	6	6	1249.8148879999999	262.25347400000004	5.47	true	AnalyteSP[GM3 18:2;O2/23:0 @5.47 MW=1248.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+195	GM3 18:1;O2/23:0	6	6	1251.830538	264.26912400000003	5.855	true	AnalyteSP[GM3 18:1;O2/23:0 @5.86 MW=1250.8227 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+196	GM3 17:1;O2/24:0 (qualifier)	7	7	1251.830538	274.09267900000003	5.8725000000000005	false	AnalyteSP[GM3 18:1;O2/23:0 @5.86 MW=1250.8227 st🟡🟢id🟢🟢rt🟢sig🟢🟢, GM3 17:1;O2/24:0 @5.89 MW=1250.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
+197	GM3 17:1;O2/24:0	6	6	1251.830538	250.25347400000004	5.89	true	AnalyteSP[GM3 17:1;O2/24:0 @5.89 MW=1250.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+198	GM3 20:1;O2/20:0;O	6	6	1253.8098029999999	292.300424	5.57	true	AnalyteSP[GM3 20:1;O2/20:0;O @5.57 MW=1252.802 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+199	GM3 41:0;O2 (qualifier)	7	7	1253.8219313333332	274.09267900000003	5.577222222222222	false	AnalyteSP[GM3 20:1;O2/20:0;O @5.57 MW=1252.802 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 18:1;O2/22:0;O @5.59 MW=1252.802 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 41:0;O2 @5.57 MW=1252.8384 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	3
+200	GM3 41:0;O2	6	6	1253.8279954999998	264.26912400000003	5.580833333333333	true	AnalyteSP[GM3 18:1;O2/22:0;O @5.59 MW=1252.802 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 41:0;O2 @5.57 MW=1252.8384 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
+201	GM3 18:2;O2/24:1	6	6	1261.8148879999999	262.25347400000004	5.24	true	AnalyteSP[GM3 18:2;O2/24:1 @5.24 MW=1260.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+202	GM3 18:1;O2/24:2 (qualifier)	7	7	1261.8148879999999	274.09267900000003	5.24	false	AnalyteSP[GM3 18:2;O2/24:1 @5.24 MW=1260.8071 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 18:1;O2/24:2 @5.24 MW=1260.8071 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	2
+203	GM3 18:1;O2/24:2	6	6	1261.8148879999999	264.26912400000003	5.24	true	AnalyteSP[GM3 18:1;O2/24:2 @5.24 MW=1260.8071 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+204	GM3 18:1;O2/24:1	6	6	1263.830538	264.26912400000003	5.630208333333334	true	AnalyteSP[GM3 18:1;O2/24:1 @5.63 MW=1262.8227 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+205	GM3 18:2;O2/24:0 (qualifier)	7	7	1263.830538	274.09267900000003	5.653402777777778	false	AnalyteSP[GM3 18:1;O2/24:1 @5.63 MW=1262.8227 st🟡🟢id🟢🟢rt🟢sig🟢🟢, GM3 20:1;O2/22:1 @5.64 MW=1262.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢, GM3 18:2;O2/24:0 @5.69 MW=1262.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	3
+206	GM3 20:1;O2/22:1	6	6	1263.830538	292.300424	5.64	true	AnalyteSP[GM3 20:1;O2/22:1 @5.64 MW=1262.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+207	GM3 18:2;O2/24:0	6	6	1263.830538	262.25347400000004	5.69	true	AnalyteSP[GM3 18:2;O2/24:0 @5.69 MW=1262.8227 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+208	GM3 18:1;O2/24:0	6	6	1265.846188	264.26912400000003	6.066041666666665	true	AnalyteSP[GM3 18:1;O2/24:0 @6.07 MW=1264.8384 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+209	GM3 18:1;O2/24:0 (qualifier)	7	7	1265.846188	274.09267900000003	6.066041666666665	false	AnalyteSP[GM3 18:1;O2/24:0 @6.07 MW=1264.8384 st🟡🟢id🟢🟢rt🟢sig🟢🟢]	Positive	1
+210	GM3 18:1;O2/23:0;O	6	6	1267.825453	264.26912400000003	5.7825	true	AnalyteSP[GM3 18:1;O2/23:0;O @5.78 MW=1266.8176 st🟡🟢id🟢🟡rt🟢sig🟢🟢]	Positive	1
+211	GM3 18:1;O2/23:0;O (qualifier)	7	7	1267.825453	274.09267900000003	5.7825	false	AnalyteSP[GM3 18:1;O2/23:0;O @5.78 MW=1266.8176 st🟡🟢id🟢🟡rt🟢sig🟢🟢]	Positive	1
+212	GM3 18:1;O2/24:1;O	6	6	1279.825453	264.26912400000003	5.566666666666666	true	AnalyteSP[GM3 18:1;O2/24:1;O @5.57 MW=1278.8176 st🟡🟢id🟢🟡rt🟢sig🟢🟢]	Positive	1
+213	GM3 18:2;O2/24:0;O (qualifier)	7	7	1279.825453	274.09267900000003	5.575833333333334	false	AnalyteSP[GM3 18:1;O2/24:1;O @5.57 MW=1278.8176 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 18:2;O2/24:0;O @5.58 MW=1278.8176 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
+214	GM3 18:2;O2/24:0;O	6	6	1279.825453	262.25347400000004	5.585	true	AnalyteSP[GM3 18:2;O2/24:0;O @5.58 MW=1278.8176 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1
+215	GM3 43:0;O2	6	6	1281.8592955	264.26912400000003	5.9725	true	AnalyteSP[GM3 18:1;O2/24:0;O @6.0 MW=1280.8333 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 43:0;O2 @5.95 MW=1280.8697 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
+216	GM3 43:0;O2 (qualifier)	7	7	1281.8592955	274.09267900000003	5.9725	false	AnalyteSP[GM3 18:1;O2/24:0;O @6.0 MW=1280.8333 st🟡🟢id🟢🟡rt🟢sig🟢🟢, GM3 43:0;O2 @5.95 MW=1280.8697 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	2
+217	HexNAcHex3Cer 18:1;O2/24:1	5	5	1337.8673179999998	264.26912400000003	6.96	true	AnalyteSP[HexNAcHex3Cer 18:1;O2/24:1 @6.96 MW=1336.8595 st🟡🟢id🟡🟢rt🟢sig🟢🟢]	Positive	1
+218	HexNAcHex3Cer 18:2;O2/24:0	5	5	1337.8673179999998	262.25347400000004	7.0	true	AnalyteSP[HexNAcHex3Cer 18:2;O2/24:0 @7.0 MW=1336.8595 st🟡🟢id🟡🟡rt🟢sig🟢🟢]	Positive	1

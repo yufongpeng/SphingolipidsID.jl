@@ -314,6 +314,7 @@ iscomponent(::Ion{<: Adduct, Glycan{Tuple{Hex, NeuAc, NeuAc}}}, cpd::AbstractCom
     isa(cpd.class, GD1c)
 
 # iscompatible: not exact, allow isomer
+iscompatible(ana1::AbstractAnalyteID, ana2::AbstractAnalyteID) = iscompatible(last(ana1), last(ana2))
 iscompatible(cpd1::AbstractCompoundID, cpd2::AbstractCompoundID) =
     iscompatible(cpd1.class, cpd2.class) && iscompatible(cpd1.chain, cpd2.chain)
 
@@ -331,6 +332,18 @@ iscompatible(sc1::Acyl, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(sc1::Acyl, sc2::ACYL) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(sc1::ACYL, sc2::Acyl) = sumcomp(sc1) ≡ sumcomp(sc2)
 iscompatible(ion::Ion, cpd::AbstractCompoundID) = iscomponent(ion, cpd)
+
+# iscompatible_isf: allow NLH2O
+iscompatible_isf(x1, x2) = iscompatible(x1, x2)
+iscompatible_isf(sc1::SumChain, sc2::SumChain) = n13C(sc1) ≡ n13C(sc2) && nD(sc1) ≡ nD(sc2) && ncb(sc1) ≡ ncb(sc2) && ndbox(sc1) ≡ ndbox(sc2) 
+iscompatible_isf(sc1::SumChain, sc2::ChainSP) = n13C(sc1) ≡ n13C(sc2) && nD(sc1) ≡ nD(sc2) && ncb(sc1) ≡ ncb(sc2) && ndbox(sc1) ≡ ndbox(sc2) 
+iscompatible_isf(sc1::ChainSP, sc2::SumChain) = n13C(sc1) ≡ n13C(sc2) && nD(sc1) ≡ nD(sc2) && ncb(sc1) ≡ ncb(sc2) && ndbox(sc1) ≡ ndbox(sc2) 
+iscompatible_isf(sc1::DiChain, sc2::DiChain) = iscompatible_isf(sc1.lcb, sc2.lcb) && iscompatible_isf(sc1.acyl, sc2.acyl)
+iscompatible_isf(sc1::LCB, sc2::LCB) = n13C(sc1) ≡ n13C(sc2) && nD(sc1) ≡ nD(sc2) && ncb(sc1) ≡ ncb(sc2) && ndbox(sc1) ≡ ndbox(sc2) 
+iscompatible_isf(sc1::ACYL, sc2::ACYL) = n13C(sc1) ≡ n13C(sc2) && nD(sc1) ≡ nD(sc2) && ncb(sc1) ≡ ncb(sc2) && ndbox(sc1) ≡ ndbox(sc2) 
+iscompatible_isf(sc1::Acyl, sc2::Acyl) = n13C(sc1) ≡ n13C(sc2) && nD(sc1) ≡ nD(sc2) && ncb(sc1) ≡ ncb(sc2) && ndbox(sc1) ≡ ndbox(sc2) 
+iscompatible_isf(sc1::Acyl, sc2::ACYL) = n13C(sc1) ≡ n13C(sc2) && nD(sc1) ≡ nD(sc2) && ncb(sc1) ≡ ncb(sc2) && ndbox(sc1) ≡ ndbox(sc2) 
+iscompatible_isf(sc1::ACYL, sc2::Acyl) = n13C(sc1) ≡ n13C(sc2) && nD(sc1) ≡ nD(sc2) && ncb(sc1) ≡ ncb(sc2) && ndbox(sc1) ≡ ndbox(sc2) 
 
 copy_wo_project(cpd::CompoundSP) = CompoundSP(cpd.class, cpd.chain, deepcopy(cpd.fragment), cpd.signal, deepcopy(cpd.state), deepcopy(cpd.result), cpd.project)
 copy_wo_project(cpd::SPID) = SPID(cpd.class, cpd.chain)
