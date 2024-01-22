@@ -116,6 +116,7 @@ function analysistable(featuretable::Table; data = :area, method = nothing, defa
 end
 
 function rec_r2(id, conc, value, nlevel, r2_threshold, r2_current)
+    isnan(r2_current) && return (false, Int[], -Inf)
     length(unique(conc)) < nlevel && return (false, Int[], -Inf)
     r2 = cor(conc, value) ^ 2
     r2 < r2_current && return (false, id, r2_current)
@@ -340,10 +341,12 @@ function run_serialdilution(signaltable::ChemistryQuantitativeAnalysis.AbstractD
     batch = Batch(method)
     nlevel = length(conctable)
     Threads.@threads for cal in batch.calibration
+        @info "SerialDilution | $(cal.analyte[1]) starts"
         _, id, _ = rec_r2(collect(eachindex(cal.table.x)), cal.table.x, cal.table.y, nlevel, r2_threshold, 0)
         cal.table.include .= false
         cal.table.include[id] .= true
         update_calibration!(cal, method)
+        @info "SerialDilution | $(cal.analyte[1]) ends"
     end
     batch
 end
