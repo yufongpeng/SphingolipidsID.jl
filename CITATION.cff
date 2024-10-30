@@ -1,0 +1,24 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: SphingolipidsID.jl
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Yu-Fong
+    family-names: Peng
+    email: sciphypar@gmail.com
+    orcid: 'https://orcid.org/0000-0002-3597-8047'
+repository-code: 'https://github.com/yufongpeng/SphingolipidsID.jl'
+abstract: Automatic identify sphingolipids through PreIS and MRM
+keywords:
+  - sphingolipids
+  - LC-MS/MS
+  - Identification
+  - Quantification
+license: MIT
+version: v0.3.0
+date-released: '2024-01-12'
