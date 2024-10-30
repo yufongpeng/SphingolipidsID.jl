@@ -15,7 +15,7 @@ authors:
 repository-code: 'https://github.com/yufongpeng/SphingolipidsID.jl'
 abstract: Automatic identify sphingolipids through PreIS and MRM
 keywords:
-  - sphingolipids
+  - Sphingolipids
   - LC-MS/MS
   - Identification
   - Quantification
